@@ -705,11 +705,27 @@ function fetchSheet(sheetName, callback){
 }
 
 function loadSheetsData(){
-  setLoading(true, 'Cargando trabajadores...');
+  setLoading(true, 'Cargando datos del servidor...');
   var loaded = {workers: false, tasks: false, lideres: false};
+  var done = false;
+
+  var timeout = setTimeout(function(){
+    if(done) return;
+    done = true;
+    if(!loaded.workers) NAMES = FALLBACK_NAMES.slice();
+    if(!loaded.tasks)   ALL_ACTS = FALLBACK_ACTS.slice();
+    if(!loaded.lideres) LIDERES = [
+      {name:'Jose Francisco Gomez Diaz', empNum:'H00523', pin:'0523', crew:'Pennrose 2'}
+    ];
+    setLoading(false);
+    showLogin();
+  }, 8000);
 
   function checkDone(){
+    if(done) return;
     if(loaded.workers && loaded.tasks && loaded.lideres){
+      done = true;
+      clearTimeout(timeout);
       setLoading(false);
       showLogin();
     }
