@@ -1419,13 +1419,15 @@ function noTime(){ ptm=null; gEl('tmOv').classList.remove('on'); }
 
 function detPat(){
   // Collect ALL unique activities from previous workers (excluding last added)
+  // Key = ai + finca so same activity in different labor shows separately
   var seen = {}, pat = [];
   for(var i=0;i<workers.length-1;i++){
     var w=workers[i];
     for(var j=0;j<w.acts.length;j++){
       var a=w.acts[j];
-      if(!seen[a.ai]){
-        seen[a.ai]=true;
+      var key = a.ai + '_' + (a.finca||'');
+      if(!seen[key]){
+        seen[key]=true;
         pat.push({ai:a.ai,ini:a.ini||'',fin:a.fin||'',showTime:a.showTime||false,qty:'',pay:0,finca:a.finca||''});
       }
     }
@@ -1443,10 +1445,12 @@ function rndCpList(){
   var h='';
   for(var i=0;i<pcp.pat.length;i++){
     var a=pcp.pat[i]; var act=ACTS[a.ai];
+    if(!act) continue;
     var ts=a.ini&&a.fin?' | '+a.ini+'→'+a.fin:'';
-    var note=act.hr?'Horas automáticas'+ts:act.tipo+ts+' — captura cantidad después';
+    var note=act.hr?'Horas'+ts:act.tipo+ts+' — captura cantidad después';
+    var fincaTag = a.finca ? ' 📍<b>'+a.finca+'</b>' : '';
     var on=pcp.sel[i];
-    h+='<div class="ci'+(on?' on':'')+'" onclick="togCp('+i+')"><div class="cbox">✓</div><div><div class="cn">'+act.es+'</div><div class="cd">$'+act.p+'/'+act.tipo+' · '+note+'</div></div></div>';
+    h+='<div class="ci'+(on?' on':'')+'" onclick="togCp('+i+')"><div class="cbox">✓</div><div><div class="cn">'+act.es+fincaTag+'</div><div class="cd">$'+act.p+'/'+act.tipo+' · '+note+'</div></div></div>';
   }
   gEl('cpL').innerHTML=h;
 }
