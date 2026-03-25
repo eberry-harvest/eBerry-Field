@@ -518,16 +518,25 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 <!-- PAGE 4 — AUSENCIAS -->
 <div class="pg" id="p4">
   <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px;margin-bottom:3px">Ausencias del Día</div>
-  <div style="font-size:13px;color:var(--gr);margin-bottom:14px">Registra quién faltó y el motivo</div>
+  <div style="font-size:13px;color:var(--gr);margin-bottom:14px">Personas de tu equipo que no trabajaron hoy</div>
   <div id="ausenciasList"></div>
   <div id="ausenciasEmpty" style="text-align:center;padding:40px 20px;color:var(--gr)">
     <div style="font-size:40px;margin-bottom:12px">✅</div>
     <div style="font-size:15px;font-weight:600;margin-bottom:6px">Sin ausencias registradas</div>
-    <div style="font-size:13px">Usa el botón de abajo para agregar</div>
+    <div style="font-size:13px">Usa la barra de abajo para agregar</div>
   </div>
-  <button onclick="addAusencia()" style="width:100%;padding:14px;border:2px dashed var(--g2);border-radius:10px;background:none;color:var(--g);font-family:'DM Sans',sans-serif;font-size:14px;font-weight:700;cursor:pointer;margin-top:8px;display:flex;align-items:center;justify-content:center;gap:8px">
-    ＋ Agregar ausencia
-  </button>
+  <!-- Search bar same style as workers tab -->
+  <div style="position:fixed;bottom:70px;left:0;right:0;z-index:150;background:#fff;border-top:1px solid var(--bd);padding:8px 12px 4px;display:none" id="ausBar">
+    <div style="position:relative">
+      <div class="drop on" id="ausDrop" style="display:none;position:absolute;bottom:100%;left:0;right:0;background:#fff;border:1.5px solid var(--g);border-bottom:none;border-radius:8px 8px 0 0;z-index:300;max-height:190px;overflow-y:auto"></div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input type="text" id="ausSearch" placeholder="🔍 Buscar ausente..." autocomplete="off"
+          style="flex:1;padding:11px 12px;border:1.5px solid var(--bd);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:15px"
+          oninput="onAusAC(this.value)" onblur="closeAusAC()">
+        <button onclick="addAusenciaFromBar()" style="background:var(--g);color:#fff;border:none;border-radius:8px;padding:11px 15px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:700;cursor:pointer;flex-shrink:0">+ Agregar</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- STICKY BOTTOM -->
@@ -1565,6 +1574,7 @@ function go(n){
   var pgs=document.querySelectorAll('.pg'); for(var i=0;i<pgs.length;i++) pgs[i].classList.toggle('on',i===n);
   var tabs=document.querySelectorAll('.tab'); for(var i=0;i<tabs.length;i++){ tabs[i].classList.remove('act','done'); if(i===n)tabs[i].classList.add('act'); else if(i<n)tabs[i].classList.add('done'); }
   gEl('addbar').classList.toggle('on',n===1);
+  var ausBar=gEl('ausBar'); if(ausBar) ausBar.style.display=(n===4?'block':'none');
   pg=n; updNav(); window.scrollTo(0,0);
 }
 function next(){ if(pg<4)go(pg+1); }
@@ -2183,12 +2193,70 @@ function migrateActsToNames(){
 }
 
 // ── AUSENCIAS SYSTEM ──
-var ausencias = []; // [{name, motivo}] motivo: 'cambio'|'enfermedad'|'injustificada'
+var ausencias = []; // [{name, motivo}]
 
-function addAusencia(){
-  var name = prompt('Nombre del trabajador ausente:');
-  if(!name || !name.trim()) return;
-  name = name.trim();
+function getAusenciaCandidates(){
+  // People in crew NOT already added as workers AND not already in ausencias
+  var result = [];
+  for(var i=0;i<NAMES.length;i++){
+    var name = NAMES[i];
+    // Skip if already a worker
+    var isWorker = false;
+    for(var j=0;j<workers.length;j++){
+      if(workers[j].name.toLowerCase()===name.toLowerCase()){ isWorker=true; break; }
+    }
+    if(isWorker) continue;
+    // Skip if already in ausencias
+    var isAus = false;
+    for(var j=0;j<ausencias.length;j++){
+      if(ausencias[j].name.toLowerCase()===name.toLowerCase()){ isAus=true; break; }
+    }
+    if(isAus) continue;
+    result.push(name);
+  }
+  return result;
+}
+
+function onAusAC(v){
+  var dr = gEl('ausDrop'); if(!dr) return;
+  if(v.length < 2){ dr.classList.remove('on'); return; }
+  var q = v.toLowerCase();
+  var candidates = getAusenciaCandidates();
+  var res = [];
+  for(var i=0;i<candidates.length;i++){
+    if(candidates[i].toLowerCase().indexOf(q)>=0) res.push(candidates[i]);
+    if(res.length>=7) break;
+  }
+  if(!res.length){ dr.classList.remove('on'); return; }
+  var esc = v.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  var rx = new RegExp('('+esc+')','gi');
+  dr.innerHTML = '';
+  for(var k=0;k<res.length;k++){
+    var d = document.createElement('div'); d.className='di';
+    d.innerHTML = res[k].replace(rx,'<mark>$1</mark>');
+    (function(nm){
+      d.addEventListener('mousedown', function(){ addAusenciaConfirmed(nm); gEl('ausSearch').value=''; dr.classList.remove('on'); });
+    })(res[k]);
+    dr.appendChild(d);
+  }
+  dr.classList.add('on');
+}
+
+function closeAusAC(){ setTimeout(function(){ var dr=gEl('ausDrop'); if(dr)dr.classList.remove('on'); },200); }
+
+function addAusenciaFromBar(){
+  var v = gEl('ausSearch').value.trim();
+  if(!v){ toast('⚠️ Escribe un nombre'); return; }
+  addAusenciaConfirmed(v);
+  gEl('ausSearch').value='';
+  var dr=gEl('ausDrop'); if(dr)dr.classList.remove('on');
+}
+
+function addAusenciaConfirmed(name){
+  // Check not duplicate
+  for(var i=0;i<ausencias.length;i++){
+    if(ausencias[i].name.toLowerCase()===name.toLowerCase()){ toast('⚠️ Ya está en ausencias'); return; }
+  }
   ausencias.push({name:name, motivo:''});
   renderAusencias();
   autoSave();
@@ -2218,9 +2286,9 @@ function renderAusencias(){
     var card = document.createElement('div');
     card.className = 'aus-card';
     var motivos = [
-      {key:'cambio',       label:'🔄 Cambio de rancho',       cls:'sel-cambio'},
-      {key:'enfermedad',   label:'🤒 Falta por enfermedad',    cls:'sel-enfermedad'},
-      {key:'injustificada',label:'❌ Falta no justificada',    cls:'sel-injustificada'}
+      {key:'cambio',        label:'🔄 Cambio de rancho',     cls:'sel-cambio'},
+      {key:'enfermedad',    label:'🤒 Falta por enfermedad',  cls:'sel-enfermedad'},
+      {key:'injustificada', label:'❌ Falta no justificada',  cls:'sel-injustificada'}
     ];
     var optsHtml = '';
     for(var j=0;j<motivos.length;j++){
