@@ -200,6 +200,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     <div style="display:flex;align-items:center;gap:6px">
       <div class="dpill" id="hdate">—</div>
       <button onclick="showHistory()" style="background:rgba(255,255,255,.15);border:none;border-radius:20px;padding:4px 10px;color:#fff;font-size:12px;font-weight:600;cursor:pointer">📅</button>
+      <button id="logoutBtn" onclick="logoutUser()" style="display:none;background:rgba(204,34,34,.75);border:none;border-radius:20px;padding:4px 10px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">🚪 Salir</button>
     </div>
   </div>
   <div class="tabs">
@@ -382,6 +383,32 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     <div class="mbs">
       <button class="mok" style="background:var(--r)" onclick="confirmDelAll()">🗑️ Sí, eliminar todos</button>
       <button class="mca" onclick="gEl('delAllOv').classList.remove('on')">No, cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- DUPLICATE SESSION MODAL -->
+<div class="ov" id="dupSessOv">
+  <div class="md">
+    <div class="mt">⚠️ Sesión Activa</div>
+    <div class="ms" id="dupSessMsg">Ya hay una sesión abierta para este surquero en otro dispositivo.</div>
+    <div class="mbox" style="background:#fff8ec;border:1.5px solid var(--a);margin-bottom:14px">
+      <div class="ml" style="color:var(--a)">Para forzar el acceso, el Administrador debe autorizar</div>
+      <div class="mv" id="dupSessInfo" style="color:var(--a);font-size:15px">—</div>
+    </div>
+    <div style="margin-bottom:14px">
+      <label style="display:block;font-size:11px;font-weight:700;color:var(--gr);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">🔐 PIN del Administrador</label>
+      <div style="display:flex;gap:8px">
+        <input type="password" id="dupAdminPin" maxlength="4" inputmode="numeric"
+          placeholder="PIN Admin (4 dígitos)"
+          style="flex:1;padding:12px;border:1.5px solid var(--bd);border-radius:8px;font-size:18px;font-family:'DM Sans',sans-serif;letter-spacing:6px;text-align:center"
+          oninput="this.value=this.value.replace(/[^0-9]/g,'')">
+      </div>
+      <div id="dupAdminErr" style="color:var(--r);font-size:12px;font-weight:600;margin-top:6px;min-height:18px"></div>
+    </div>
+    <div class="mbs">
+      <button class="mok" onclick="forceSessionTakeover()">🔓 Autorizar y Entrar</button>
+      <button class="mca" onclick="cancelDupSession()">Cancelar</button>
     </div>
   </div>
 </div>
@@ -601,6 +628,74 @@ var FALLBACK_ACTS = [
   {es:"Troquero",en:"Truck driver",tipo:"Hora",p:16.23,hr:true}
 ];
 
+// ── SESSION MANAGEMENT ──────────────────────────────────────
+// Unique device ID (persisted in localStorage)
+var DEVICE_ID = (function(){
+  var k = 'eb_device_id';
+  var id = localStorage.getItem(k);
+  if(!id){
+    id = 'dev_' + Math.random().toString(36).slice(2,10) + '_' + Date.now();
+    localStorage.setItem(k, id);
+  }
+  return id;
+})();
+
+var _sessionHeartbeat = null;
+var _pendingSessionUser = null; // user waiting to login after session check
+
+function sessionCall(params, callback){
+  var qs = Object.keys(params).map(function(k){
+    return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
+  }).join('&');
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', APPS_SCRIPT_URL + '?action=session&' + qs, true);
+  xhr.onload = function(){
+    if(xhr.status === 200){
+      try{ callback(null, JSON.parse(xhr.responseText)); }
+      catch(e){ callback('parse', null); }
+    } else { callback('http', null); }
+  };
+  xhr.onerror = function(){ callback('network', null); };
+  xhr.send();
+}
+
+function startSessionHeartbeat(surquero){
+  stopSessionHeartbeat();
+  _sessionHeartbeat = setInterval(function(){
+    sessionCall({cmd:'heartbeat', surquero:surquero, deviceId:DEVICE_ID}, function(){});
+  }, 120000); // every 2 min
+}
+
+function stopSessionHeartbeat(){
+  if(_sessionHeartbeat){ clearInterval(_sessionHeartbeat); _sessionHeartbeat = null; }
+}
+
+function closeSession(){
+  if(currentUser && !currentUser.isAdmin){
+    sessionCall({cmd:'close', surquero:currentUser.name, deviceId:DEVICE_ID}, function(){});
+  }
+  stopSessionHeartbeat();
+}
+
+function logoutUser(){
+  saveQuiet();
+  closeSession();
+  currentUser = null;
+  // Hide logout button
+  var btn = gEl('logoutBtn'); if(btn) btn.style.display = 'none';
+  // Reset pin state
+  pinBuffer = '';
+  updPinDots();
+  gEl('loginErr').textContent = '';
+  // Show login screen
+  gEl('loginScreen').classList.remove('hide');
+  toast('👋 Sesión cerrada');
+}
+
+// Close session when tab is hidden/closed
+window.addEventListener('pagehide', function(){ closeSession(); });
+window.addEventListener('beforeunload', function(){ closeSession(); });
+
 // ── PIN LOGIN SYSTEM ──
 var pinBuffer = '';
 
@@ -629,28 +724,97 @@ function checkPin(){
   pinBuffer = '';
   updPinDots();
 
-  // Admin PIN
+  // Admin PIN — no session check needed
   if(pin === '2026'){
     loginSuccess({name:'Administrador', pin:'2026', crew:'ALL', isAdmin:true});
     return;
   }
 
   // Check against lideres list
+  var matchedUser = null;
   for(var i=0;i<LIDERES.length;i++){
     if(LIDERES[i].pin === pin){
-      loginSuccess({name:LIDERES[i].name, pin:pin, crew:LIDERES[i].crew, isAdmin:false, empNum:LIDERES[i].empNum});
-      return;
+      matchedUser = {name:LIDERES[i].name, pin:pin, crew:LIDERES[i].crew, isAdmin:false, empNum:LIDERES[i].empNum};
+      break;
     }
   }
 
-  // Wrong PIN
-  gEl('loginErr').textContent = '❌ PIN incorrecto, intenta de nuevo';
-  setTimeout(function(){ gEl('loginErr').textContent=''; }, 2000);
+  if(!matchedUser){
+    gEl('loginErr').textContent = '❌ PIN incorrecto, intenta de nuevo';
+    setTimeout(function(){ gEl('loginErr').textContent=''; }, 2000);
+    return;
+  }
+
+  // ── Check for duplicate session ──
+  gEl('loginErr').textContent = '🔍 Verificando sesión...';
+  _pendingSessionUser = matchedUser;
+
+  sessionCall({cmd:'check', surquero:matchedUser.name}, function(err, data){
+    gEl('loginErr').textContent = '';
+    if(err || !data){
+      // Network error — allow login anyway (graceful degradation)
+      proceedLogin(_pendingSessionUser);
+      return;
+    }
+    if(data.active){
+      // Show duplicate session modal
+      var mins = data.minutesAgo || 0;
+      var lastSeen = data.lastSeenMin || 0;
+      gEl('dupSessMsg').textContent = '⚠️ ' + matchedUser.name.split(' ')[0] + ' ya tiene una sesión activa en otro dispositivo.';
+      gEl('dupSessInfo').textContent =
+        'Abierta hace ' + mins + ' min · Última actividad hace ' + lastSeen + ' min';
+      gEl('dupAdminPin').value = '';
+      gEl('dupAdminErr').textContent = '';
+      gEl('dupSessOv').classList.add('on');
+    } else {
+      proceedLogin(_pendingSessionUser);
+    }
+  });
+}
+
+function forceSessionTakeover(){
+  var adminPin = gEl('dupAdminPin').value.trim();
+  if(adminPin.length < 4){
+    gEl('dupAdminErr').textContent = '❌ Ingresa el PIN de 4 dígitos del Admin';
+    return;
+  }
+  if(adminPin !== '2026'){
+    gEl('dupAdminErr').textContent = '❌ PIN incorrecto';
+    gEl('dupAdminPin').value = '';
+    return;
+  }
+  // Force close old session via server
+  var user = _pendingSessionUser;
+  gEl('dupAdminErr').textContent = '🔄 Cerrando sesión anterior...';
+  sessionCall({cmd:'force', surquero:user.name, adminPin:'2026'}, function(err, data){
+    if(!err && data && data.success){
+      gEl('dupSessOv').classList.remove('on');
+      toast('✅ Sesión anterior cerrada por Admin');
+      proceedLogin(user);
+    } else {
+      gEl('dupAdminErr').textContent = '❌ Error al cerrar sesión: ' + (data&&data.error||'sin conexión');
+    }
+  });
+}
+
+function cancelDupSession(){
+  _pendingSessionUser = null;
+  gEl('dupSessOv').classList.remove('on');
+  toast('Acceso cancelado');
+}
+
+function proceedLogin(user){
+  // Open session on server
+  sessionCall({cmd:'open', surquero:user.name, deviceId:DEVICE_ID}, function(){});
+  startSessionHeartbeat(user.name);
+  loginSuccess(user);
 }
 
 function loginSuccess(user){
   currentUser = user;
   gEl('loginScreen').classList.add('hide');
+  // Show logout button
+  var btn = gEl('logoutBtn'); if(btn) btn.style.display = 'block';
 
   if(!user.isAdmin){
     filterDataForCrew(user.crew);
