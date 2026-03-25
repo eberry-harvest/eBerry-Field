@@ -1173,10 +1173,11 @@ function mkActRow(wid_,ai){
   fincaInp.type = 'text';
   fincaInp.id = 'finca_act_'+wid_+'_'+ai;
   fincaInp.placeholder = '📍 Labor del día';
-  fincaInp.value = a.finca !== undefined ? a.finca : gVal('finca');
-  // Apply initial style — always show as filled since it has a value
-  fincaInp.style.borderColor = 'var(--bd)';
-  fincaInp.style.borderStyle = 'dashed';
+  var actFincaVal = (a.finca !== undefined && a.finca !== '') ? a.finca : gVal('finca');
+  fincaInp.value = actFincaVal;
+  var isDiffInit = actFincaVal && actFincaVal !== gVal('finca');
+  fincaInp.style.borderColor = isDiffInit ? 'var(--g)' : 'var(--bd)';
+  fincaInp.style.borderStyle = isDiffInit ? 'solid' : 'dashed';
   (function(wi2,ai2){
     fincaInp.addEventListener('input', function(){
       var w2=getW(wi2); if(!w2||!w2.acts[ai2])return;
