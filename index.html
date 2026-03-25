@@ -1419,13 +1419,14 @@ function noTime(){ ptm=null; gEl('tmOv').classList.remove('on'); }
 
 function detPat(){
   // Collect ALL unique activities from previous workers (excluding last added)
-  // Key = ai + finca so same activity in different labor shows separately
+  // Key = ai + normalized finca — deduplicates same activity+labor across workers
   var seen = {}, pat = [];
   for(var i=0;i<workers.length-1;i++){
     var w=workers[i];
     for(var j=0;j<w.acts.length;j++){
       var a=w.acts[j];
-      var key = a.ai + '_' + (a.finca||'');
+      var fincaNorm = (a.finca||'').trim().toLowerCase();
+      var key = a.ai + '_' + fincaNorm;
       if(!seen[key]){
         seen[key]=true;
         pat.push({ai:a.ai,ini:a.ini||'',fin:a.fin||'',showTime:a.showTime||false,qty:'',pay:0,finca:a.finca||''});
