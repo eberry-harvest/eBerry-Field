@@ -531,7 +531,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     <button class="btn pdf" onclick="genPDF()">📄 Generar PDF para Payroll</button>
     <!-- ── PAYROLL FIELD MASTER BUTTON ── -->
     <button id="sheetsSendBtn" class="btn" style="background:#1a3a5c;color:#fff" onclick="sendToSheets()">📊 Enviar a Payroll Field Master</button>
-    <button class="btn bg" onclick="save()">💾 Guardar en el cel</button>
+    <button class="btn bg" onclick="save()">💾 Guardar</button>
     <p style="font-size:11px;color:var(--gr);text-align:center">Guardado localmente en el dispositivo</p>
     <div style="height:1px;background:var(--bd);margin:10px 0"></div>
     <div style="font-size:11px;font-weight:700;color:var(--gr);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">📲 Compartir datos entre dispositivos</div>
@@ -1594,7 +1594,7 @@ function save(){
       for(var sj=0;sj<workers[si].acts.length;sj++){
         var sa=workers[si].acts[sj];
         var sact=sa.ai>=0&&sa.ai<ACTS.length?ACTS[sa.ai]:null;
-        ws.acts.push({ai:sa.ai,esName:sact?sact.es:'',qty:sa.qty,ini:sa.ini,fin:sa.fin,showTime:sa.showTime,pay:sa.pay,shifts:sa.shifts});
+        ws.acts.push({ai:sa.ai,esName:sact?sact.es:'',qty:sa.qty,ini:sa.ini,fin:sa.fin,showTime:sa.showTime,pay:sa.pay,shifts:sa.shifts,finca:sa.finca||''});
       }
       wSave.push(ws);
     }
@@ -1602,7 +1602,7 @@ function save(){
     var dateKey=getUserHistKey(vals.fecha||new Date().toISOString().split('T')[0]);
     localStorage.setItem(dateKey,JSON.stringify({v:vals,w:workers,id:wid,ep:estP,hp:hilP,cp:cajasP,saved:new Date().toISOString()}));
     toast('💾 Guardado');
-  }catch(e){ toast('Error al guardar'); }
+  }catch(e){ toast('Error al guardar: '+e.message); }
 }
 
 function load(){
@@ -1788,6 +1788,7 @@ function autoSave(){
   _asTimer=setTimeout(function(){ saveQuiet(); },800);
 }
 function saveQuiet(){
+  if(!currentUser) return; // No guardar si no hay sesión activa
   try{
     var vals={rancho:gVal('rancho'),fecha:gVal('fecha'),numBus:gVal('numBus'),numCam:gVal('numCam'),surquero:gVal('surquero'),finca:gVal('finca'),notas:gVal('notas'),hEnt:gVal('hEnt'),hSal:gVal('hSal'),lIni:gVal('lIni'),lFin:gVal('lFin'),payH:gVal('payH'),payMin:gVal('payMin'),cajasTotal:gEl('cajasTotal').value,cajasPrecio:gEl('cajasPrecio').value,cajasIni:gEl('cajasIni').value,cajasFin:gEl('cajasFin').value,estAcres:gEl('estAcres').value,estAncho:gEl('estAncho').value,estIni:gEl('estIni').value,estFin:gEl('estFin').value,hilAcres:gEl('hilAcres').value,hilAncho:gEl('hilAncho').value,hilIni:gEl('hilIni').value,hilFin:gEl('hilFin').value};
     var wSave=[];
@@ -1796,7 +1797,7 @@ function saveQuiet(){
       for(var sj=0;sj<workers[si].acts.length;sj++){
         var sa=workers[si].acts[sj];
         var sact=sa.ai>=0&&sa.ai<ACTS.length?ACTS[sa.ai]:null;
-        ws.acts.push({ai:sa.ai,esName:sact?sact.es:'',qty:sa.qty,ini:sa.ini,fin:sa.fin,showTime:sa.showTime,pay:sa.pay,shifts:sa.shifts});
+        ws.acts.push({ai:sa.ai,esName:sact?sact.es:'',qty:sa.qty,ini:sa.ini,fin:sa.fin,showTime:sa.showTime,pay:sa.pay,shifts:sa.shifts,finca:sa.finca||''});
       }
       wSave.push(ws);
     }
@@ -1835,9 +1836,16 @@ window.addEventListener('DOMContentLoaded',function(){
 
 function showHistory(){
   var keys=[], i;
+  var userKey = getUserKey(); // e.g. pr9_u_josefrancisc
+  var histPrefix = userKey + '_hist_'; // pr9_u_josefrancisc_hist_
   for(i=0;i<localStorage.length;i++){
     var k=localStorage.key(i);
-    if(k&&k.indexOf('pr9_hist_')===0) keys.push(k);
+    if(k && k.indexOf(histPrefix)===0) keys.push(k);
+  }
+  // Also include legacy keys for backwards compat
+  for(i=0;i<localStorage.length;i++){
+    var k=localStorage.key(i);
+    if(k && k.indexOf('pr9_hist_')===0 && keys.indexOf(k)<0) keys.push(k);
   }
   keys.sort().reverse();
   if(!keys.length){
@@ -1845,7 +1853,7 @@ function showHistory(){
   } else {
     var h='';
     for(i=0;i<keys.length;i++){
-      var date=keys[i].replace('pr9_hist_','');
+      var date=keys[i].replace(histPrefix,'').replace('pr9_hist_','');
       var raw=localStorage.getItem(keys[i]);
       var info={workers:[]};
       try{ info=JSON.parse(raw); }catch(e){}
