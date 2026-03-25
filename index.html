@@ -1398,6 +1398,16 @@ function sendWA(){
 }
 function copyR(){ if(navigator.clipboard){ navigator.clipboard.writeText(mkReport()).then(function(){ toast('✓ Copiado'); }); } }
 
+// ── USER-SPECIFIC STORAGE KEY ──
+function getUserKey(){
+  if(!currentUser) return 'pr9';
+  var name = currentUser.isAdmin ? 'admin' : currentUser.name.replace(/\s+/g,'').toLowerCase().slice(0,20);
+  return 'pr9_u_' + name;
+}
+function getUserHistKey(fecha){
+  return getUserKey() + '_hist_' + fecha;
+}
+
 function save(){
   try {
     var vals={rancho:gVal('rancho'),fecha:gVal('fecha'),numBus:gVal('numBus'),numCam:gVal('numCam'),surquero:gVal('surquero'),finca:gVal('finca'),notas:gVal('notas'),hEnt:gVal('hEnt'),hSal:gVal('hSal'),lIni:gVal('lIni'),lFin:gVal('lFin'),payH:gVal('payH'),payMin:gVal('payMin'),cajasTotal:gEl('cajasTotal').value,cajasPrecio:gEl('cajasPrecio').value,cajasIni:gEl('cajasIni').value,cajasFin:gEl('cajasFin').value,estAcres:gEl('estAcres').value,estAncho:gEl('estAncho').value,estIni:gEl('estIni').value,estFin:gEl('estFin').value,hilAcres:gEl('hilAcres').value,hilAncho:gEl('hilAncho').value,hilIni:gEl('hilIni').value,hilFin:gEl('hilFin').value};
@@ -1411,23 +1421,46 @@ function save(){
       }
       wSave.push(ws);
     }
-    localStorage.setItem('pr9',JSON.stringify({v:vals,w:wSave,id:wid,ep:estP,hp:hilP,cp:cajasP,ga:grpActs}));
-    var dateKey='pr9_hist_'+(vals.fecha||new Date().toISOString().split('T')[0]);
+    localStorage.setItem(getUserKey(),JSON.stringify({v:vals,w:wSave,id:wid,ep:estP,hp:hilP,cp:cajasP,ga:grpActs,aus:ausencias}));
+    var dateKey=getUserHistKey(vals.fecha||new Date().toISOString().split('T')[0]);
     localStorage.setItem(dateKey,JSON.stringify({v:vals,w:workers,id:wid,ep:estP,hp:hilP,cp:cajasP,saved:new Date().toISOString()}));
     toast('💾 Guardado');
   }catch(e){ toast('Error al guardar'); }
 }
 
 function load(){
-  var KEYS = ['pr9','pr26v9','pr26v8','pr26v7','pr26v6','pr26v5','pr26v4','pr26v3','pr26v2','pr26'];
+  // User-specific key first, then legacy fallback
+  var userKey = getUserKey();
+  var KEYS = [userKey,'pr9','pr26v9','pr26v8','pr26v7','pr26v6','pr26v5','pr26v4','pr26v3','pr26v2','pr26'];
   var raw = null;
-  for(var ki=0;ki<KEYS.length;ki++){ raw = localStorage.getItem(KEYS[ki]); if(raw) break; }
-  if(!raw){ showEmptyState(); return; }
+  for(var ki=0;ki<KEYS.length;ki++){
+    raw = localStorage.getItem(KEYS[ki]);
+    // Only use legacy keys if they match today's surquero
+    if(raw && ki > 0){
+      try{
+        var chk = JSON.parse(raw);
+        if(chk.v && chk.v.surquero && currentUser && !currentUser.isAdmin){
+          if(chk.v.surquero !== currentUser.name){ raw = null; continue; }
+        }
+      }catch(e){ raw = null; continue; }
+    }
+    if(raw) break;
+  }
+  if(!raw){ showEmptyState(); applyAutoFill(); return; }
   try {
     var d=JSON.parse(raw);
-    if(d.v){ var k=Object.keys(d.v); for(var i=0;i<k.length;i++){ var e=gEl(k[i]); if(e)e.value=d.v[k[i]]; } }
+    // Load params but preserve auto-filled surquero/rancho for non-admin
+    if(d.v){
+      var skip = currentUser && !currentUser.isAdmin ? ['surquero','rancho'] : [];
+      var k=Object.keys(d.v);
+      for(var i=0;i<k.length;i++){
+        if(skip.indexOf(k[i])>=0) continue;
+        var e=gEl(k[i]); if(e)e.value=d.v[k[i]];
+      }
+    }
     if(d.w)workers=d.w; if(d.id)wid=d.id;
     if(d.ep)estP=d.ep; if(d.hp)hilP=d.hp; if(d.cp)cajasP=d.cp; if(d.ga)grpActs=d.ga;
+    if(d.aus)ausencias=d.aus;
     updParam(); updParts();
     for(var i=0;i<workers.length;i++){
       for(var j=0;j<workers[i].acts.length;j++){
@@ -1450,10 +1483,30 @@ function load(){
     for(var i=0;i<workers.length;i++) list.appendChild(mkCard(workers[i],i));
     setTimeout(function(){ for(var i=0;i<workers.length;i++) updTot(workers[i].id); }, 50);
     if(!workers.length){ showEmptyState(); }
-    toast('✓ Datos cargados ('+workers.length+' trabajadores)');
+    // Always re-apply auto-fill after load
+    applyAutoFill();
     setTimeout(renderGrpActs, 100);
     saveQuiet();
-  }catch(e){ showEmptyState(); toast('⚠️ Error al cargar: '+e.message); }
+  }catch(e){ showEmptyState(); applyAutoFill(); toast('⚠️ Error al cargar: '+e.message); }
+}
+
+// Apply auto-fill values that should always override saved data
+function applyAutoFill(){
+  if(!currentUser) return;
+  // Surquero — always locked to logged-in user
+  var disp = gEl('surqueroDisplay');
+  var inp  = gEl('surquero');
+  if(!currentUser.isAdmin){
+    if(disp) disp.textContent = currentUser.name;
+    if(inp)  inp.value = currentUser.name;
+    // Rancho — always from crew
+    var crewBase = currentUser.crew.replace(/\s*\d+$/,'').trim();
+    var rEl = gEl('rancho'); if(rEl) rEl.value = crewBase;
+  } else {
+    if(disp) disp.innerHTML = currentUser.name + ' <span style="font-size:11px;color:var(--a);font-weight:700">[ADMIN]</span>';
+    if(inp)  inp.value = currentUser.name;
+  }
+  updDate();
 }
 
 function showEmptyState(){
@@ -1502,8 +1555,8 @@ function saveQuiet(){
       }
       wSave.push(ws);
     }
-    localStorage.setItem('pr9',JSON.stringify({v:vals,w:wSave,id:wid,ep:estP,hp:hilP,cp:cajasP,ga:grpActs}));
-    var dateKey='pr9_hist_'+(vals.fecha||new Date().toISOString().split('T')[0]);
+    localStorage.setItem(getUserKey(),JSON.stringify({v:vals,w:wSave,id:wid,ep:estP,hp:hilP,cp:cajasP,ga:grpActs,aus:ausencias}));
+    var dateKey=getUserHistKey(vals.fecha||new Date().toISOString().split('T')[0]);
     localStorage.setItem(dateKey,JSON.stringify({v:vals,w:workers,id:wid,ep:estP,hp:hilP,cp:cajasP,saved:new Date().toISOString()}));
     var p=gEl('savepill'); if(!p)return;
     p.textContent='✓ Guardado'; p.style.color='rgba(255,255,255,.95)';
