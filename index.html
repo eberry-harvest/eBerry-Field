@@ -1160,6 +1160,33 @@ function mkActRow(wid_,ai){
   var xb=document.createElement('button'); xb.className='xbtn'; xb.textContent='✕';
   (function(wi2,ai2){ xb.addEventListener('click',function(){ askDelAct(wi2,ai2); }); })(wid_,ai);
   arh.appendChild(sel); arh.appendChild(xb); div.appendChild(arh);
+
+  // ── Finca/Labor opcional por actividad ──
+  var fincaRow = document.createElement('div');
+  fincaRow.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:6px';
+  var fincaInp = document.createElement('input');
+  fincaInp.type = 'text';
+  fincaInp.id = 'finca_act_'+wid_+'_'+ai;
+  fincaInp.placeholder = '📍 Labor (dejar vacío = usa la del día)';
+  fincaInp.value = a.finca || '';
+  fincaInp.style.cssText = 'flex:1;padding:7px 10px;border:1.5px dashed var(--bd);border-radius:7px;font-size:12px;font-family:DM Sans,sans-serif;color:var(--dk);background:var(--lt)';
+  (function(wi2,ai2){
+    fincaInp.addEventListener('input', function(){
+      var w2=getW(wi2); if(!w2||!w2.acts[ai2])return;
+      w2.acts[ai2].finca = this.value.trim();
+      // Visual cue — highlight border when filled
+      this.style.borderColor = this.value.trim() ? 'var(--g)' : 'var(--bd)';
+      this.style.borderStyle = this.value.trim() ? 'solid' : 'dashed';
+      autoSave();
+    });
+  })(wid_, ai);
+  // Apply initial style if already has value
+  if(a.finca){
+    fincaInp.style.borderColor = 'var(--g)';
+    fincaInp.style.borderStyle = 'solid';
+  }
+  fincaRow.appendChild(fincaInp);
+  div.appendChild(fincaRow);
   if(act.hr){
     if(!a.shifts||!a.shifts.length){ a.shifts=[{ini:a.ini||'',fin:a.fin||''}]; }
     var tog=document.createElement('div');
@@ -1288,6 +1315,8 @@ function updPreview(wi){
       label=act.es.split(' ').slice(0,2).join(' ')+(a.qty?' '+a.qty+' '+act.tipo:'');
       if(a.pay>0) label+=' $'+a.pay.toFixed(0);
     }
+    // Show labor badge if different from day's finca
+    if(a.finca && a.finca !== gVal('finca')) label += ' 📍'+a.finca;
     h+='<span class="'+cls+'">'+label+'</span>';
   }
   var ex=grpPay(wi);
@@ -1316,7 +1345,8 @@ function togTime(wi,ai){
 function chAct(wi,ai,nai){
   var w=getW(wi); if(!w)return;
   var actName=nai>=0&&nai<ACTS.length?ACTS[nai].es:'';
-  w.acts[ai]={ai:nai,esName:actName,qty:'',ini:'',fin:'',showTime:false,pay:0};
+  var prevFinca = w.acts[ai].finca || '';
+  w.acts[ai]={ai:nai,esName:actName,qty:'',ini:'',fin:'',showTime:false,pay:0,finca:prevFinca};
   var old=gEl('ar'+wi+'_'+ai); if(old)old.parentNode.removeChild(old);
   var cont=gEl('ac'+wi); if(!cont)return;
   cont.innerHTML='';
@@ -1920,7 +1950,13 @@ function buildPDFWindow(vals, wks, ep, hp, cp){
         var cv='';
         if(col2.hr){ var h2=totalShiftHours(found2); cv=h2+' h'; }
         else { cv=found2.qty||''; }
-        td+='<td style="text-align:center">'+cv+'</td>';
+        // Show labor badge if different from day's finca
+        var actFinca = found2.finca||'';
+        var dayFinca = vals.finca||'';
+        var fincaBadge = (actFinca && actFinca !== dayFinca)
+          ? '<br><span style="font-size:8px;background:#eef4fd;color:#3a7fd4;border-radius:3px;padding:1px 4px;font-weight:600">'+actFinca+'</span>'
+          : '';
+        td+='<td style="text-align:center">'+cv+fincaBadge+'</td>';
       } else { td+='<td></td>'; }
     }
     if(cp&&cp.length&&cajasT) td+='<td style="text-align:center">'+(inA(cp,w.id)?cajasPerPerson.toFixed(1):'')+'</td>';
@@ -2218,7 +2254,8 @@ function sendToSheets() {
         tipo:       act.tipo,
         unitPrice:  act.p,
         qty:        act.tipo === 'Hora' ? '' : (a.qty || ''),
-        totalHours: act.tipo === 'Hora' ? totalH : ''
+        totalHours: act.tipo === 'Hora' ? totalH : '',
+        finca:      a.finca || gVal('finca') // labor por actividad o la del día
       });
     }
     payload.workers.push(wOut);
