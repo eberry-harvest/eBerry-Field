@@ -1417,9 +1417,12 @@ function okTime(){
 function noTime(){ ptm=null; gEl('tmOv').classList.remove('on'); }
 
 function detPat(){
+  // Collect workers WITH activities, excluding the last one just added
   var wa=[];
-  for(var i=0;i<workers.length;i++){ if(workers[i].acts.length>0)wa.push(workers[i]); }
-  if(wa.length<2)return null;
+  for(var i=0;i<workers.length-1;i++){ if(workers[i].acts.length>0)wa.push(workers[i]); }
+  if(wa.length<1)return null; // No previous worker with activities
+
+  // Check all have the same activity set
   var ref=[]; for(var j=0;j<wa[0].acts.length;j++) ref.push(wa[0].acts[j].ai);
   ref.sort();
   for(var i=1;i<wa.length;i++){
@@ -1430,15 +1433,18 @@ function detPat(){
   var pat=[];
   for(var j=0;j<wa[0].acts.length;j++){
     var a=wa[0].acts[j];
-    pat.push({ai:a.ai,ini:a.ini||'',fin:a.fin||'',showTime:a.showTime||false,qty:'',pay:0});
+    pat.push({ai:a.ai,ini:a.ini||'',fin:a.fin||'',showTime:a.showTime||false,qty:'',pay:0,finca:a.finca||''});
   }
   return pat;
 }
 function showCp(wi,pat){
-  var cnt=0; for(var i=0;i<workers.length;i++){ if(workers[i].id!==workers[wi].id&&workers[i].acts.length>0)cnt++; }
+  var cnt=0; for(var i=0;i<workers.length-1;i++){ if(workers[i].acts.length>0)cnt++; }
   pcp={wi:wi,pat:pat,sel:[]};
   for(var i=0;i<pat.length;i++) pcp.sel.push(true);
-  gEl('cpS').textContent='Los '+cnt+' trabajadores anteriores comparten las mismas actividades. ¿Aplicarlas a '+workers[wi].name+'?';
+  var msg = cnt===1
+    ? '¿Aplicar las mismas actividades de '+workers[wi-1>0?wi-1:0].name.split(' ')[0]+' a '+workers[wi].name.split(' ')[0]+'?'
+    : 'Los '+cnt+' trabajadores anteriores comparten las mismas actividades. ¿Aplicarlas a '+workers[wi].name+'?';
+  gEl('cpS').textContent = msg;
   rndCpList();
   gEl('cpOv').classList.add('on');
 }
