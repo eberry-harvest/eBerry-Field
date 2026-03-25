@@ -775,12 +775,12 @@ function buildLideres(){
   LIDERES = [];
   for(var i=0;i<ALL_WORKERS.length;i++){
     var w = ALL_WORKERS[i];
-    if(w.lider && w.lider.toLowerCase()==='surquero'){
-      var pin = w.empNum.replace(/\D/g,'').slice(-4);
-      LIDERES.push({name:w.name, empNum:w.empNum, pin:pin, crew:w.crew});
+    if(w.lider && w.lider.toLowerCase()==='surquero' && w.nip){
+      LIDERES.push({name:w.name, empNum:w.empNum, pin:String(w.nip).trim(), crew:w.crew});
     }
   }
   if(!LIDERES.length){
+    // Fallback
     LIDERES = [{name:'Jose Francisco Gomez Diaz', empNum:'H00523', pin:'0523', crew:'Pennrose 2'}];
   }
 }
