@@ -170,6 +170,23 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 #loadingOv.hide{display:none}
 .loading-spin{width:40px;height:40px;border:4px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+/* ── AUSENCIAS ── */
+.aus-card{background:#fff;border:1.5px solid var(--bd);border-radius:12px;padding:13px;margin-bottom:10px}
+.aus-name{font-weight:700;font-size:14px;margin-bottom:8px;color:var(--dk)}
+.aus-opts{display:flex;flex-direction:column;gap:6px}
+.aus-opt{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;border:1.5px solid var(--bd);cursor:pointer;background:#fff;-webkit-tap-highlight-color:transparent}
+.aus-opt.sel-cambio{background:#eef4fd;border-color:#3a7fd4}
+.aus-opt.sel-enfermedad{background:var(--bp);border-color:var(--b)}
+.aus-opt.sel-injustificada{background:var(--rp);border-color:var(--r)}
+.aus-dot{width:14px;height:14px;border-radius:50%;border:2px solid var(--bd);flex-shrink:0}
+.aus-opt.sel-cambio .aus-dot{background:#3a7fd4;border-color:#3a7fd4}
+.aus-opt.sel-enfermedad .aus-dot{background:var(--b);border-color:var(--b)}
+.aus-opt.sel-injustificada .aus-dot{background:var(--r);border-color:var(--r)}
+.aus-lbl{font-size:13px;font-weight:600;color:var(--gr)}
+.aus-opt.sel-cambio .aus-lbl{color:#3a7fd4}
+.aus-opt.sel-enfermedad .aus-lbl{color:var(--b)}
+.aus-opt.sel-injustificada .aus-lbl{color:var(--r)}
+/* ── END STYLES ── */
 .loading-txt{color:#fff;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600}
 </style>
 </head>
@@ -190,6 +207,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     <button class="tab" onclick="go(1)">② Trabajadores</button>
     <button class="tab" onclick="go(2)">③ Act. Grupales</button>
     <button class="tab" onclick="go(3)">④ Resumen</button>
+    <button class="tab" onclick="go(4)">⑤ Ausencias</button>
   </div>
 </header>
 <!-- ── LOGIN SCREEN ── -->
@@ -395,7 +413,8 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 <div class="pg on" id="p0">
   <div class="card">
     <div class="ct">📋 Operación</div>
-    <label>Rancho</label><input type="text" id="rancho" value="Pennrose">
+    <label>Rancho</label>
+    <input type="text" id="rancho" value="Pennrose">
     <div class="r2">
       <div><label>Fecha</label><input type="date" id="fecha" onchange="updDate()"></div>
       <div><label># Bus</label><input type="text" id="numBus" placeholder="951"></div>
@@ -403,9 +422,8 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     <div class="r2">
       <div><label># Camioneta</label><input type="text" id="numCam" placeholder="Opt."></div>
       <div><label>Surquero</label>
-        <select id="surquero" onchange="onSurqueroChange(this)">
-          <option selected>Jose Francisco Gomez Diaz</option>
-        </select>
+        <div id="surqueroDisplay" style="padding:11px 12px;border:1.5px solid var(--bd);border-radius:8px;font-size:15px;background:#f0f0f0;color:var(--dk);font-weight:600">—</div>
+        <input type="hidden" id="surquero" value="">
       </div>
     </div>
     <label>Finca / Labor</label><input type="text" id="finca" placeholder="Ej: Block 5 Norte">
@@ -495,6 +513,21 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     <input type="file" id="importFile" accept=".json" style="display:none" onchange="onImportFile(this)">
     <p style="font-size:11px;color:var(--gr);text-align:center">Exporta para mandar a otro cel por WhatsApp</p>
   </div>
+</div>
+
+<!-- PAGE 4 — AUSENCIAS -->
+<div class="pg" id="p4">
+  <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px;margin-bottom:3px">Ausencias del Día</div>
+  <div style="font-size:13px;color:var(--gr);margin-bottom:14px">Registra quién faltó y el motivo</div>
+  <div id="ausenciasList"></div>
+  <div id="ausenciasEmpty" style="text-align:center;padding:40px 20px;color:var(--gr)">
+    <div style="font-size:40px;margin-bottom:12px">✅</div>
+    <div style="font-size:15px;font-weight:600;margin-bottom:6px">Sin ausencias registradas</div>
+    <div style="font-size:13px">Usa el botón de abajo para agregar</div>
+  </div>
+  <button onclick="addAusencia()" style="width:100%;padding:14px;border:2px dashed var(--g2);border-radius:10px;background:none;color:var(--g);font-family:'DM Sans',sans-serif;font-size:14px;font-weight:700;cursor:pointer;margin-top:8px;display:flex;align-items:center;justify-content:center;gap:8px">
+    ＋ Agregar ausencia
+  </button>
 </div>
 
 <!-- STICKY BOTTOM -->
@@ -610,28 +643,42 @@ function loginSuccess(user){
   currentUser = user;
   gEl('loginScreen').classList.add('hide');
 
-  // Set crew/farm based on user
+  // Auto-fill fecha with today
+  var now = new Date();
+  var mo = now.getMonth()+1; var dy = now.getDate();
+  var today = now.getFullYear()+'-'+(mo<10?'0'+mo:mo)+'-'+(dy<10?'0'+dy:dy);
+  var fEl = gEl('fecha'); if(fEl && !fEl.value) fEl.value = today;
+
+  // Auto-fill hora entrada with current time
+  var hh = now.getHours(); var mm = now.getMinutes();
+  var timeNow = (hh<10?'0'+hh:hh)+':'+(mm<10?'0'+mm:mm);
+  var hEntEl = gEl('hEnt'); if(hEntEl) hEntEl.value = timeNow;
+
   if(!user.isAdmin){
-    // Set farm to user's crew
+    // Auto-fill rancho from crew (base name)
+    var crewBase = user.crew.replace(/\s*\d+$/, '').trim();
     var ranchoEl = gEl('rancho');
-    if(ranchoEl && user.crew) ranchoEl.value = user.crew;
-    // Filter workers and activities for this crew
+    if(ranchoEl) ranchoEl.value = crewBase;
+
+    // Lock surquero — show name, store in hidden input
+    var disp = gEl('surqueroDisplay');
+    var inp  = gEl('surquero');
+    if(disp) disp.textContent = user.name;
+    if(inp)  inp.value = user.name;
+    _prevSurquero = user.name;
+
     filterDataForCrew(user.crew);
-    // Set surquero default
-    var surqEl = gEl('surquero');
-    if(surqEl){
-      surqEl.innerHTML = '';
-      var opt = document.createElement('option');
-      opt.value = user.name; opt.textContent = user.name; opt.selected = true;
-      surqEl.appendChild(opt);
-    }
   } else {
-    // Admin sees all workers and all activities
+    // Admin — rancho editable, surquero shows Admin label
+    var disp = gEl('surqueroDisplay');
+    if(disp) disp.innerHTML = user.name + ' <span style="font-size:11px;color:var(--a);font-weight:700">[ADMIN]</span>';
+    var inp = gEl('surquero');
+    if(inp) inp.value = user.name;
     NAMES = ALL_WORKERS.map(function(w){ return w.name; });
     ACTS = ALL_ACTS.slice();
-    populateSurqueroSelect();
   }
 
+  updParam();
   toast('✅ Bienvenido, ' + (user.isAdmin ? 'Administrador' : user.name.split(' ')[0]) + '!');
   load();
 }
@@ -728,6 +775,8 @@ function loadSheetsData(){
       done = true;
       clearTimeout(timeout);
       buildLideres();
+      saveCache(ALL_WORKERS, ALL_ACTS, LIDERES);
+      startKeepAlive();
       setLoading(false);
       showLogin();
     }
@@ -1420,17 +1469,18 @@ function go(n){
   if(n===1){updBanner(); setTimeout(function(){ for(var i=0;i<workers.length;i++) updTot(workers[i].id); },50);}
   if(n===2){updParts();renderGrpActs();}
   if(n===3)buildSum();
+  if(n===4)renderAusencias();
   var pgs=document.querySelectorAll('.pg'); for(var i=0;i<pgs.length;i++) pgs[i].classList.toggle('on',i===n);
   var tabs=document.querySelectorAll('.tab'); for(var i=0;i<tabs.length;i++){ tabs[i].classList.remove('act','done'); if(i===n)tabs[i].classList.add('act'); else if(i<n)tabs[i].classList.add('done'); }
   gEl('addbar').classList.toggle('on',n===1);
   pg=n; updNav(); window.scrollTo(0,0);
 }
-function next(){ if(pg<3)go(pg+1); }
+function next(){ if(pg<4)go(pg+1); }
 function prev(){ if(pg>0)go(pg-1); }
 function updNav(){
   gEl('np').style.display=pg===0?'none':'';
-  var nn=gEl('nn'); nn.textContent=pg===3?'💾 Guardar':'Siguiente →';
-  nn.onclick=pg===3?save:next;
+  var nn=gEl('nn'); nn.textContent=pg===4?'💾 Guardar':'Siguiente →';
+  nn.onclick=pg===4?save:next;
 }
 function toast(msg){ var t=gEl('toast'); t.textContent=msg; t.classList.add('on'); setTimeout(function(){ t.classList.remove('on'); },2500); }
 
@@ -2040,18 +2090,159 @@ function migrateActsToNames(){
   }catch(e){}
 }
 
-// ── APP INIT ── load Sheets data → show login → user enters PIN → app starts
+// ── AUSENCIAS SYSTEM ──
+var ausencias = []; // [{name, motivo}] motivo: 'cambio'|'enfermedad'|'injustificada'
+
+function addAusencia(){
+  var name = prompt('Nombre del trabajador ausente:');
+  if(!name || !name.trim()) return;
+  name = name.trim();
+  ausencias.push({name:name, motivo:''});
+  renderAusencias();
+  autoSave();
+}
+
+function setMotivo(idx, motivo){
+  if(ausencias[idx]) ausencias[idx].motivo = motivo;
+  renderAusencias();
+  autoSave();
+}
+
+function removeAusencia(idx){
+  ausencias.splice(idx,1);
+  renderAusencias();
+  autoSave();
+}
+
+function renderAusencias(){
+  var list = gEl('ausenciasList');
+  var empty = gEl('ausenciasEmpty');
+  if(!list) return;
+  list.innerHTML = '';
+  if(!ausencias.length){ if(empty) empty.style.display='block'; return; }
+  if(empty) empty.style.display='none';
+  for(var i=0;i<ausencias.length;i++){
+    var a = ausencias[i];
+    var card = document.createElement('div');
+    card.className = 'aus-card';
+    var motivos = [
+      {key:'cambio',       label:'🔄 Cambio de rancho',       cls:'sel-cambio'},
+      {key:'enfermedad',   label:'🤒 Falta por enfermedad',    cls:'sel-enfermedad'},
+      {key:'injustificada',label:'❌ Falta no justificada',    cls:'sel-injustificada'}
+    ];
+    var optsHtml = '';
+    for(var j=0;j<motivos.length;j++){
+      var m = motivos[j];
+      var sel = a.motivo===m.key ? m.cls : '';
+      optsHtml += '<div class="aus-opt '+sel+'" onclick="setMotivo('+i+',\''+m.key+'\')">'
+        +'<div class="aus-dot"></div>'
+        +'<span class="aus-lbl">'+m.label+'</span>'
+        +'</div>';
+    }
+    card.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
+      +'<div class="aus-name">👤 '+a.name+'</div>'
+      +'<button onclick="removeAusencia('+i+')" style="background:var(--rp);color:var(--r);border:none;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer">✕ Quitar</button>'
+      +'</div>'
+      +'<div class="aus-opts">'+optsHtml+'</div>';
+    list.appendChild(card);
+  }
+}
+
+// ── LOCAL CACHE (instant load on return visits) ──
+var CACHE_KEY = 'eb_appdata_v1';
+
+function saveCache(workers, acts, lideres){
+  try{
+    localStorage.setItem(CACHE_KEY, JSON.stringify({
+      workers: workers, acts: acts, lideres: lideres,
+      ts: Date.now()
+    }));
+  }catch(e){}
+}
+
+function loadCache(){
+  try{
+    var raw = localStorage.getItem(CACHE_KEY);
+    if(!raw) return null;
+    var d = JSON.parse(raw);
+    // Cache valid for 24 hours
+    if(Date.now() - d.ts > 86400000) return null;
+    return d;
+  }catch(e){ return null; }
+}
+
+// ── KEEP-ALIVE (ping Apps Script every 4 min to prevent sleep) ──
+function startKeepAlive(){
+  setInterval(function(){
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', APPS_SCRIPT_URL + '?action=ping', true);
+    xhr.send();
+  }, 240000); // every 4 minutes
+}
+
+// ── APP INIT ──
 window.addEventListener('DOMContentLoaded', function(){
   migrateActsToNames();
-  // Set today's date
-  var now = new Date();
-  var mo = now.getMonth()+1; var dy = now.getDate();
-  var today = now.getFullYear()+'-'+(mo<10?'0'+mo:mo)+'-'+(dy<10?'0'+dy:dy);
-  var fEl = gEl('fecha'); if(fEl && !fEl.value) fEl.value = today;
-  updParam();
-  // Load data from Sheets then show login
-  loadSheetsData();
+
+  // Save pill
+  var htop=document.querySelector('.htop');
+  if(htop){
+    var pill=document.createElement('div');
+    pill.id='savepill';
+    pill.style.cssText='background:rgba(255,255,255,.12);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;color:rgba(255,255,255,.45);margin-left:5px;white-space:nowrap';
+    pill.textContent='● Auto';
+    var dpill=htop.querySelector('.dpill');
+    if(dpill&&dpill.parentNode){ dpill.parentNode.insertBefore(pill,dpill.nextSibling); }
+    else { htop.appendChild(pill); }
+  }
+
+  var ids=['rancho','fecha','numBus','numCam','finca','notas','hEnt','hSal','lIni','lFin'];
+  for(var i=0;i<ids.length;i++){
+    (function(id){
+      var el=gEl(id); if(!el)return;
+      el.addEventListener('change',autoSave);
+      el.addEventListener('input',autoSave);
+    })(ids[i]);
+  }
+  window.addEventListener('visibilitychange',function(){ if(document.visibilityState==='hidden'&&currentUser) saveQuiet(); });
+
+  // Try cache first for instant login display
+  var cache = loadCache();
+  if(cache && cache.workers && cache.workers.length){
+    ALL_WORKERS = cache.workers;
+    ALL_ACTS    = cache.acts || [];
+    LIDERES     = cache.lideres || [];
+    setLoading(false);
+    showLogin();
+    // Refresh in background silently
+    refreshDataBackground();
+    startKeepAlive();
+  } else {
+    // No cache → load fresh
+    loadSheetsData();
+  }
 });
+
+function refreshDataBackground(){
+  fetchFromScript('workers', function(err, data){
+    if(!err && data && data.success && data.workers){
+      ALL_WORKERS = data.workers;
+      buildLideres();
+      saveCache(ALL_WORKERS, ALL_ACTS, LIDERES);
+    }
+  });
+  fetchFromScript('tasks', function(err, data){
+    if(!err && data && data.success && data.tasks){
+      ALL_ACTS = [];
+      var tipoMap={'Hours':'Hora','Daywork':'Hora','Hour':'Hora','Pieces':'Ficha','Piece':'Ficha','Extra':'$','Boxes':'Caja','Box':'Caja'};
+      for(var i=0;i<data.tasks.length;i++){
+        var t=data.tasks[i]; var tipoNorm=tipoMap[t.tipo]||'Hora';
+        ALL_ACTS.push({farm:t.farm,es:t.es,en:t.en||t.es,tipo:tipoNorm,p:t.rate||16.23,hr:tipoNorm==='Hora'});
+      }
+      saveCache(ALL_WORKERS, ALL_ACTS, LIDERES);
+    }
+  });
+}
 
 // Heartbeat autosave
 setInterval(function(){ if(currentUser) saveQuiet(); }, 30000);
