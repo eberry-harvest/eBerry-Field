@@ -1062,23 +1062,30 @@ function closeAC(){ setTimeout(function(){ gEl('drop').classList.remove('on'); }
 function addFrom(){ var n=gEl('srch').value.trim(); if(!n){toast('⚠️ Escribe un nombre');return;} doAdd(n); }
 
 function doAdd(name){
-  for(var i=0;i<workers.length;i++){ if(workers[i].name===name){toast('⚠️ Ya está en la lista');return;} }
+  for(var i=0;i<workers.length;i++){ if(workers[i].name.toLowerCase()===name.toLowerCase()){toast('⚠️ Ya está en la lista');return;} }
+
+  // Try to find official name from NAMES (current crew)
+  var officialName = name;
+  for(var k=0;k<NAMES.length;k++){
+    if(NAMES[k].toLowerCase()===name.toLowerCase()){ officialName=NAMES[k]; break; }
+  }
 
   // Check if in current crew
-  var inCrew = false;
-  for(var k=0;k<NAMES.length;k++){ if(NAMES[k].toLowerCase()===name.toLowerCase()){inCrew=true;break;} }
-  if(inCrew){ doAddConfirmed(name); return; }
+  var inCrew = officialName !== name || (function(){
+    for(var k=0;k<NAMES.length;k++){ if(NAMES[k].toLowerCase()===name.toLowerCase()) return true; } return false;
+  })();
+  if(inCrew){ doAddConfirmed(officialName); return; }
 
-  // Check if in another crew (from ALL_WORKERS)
+  // Check if in another crew (from ALL_WORKERS) — use official name from DB
   var otherCrew = '';
   var foundInDB = false;
   for(var k=0;k<ALL_WORKERS.length;k++){
     if(ALL_WORKERS[k].name.toLowerCase()===name.toLowerCase()){
-      foundInDB=true; otherCrew=ALL_WORKERS[k].crew; break;
+      foundInDB=true; otherCrew=ALL_WORKERS[k].crew; officialName=ALL_WORKERS[k].name; break;
     }
   }
 
-  pendingUnk = name;
+  pendingUnk = officialName; // always use official name
   if(foundInDB && otherCrew){
     gEl('unkS').textContent='Esta persona pertenece al crew "'+otherCrew+'". ¿Confirmas que deseas agregarlo a este día?';
   } else if(foundInDB){
@@ -1086,7 +1093,7 @@ function doAdd(name){
   } else {
     gEl('unkS').textContent='Esta persona no está en la base de datos de la empresa. Revisa el nombre. ¿Deseas agregarlo de todas formas?';
   }
-  gEl('unkN').textContent=name;
+  gEl('unkN').textContent=officialName;
   gEl('unkOv').classList.add('on');
 }
 function okUnk(){ if(pendingUnk){ doAddConfirmed(pendingUnk); pendingUnk=null; } gEl('unkOv').classList.remove('on'); }
