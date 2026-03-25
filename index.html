@@ -1138,7 +1138,7 @@ function addAct(wid_){
   var w=getW(wid_); if(!w)return;
   var ai=w.acts.length;
   var defName=ACTS.length>0?ACTS[0].es:'';
-  w.acts.push({ai:0,esName:defName,qty:'',ini:'',fin:'',showTime:false,pay:0});
+  w.acts.push({ai:0,esName:defName,qty:'',ini:'',fin:'',showTime:false,pay:0,finca:gVal('finca')});
   mkActRow(wid_,ai);
   autoSave();
 }
@@ -1167,24 +1167,21 @@ function mkActRow(wid_,ai){
   var fincaInp = document.createElement('input');
   fincaInp.type = 'text';
   fincaInp.id = 'finca_act_'+wid_+'_'+ai;
-  fincaInp.placeholder = '📍 Labor (dejar vacío = usa la del día)';
-  fincaInp.value = a.finca || '';
-  fincaInp.style.cssText = 'flex:1;padding:7px 10px;border:1.5px dashed var(--bd);border-radius:7px;font-size:12px;font-family:DM Sans,sans-serif;color:var(--dk);background:var(--lt)';
+  fincaInp.placeholder = '📍 Labor del día';
+  fincaInp.value = a.finca !== undefined ? a.finca : gVal('finca');
+  // Apply initial style — always show as filled since it has a value
+  fincaInp.style.borderColor = 'var(--bd)';
+  fincaInp.style.borderStyle = 'dashed';
   (function(wi2,ai2){
     fincaInp.addEventListener('input', function(){
       var w2=getW(wi2); if(!w2||!w2.acts[ai2])return;
       w2.acts[ai2].finca = this.value.trim();
-      // Visual cue — highlight border when filled
-      this.style.borderColor = this.value.trim() ? 'var(--g)' : 'var(--bd)';
-      this.style.borderStyle = this.value.trim() ? 'solid' : 'dashed';
+      var isDiff = this.value.trim() && this.value.trim() !== gVal('finca');
+      this.style.borderColor = isDiff ? 'var(--g)' : 'var(--bd)';
+      this.style.borderStyle = isDiff ? 'solid' : 'dashed';
       autoSave();
     });
   })(wid_, ai);
-  // Apply initial style if already has value
-  if(a.finca){
-    fincaInp.style.borderColor = 'var(--g)';
-    fincaInp.style.borderStyle = 'solid';
-  }
   fincaRow.appendChild(fincaInp);
   div.appendChild(fincaRow);
   if(act.hr){
@@ -1456,7 +1453,7 @@ function saAll(){ var all=true; for(var i=0;i<pcp.sel.length;i++){if(!pcp.sel[i]
 function okCopy(){
   if(!pcp)return; var wi=pcp.wi,w=workers[wi];
   w.acts=[];
-  for(var i=0;i<pcp.pat.length;i++){ if(pcp.sel[i])w.acts.push({ai:pcp.pat[i].ai,qty:'',ini:pcp.pat[i].ini,fin:pcp.pat[i].fin,showTime:pcp.pat[i].showTime,pay:0}); }
+  for(var i=0;i<pcp.pat.length;i++){ if(pcp.sel[i])w.acts.push({ai:pcp.pat[i].ai,qty:'',ini:pcp.pat[i].ini,fin:pcp.pat[i].fin,showTime:pcp.pat[i].showTime,pay:0,finca:gVal('finca')}); }
   w.open=true;
   var cont=gEl('ac'+w.id); if(cont){ cont.innerHTML=''; for(var i=0;i<w.acts.length;i++) mkActRow(w.id,i); }
   var c=gEl('wc'+w.id); if(c)c.classList.add('op');
