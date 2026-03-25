@@ -515,7 +515,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 <script>
 // ── GOOGLE SHEETS CONFIG ──
 var SHEET_ID = '1MuG59ue3F9OLasG-4I-lke0-orNiGrSAZ_n1kuSe5D4';
-var SHEETS_BASE = 'https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:json&sheet=';
+var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwjC6Gjcb3_VRmjnVDPIRptpxM8__BRa_bi2q7MJcmY0MOcXRPdS4JVqvfyKHHK6G7m/exec';
 
 // ── SESSION ──
 var currentUser = null; // {name, pin, crew, isAdmin}
@@ -685,62 +685,27 @@ var SHEET_TABS = {
   'Current Contracted Tasks by Farm': '0'
 };
 
-var SHEET_TABS = {
-  'Active Employee List': '56751593',
-  'Current Contracted Tasks by Farm': '0'
-};
-
-function fetchSheetCSV(sheetName, callback){
-  var gid = SHEET_TABS[sheetName] || '0';
-  // Primary: export by GID (most reliable)
-  var url = 'https://docs.google.com/spreadsheets/d/' + SHEET_ID
-    + '/export?format=csv&gid=' + gid;
+// ── FETCH DATA FROM APPS SCRIPT (no CORS issues) ──
+function fetchFromScript(action, callback){
+  var url = APPS_SCRIPT_URL + '?action=' + action;
+  var s = document.createElement('script');
+  var cbName = '_cb_' + action + '_' + Date.now();
+  // Apps Script JSON → wrap with JSONP trick via iframe
+  // Use XHR since Apps Script supports CORS for GET
   var xhr = new XMLHttpRequest();
   xhr.open('GET', url, true);
   xhr.onload = function(){
-    if(xhr.status === 200 && xhr.responseText && xhr.responseText.length > 50){
-      callback(null, parseCSV(xhr.responseText));
+    if(xhr.status === 200){
+      try{
+        var data = JSON.parse(xhr.responseText);
+        callback(null, data);
+      } catch(e){ callback('parse error', null); }
     } else {
-      // Fallback: try gviz method
-      var url2 = 'https://docs.google.com/spreadsheets/d/' + SHEET_ID
-        + '/gviz/tq?tqx=out:csv&sheet=' + encodeURIComponent(sheetName);
-      var xhr2 = new XMLHttpRequest();
-      xhr2.open('GET', url2, true);
-      xhr2.onload = function(){
-        if(xhr2.status === 200 && xhr2.responseText){
-          callback(null, parseCSV(xhr2.responseText));
-        } else {
-          callback('error', null);
-        }
-      };
-      xhr2.onerror = function(){ callback('network error', null); };
-      xhr2.send();
+      callback('http error ' + xhr.status, null);
     }
   };
-  xhr.onerror = function(){
-    callback('network error', null);
-  };
+  xhr.onerror = function(){ callback('network error', null); };
   xhr.send();
-}
-
-function parseCSV(text){
-  var rows = [];
-  var lines = text.split('\n');
-  for(var i=0;i<lines.length;i++){
-    var line = lines[i].trim();
-    if(!line) continue;
-    var cols = [];
-    var cur = ''; var inQ = false;
-    for(var j=0;j<line.length;j++){
-      var ch = line[j];
-      if(ch==='"'){ inQ=!inQ; }
-      else if(ch===',' && !inQ){ cols.push(cur.trim()); cur=''; }
-      else { cur+=ch; }
-    }
-    cols.push(cur.trim());
-    rows.push(cols);
-  }
-  return rows;
 }
 
 function loadSheetsData(){
@@ -755,7 +720,7 @@ function loadSheetsData(){
     buildLideres();
     setLoading(false);
     showLogin();
-  }, 10000);
+  }, 12000);
 
   function checkDone(){
     if(done) return;
@@ -768,41 +733,37 @@ function loadSheetsData(){
     }
   }
 
-  // Load Active Employee List
-  fetchSheetCSV('Active Employee List', function(err, rows){
-    if(!err && rows && rows.length > 1){
+  // Load workers from Apps Script
+  fetchFromScript('workers', function(err, data){
+    if(!err && data && data.success && data.workers){
+      ALL_WORKERS = data.workers;
+    } else {
       ALL_WORKERS = [];
-      for(var i=1;i<rows.length;i++){
-        var r = rows[i];
-        var name   = r[0]||'';
-        var empNum = r[1]||'';
-        var crew   = r[3]||'';
-        var lider  = r[6]||'';
-        if(!name || name==='Name') continue;
-        ALL_WORKERS.push({name:name, empNum:empNum, crew:crew, lider:lider.trim()});
-      }
+      toast('⚠️ Usando datos locales (sin conexión)');
     }
     loaded.workers = true;
     checkDone();
   });
 
-  // Load Current Contracted Tasks by Farm
-  fetchSheetCSV('Current Contracted Tasks by Farm', function(err, rows){
-    if(!err && rows && rows.length > 1){
+  // Load tasks from Apps Script
+  fetchFromScript('tasks', function(err, data){
+    if(!err && data && data.success && data.tasks){
       ALL_ACTS = [];
       var tipoMap = {
         'Hours':'Hora','Daywork':'Hora','Hour':'Hora',
         'Pieces':'Ficha','Piece':'Ficha',
         'Extra':'$','Boxes':'Caja','Box':'Caja'
       };
-      for(var i=1;i<rows.length;i++){
-        var r = rows[i];
-        var farm = r[0]||''; var es = r[1]||''; var en = r[2]||'';
-        var tipo = r[3]||''; var rate = parseFloat((r[4]||'').replace(/[$,]/g,''))||16.23;
-        if(!farm||!es||farm==='Farm Location') continue;
-        var tipoNorm = tipoMap[tipo]||'Hora';
-        ALL_ACTS.push({farm:farm, es:es, en:en||es, tipo:tipoNorm, p:rate, hr:tipoNorm==='Hora'});
+      for(var i=0;i<data.tasks.length;i++){
+        var t = data.tasks[i];
+        var tipoNorm = tipoMap[t.tipo] || 'Hora';
+        ALL_ACTS.push({
+          farm:t.farm, es:t.es, en:t.en||t.es,
+          tipo:tipoNorm, p:t.rate||16.23, hr:tipoNorm==='Hora'
+        });
       }
+    } else {
+      ALL_ACTS = FALLBACK_ACTS.slice();
     }
     loaded.tasks = true;
     checkDone();
