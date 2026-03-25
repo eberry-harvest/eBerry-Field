@@ -679,69 +679,107 @@ function populateSurqueroSelect(){
 }
 
 // ── LOAD DATA FROM GOOGLE SHEETS ──
-function parseSheetJSON(raw){
-  var start = raw.indexOf('(') + 1;
-  var end = raw.lastIndexOf(')');
-  return JSON.parse(raw.substring(start, end));
+// ── FETCH SHEET AS CSV (works with public sheets, no auth needed) ──
+var SHEET_TABS = {
+  'Active Employee List': '1535403728',
+  'Current Contracted Tasks by Farm': '0'
+};
+
+var SHEET_TABS = {
+  'Active Employee List': '56751593',
+  'Current Contracted Tasks by Farm': '0'
+};
+
+function fetchSheetCSV(sheetName, callback){
+  var gid = SHEET_TABS[sheetName] || '0';
+  // Primary: export by GID (most reliable)
+  var url = 'https://docs.google.com/spreadsheets/d/' + SHEET_ID
+    + '/export?format=csv&gid=' + gid;
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', url, true);
+  xhr.onload = function(){
+    if(xhr.status === 200 && xhr.responseText && xhr.responseText.length > 50){
+      callback(null, parseCSV(xhr.responseText));
+    } else {
+      // Fallback: try gviz method
+      var url2 = 'https://docs.google.com/spreadsheets/d/' + SHEET_ID
+        + '/gviz/tq?tqx=out:csv&sheet=' + encodeURIComponent(sheetName);
+      var xhr2 = new XMLHttpRequest();
+      xhr2.open('GET', url2, true);
+      xhr2.onload = function(){
+        if(xhr2.status === 200 && xhr2.responseText){
+          callback(null, parseCSV(xhr2.responseText));
+        } else {
+          callback('error', null);
+        }
+      };
+      xhr2.onerror = function(){ callback('network error', null); };
+      xhr2.send();
+    }
+  };
+  xhr.onerror = function(){
+    callback('network error', null);
+  };
+  xhr.send();
 }
 
-function fetchSheet(sheetName, callback){
-  var url = SHEETS_BASE + encodeURIComponent(sheetName);
-  var s = document.createElement('script');
-  var cbName = '_sheetCb_' + sheetName.replace(/\s/g,'_') + '_' + Date.now();
-  var fullUrl = url + '&tqx=out:json&responseHandler=' + cbName;
-  window[cbName] = function(data){
-    delete window[cbName];
-    document.head.removeChild(s);
-    callback(null, data);
-  };
-  s.onerror = function(){
-    delete window[cbName];
-    try{ document.head.removeChild(s); }catch(e){}
-    callback('error', null);
-  };
-  s.src = SHEETS_BASE + encodeURIComponent(sheetName) + '&responseHandler=' + cbName;
-  document.head.appendChild(s);
+function parseCSV(text){
+  var rows = [];
+  var lines = text.split('\n');
+  for(var i=0;i<lines.length;i++){
+    var line = lines[i].trim();
+    if(!line) continue;
+    var cols = [];
+    var cur = ''; var inQ = false;
+    for(var j=0;j<line.length;j++){
+      var ch = line[j];
+      if(ch==='"'){ inQ=!inQ; }
+      else if(ch===',' && !inQ){ cols.push(cur.trim()); cur=''; }
+      else { cur+=ch; }
+    }
+    cols.push(cur.trim());
+    rows.push(cols);
+  }
+  return rows;
 }
 
 function loadSheetsData(){
-  setLoading(true, 'Cargando datos del servidor...');
-  var loaded = {workers: false, tasks: false, lideres: false};
+  setLoading(true, 'Cargando datos...');
+  var loaded = {workers: false, tasks: false};
   var done = false;
 
   var timeout = setTimeout(function(){
-    if(done) return;
-    done = true;
-    if(!loaded.workers) NAMES = FALLBACK_NAMES.slice();
-    if(!loaded.tasks)   ALL_ACTS = FALLBACK_ACTS.slice();
-    if(!loaded.lideres) LIDERES = [
-      {name:'Jose Francisco Gomez Diaz', empNum:'H00523', pin:'0523', crew:'Pennrose 2'}
-    ];
+    if(done) return; done = true;
+    if(!loaded.workers){ ALL_WORKERS=[]; NAMES=FALLBACK_NAMES.slice(); }
+    if(!loaded.tasks){ ALL_ACTS=FALLBACK_ACTS.slice(); }
+    buildLideres();
     setLoading(false);
     showLogin();
-  }, 8000);
+  }, 10000);
 
   function checkDone(){
     if(done) return;
-    if(loaded.workers && loaded.tasks && loaded.lideres){
+    if(loaded.workers && loaded.tasks){
       done = true;
       clearTimeout(timeout);
+      buildLideres();
       setLoading(false);
       showLogin();
     }
   }
 
   // Load Active Employee List
-  fetchSheet('Active Employee List', function(err, data){
-    if(!err && data && data.table && data.table.rows){
+  fetchSheetCSV('Active Employee List', function(err, rows){
+    if(!err && rows && rows.length > 1){
       ALL_WORKERS = [];
-      var rows = data.table.rows;
-      for(var i=0;i<rows.length;i++){
+      for(var i=1;i<rows.length;i++){
         var r = rows[i];
-        var name = r.c&&r.c[0]&&r.c[0].v ? String(r.c[0].v).trim() : '';
-        var empNum = r.c&&r.c[1]&&r.c[1].v ? String(r.c[1].v).trim() : '';
-        var crew = r.c&&r.c[3]&&r.c[3].v ? String(r.c[3].v).trim() : '';
-        if(name && name !== 'Name') ALL_WORKERS.push({name:name, empNum:empNum, crew:crew});
+        var name   = r[0]||'';
+        var empNum = r[1]||'';
+        var crew   = r[3]||'';
+        var lider  = r[6]||'';
+        if(!name || name==='Name') continue;
+        ALL_WORKERS.push({name:name, empNum:empNum, crew:crew, lider:lider.trim()});
       }
     }
     loaded.workers = true;
@@ -749,63 +787,41 @@ function loadSheetsData(){
   });
 
   // Load Current Contracted Tasks by Farm
-  fetchSheet('Current Contracted Tasks by Farm', function(err, data){
-    if(!err && data && data.table && data.table.rows){
+  fetchSheetCSV('Current Contracted Tasks by Farm', function(err, rows){
+    if(!err && rows && rows.length > 1){
       ALL_ACTS = [];
-      var rows = data.table.rows;
-      for(var i=0;i<rows.length;i++){
+      var tipoMap = {
+        'Hours':'Hora','Daywork':'Hora','Hour':'Hora',
+        'Pieces':'Ficha','Piece':'Ficha',
+        'Extra':'$','Boxes':'Caja','Box':'Caja'
+      };
+      for(var i=1;i<rows.length;i++){
         var r = rows[i];
-        var farm = r.c&&r.c[0]&&r.c[0].v ? String(r.c[0].v).trim() : '';
-        var es   = r.c&&r.c[1]&&r.c[1].v ? String(r.c[1].v).trim() : '';
-        var en   = r.c&&r.c[2]&&r.c[2].v ? String(r.c[2].v).trim() : '';
-        var tipo = r.c&&r.c[3]&&r.c[3].v ? String(r.c[3].v).trim() : '';
-        var rate = r.c&&r.c[4]&&r.c[4].v ? parseFloat(r.c[4].v) : 0;
-        if(!farm || farm==='Farm Location' || !es) continue;
-        // Map pay type
-        var tipoMap = {
-          'Hours':'Hora','Daywork':'Hora','Hour':'Hora',
-          'Pieces':'Ficha','Piece':'Ficha',
-          'Extra':'$',
-          'Boxes':'Caja','Box':'Caja'
-        };
-        var tipoNorm = tipoMap[tipo] || 'Hora';
-        var isHr = (tipoNorm === 'Hora');
-        ALL_ACTS.push({farm:farm, es:es, en:en||es, tipo:tipoNorm, p:rate||16.23, hr:isHr});
+        var farm = r[0]||''; var es = r[1]||''; var en = r[2]||'';
+        var tipo = r[3]||''; var rate = parseFloat((r[4]||'').replace(/[$,]/g,''))||16.23;
+        if(!farm||!es||farm==='Farm Location') continue;
+        var tipoNorm = tipoMap[tipo]||'Hora';
+        ALL_ACTS.push({farm:farm, es:es, en:en||es, tipo:tipoNorm, p:rate, hr:tipoNorm==='Hora'});
       }
     }
     loaded.tasks = true;
     checkDone();
   });
+}
 
-  // Load Lideres from Active Employee List col G = "Surquero" or "surquero"
-  // We already loaded ALL_WORKERS — now filter by Lider column (index 6 = col G)
-  // Re-fetch with all columns to get col G
-  fetchSheet('Active Employee List', function(err, data){
-    if(!err && data && data.table && data.table.rows){
-      LIDERES = [];
-      var rows = data.table.rows;
-      for(var i=0;i<rows.length;i++){
-        var r = rows[i];
-        var name   = r.c&&r.c[0]&&r.c[0].v ? String(r.c[0].v).trim() : '';
-        var empNum = r.c&&r.c[1]&&r.c[1].v ? String(r.c[1].v).trim() : '';
-        var crew   = r.c&&r.c[3]&&r.c[3].v ? String(r.c[3].v).trim() : '';
-        var lider  = r.c&&r.c[6]&&r.c[6].v ? String(r.c[6].v).trim().toLowerCase() : '';
-        if(!name || name==='Name') continue;
-        if(lider !== 'surquero') continue;
-        var pin = empNum.replace(/\D/g,'').slice(-4);
-        LIDERES.push({name:name, empNum:empNum, pin:pin, crew:crew});
-      }
+// Build LIDERES list from ALL_WORKERS where lider column = "Surquero"
+function buildLideres(){
+  LIDERES = [];
+  for(var i=0;i<ALL_WORKERS.length;i++){
+    var w = ALL_WORKERS[i];
+    if(w.lider && w.lider.toLowerCase()==='surquero'){
+      var pin = w.empNum.replace(/\D/g,'').slice(-4);
+      LIDERES.push({name:w.name, empNum:w.empNum, pin:pin, crew:w.crew});
     }
-    // Fallback if none found
-    if(!LIDERES.length){
-      LIDERES = [
-        {name:'Jose Francisco Gomez Diaz', empNum:'H00523', pin:'0523', crew:'Pennrose 2'},
-        {name:'Moises Hernandez Hernandez', empNum:'H00734', pin:'0734', crew:'Acursio'}
-      ];
-    }
-    loaded.lideres = true;
-    checkDone();
-  });
+  }
+  if(!LIDERES.length){
+    LIDERES = [{name:'Jose Francisco Gomez Diaz', empNum:'H00523', pin:'0523', crew:'Pennrose 2'}];
+  }
 }
 
 function setLoading(show, msg){
