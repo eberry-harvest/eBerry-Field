@@ -643,37 +643,9 @@ function loginSuccess(user){
   currentUser = user;
   gEl('loginScreen').classList.add('hide');
 
-  // Auto-fill fecha with today
-  var now = new Date();
-  var mo = now.getMonth()+1; var dy = now.getDate();
-  var today = now.getFullYear()+'-'+(mo<10?'0'+mo:mo)+'-'+(dy<10?'0'+dy:dy);
-  var fEl = gEl('fecha'); if(fEl && !fEl.value) fEl.value = today;
-
-  // Auto-fill hora entrada with current time
-  var hh = now.getHours(); var mm = now.getMinutes();
-  var timeNow = (hh<10?'0'+hh:hh)+':'+(mm<10?'0'+mm:mm);
-  var hEntEl = gEl('hEnt'); if(hEntEl) hEntEl.value = timeNow;
-
   if(!user.isAdmin){
-    // Auto-fill rancho from crew (base name)
-    var crewBase = user.crew.replace(/\s*\d+$/, '').trim();
-    var ranchoEl = gEl('rancho');
-    if(ranchoEl) ranchoEl.value = crewBase;
-
-    // Lock surquero — show name, store in hidden input
-    var disp = gEl('surqueroDisplay');
-    var inp  = gEl('surquero');
-    if(disp) disp.textContent = user.name;
-    if(inp)  inp.value = user.name;
-    _prevSurquero = user.name;
-
     filterDataForCrew(user.crew);
   } else {
-    // Admin — rancho editable, surquero shows Admin label
-    var disp = gEl('surqueroDisplay');
-    if(disp) disp.innerHTML = user.name + ' <span style="font-size:11px;color:var(--a);font-weight:700">[ADMIN]</span>';
-    var inp = gEl('surquero');
-    if(inp) inp.value = user.name;
     NAMES = ALL_WORKERS.map(function(w){ return w.name; });
     ACTS = ALL_ACTS.slice();
   }
@@ -1449,6 +1421,25 @@ function load(){
   if(!raw){ showEmptyState(); applyAutoFill(); return; }
   try {
     var d=JSON.parse(raw);
+
+    // ── Check if saved data is from a previous day ──
+    var isNewDay = checkDateChange(d);
+    if(isNewDay){
+      // Reset workers but keep some params (bus, horario)
+      workers=[]; wid=0; estP=[]; hilP=[]; cajasP=[]; grpActs=[]; ausencias=[];
+      // Restore only bus and schedule from old data
+      if(d.v){
+        var keepFields = ['numBus','numCam','hEnt','hSal','lIni','lFin'];
+        for(var ki=0;ki<keepFields.length;ki++){
+          var ke=gEl(keepFields[ki]);
+          if(ke && d.v[keepFields[ki]]) ke.value = d.v[keepFields[ki]];
+        }
+      }
+      showEmptyState();
+      applyAutoFill();
+      updParam();
+      return;
+    }
     // Load params but preserve auto-filled surquero/rancho for non-admin
     if(d.v){
       var skip = currentUser && !currentUser.isAdmin ? ['surquero','rancho'] : [];
@@ -1506,7 +1497,55 @@ function applyAutoFill(){
     if(disp) disp.innerHTML = currentUser.name + ' <span style="font-size:11px;color:var(--a);font-weight:700">[ADMIN]</span>';
     if(inp)  inp.value = currentUser.name;
   }
+
+  // Auto-fill fecha with today if empty or different
+  var now = new Date();
+  var mo = now.getMonth()+1; var dy = now.getDate();
+  var today = now.getFullYear()+'-'+(mo<10?'0'+mo:mo)+'-'+(dy<10?'0'+dy:dy);
+  var fEl = gEl('fecha');
+  if(fEl) fEl.value = today;
+
+  // Auto-fill hora entrada with current time
+  var hh = now.getHours(); var mm = now.getMinutes();
+  var timeNow = (hh<10?'0'+hh:hh)+':'+(mm<10?'0'+mm:mm);
+  var hEntEl = gEl('hEnt');
+  if(hEntEl) hEntEl.value = timeNow;
+
   updDate();
+}
+
+// Check if saved data is from a previous day — auto-archive and reset if so
+function checkDateChange(savedData){
+  if(!savedData || !savedData.v) return false;
+  var savedFecha = savedData.v.fecha || '';
+  if(!savedFecha) return false;
+
+  var now = new Date();
+  var mo = now.getMonth()+1; var dy = now.getDate();
+  var today = now.getFullYear()+'-'+(mo<10?'0'+mo:mo)+'-'+(dy<10?'0'+dy:dy);
+
+  if(savedFecha === today) return false; // Same day, no change needed
+
+  // Different day! Check if there are workers to save
+  var hasWorkers = savedData.w && savedData.w.length > 0;
+  if(hasWorkers){
+    // Auto-save to history before clearing
+    var histKey = getUserHistKey(savedFecha);
+    try{
+      localStorage.setItem(histKey, JSON.stringify({
+        v: savedData.v,
+        w: savedData.w,
+        id: savedData.id||0,
+        ep: savedData.ep||[],
+        hp: savedData.hp||[],
+        cp: savedData.cp||[],
+        saved: new Date().toISOString(),
+        autoArchived: true
+      }));
+      toast('📅 Día '+savedFecha+' archivado automáticamente ('+savedData.w.length+' trabajadores)');
+    }catch(e){}
+  }
+  return true; // Signal to reset
 }
 
 function showEmptyState(){
