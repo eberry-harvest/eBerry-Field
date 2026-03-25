@@ -144,6 +144,33 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .bg{background:var(--g);color:#fff}.bw{background:#25D366;color:#fff}.bo{background:#fff;color:var(--g);border:2px solid var(--g)}.pdf{background:#c0392b;color:#fff}
 .toast{position:fixed;bottom:150px;left:50%;transform:translateX(-50%) translateY(10px);background:var(--dk);color:#fff;padding:10px 18px;border-radius:30px;font-size:14px;font-weight:500;opacity:0;transition:.3s;z-index:999;white-space:nowrap;pointer-events:none}
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ── LOGIN SCREEN ── */
+#loginScreen{position:fixed;inset:0;background:var(--g);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px}
+#loginScreen.hide{display:none}
+.login-logo{font-family:'Bebas Neue',sans-serif;font-size:42px;letter-spacing:3px;color:#fff;margin-bottom:4px}
+.login-logo em{color:var(--a);font-style:normal}
+.login-sub{font-size:11px;color:rgba(255,255,255,.6);letter-spacing:.5px;font-weight:600;margin-bottom:32px}
+.login-card{background:#fff;border-radius:18px;padding:24px 22px;width:100%;max-width:360px;box-shadow:0 8px 32px rgba(0,0,0,.25)}
+.login-title{font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--g);letter-spacing:1px;margin-bottom:4px}
+.login-hint{font-size:12px;color:var(--gr);margin-bottom:18px}
+.pin-dots{display:flex;justify-content:center;gap:12px;margin:16px 0}
+.pin-dot{width:18px;height:18px;border-radius:50%;border:2px solid var(--bd);background:#fff;transition:.2s}
+.pin-dot.filled{background:var(--g);border-color:var(--g)}
+.pin-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px}
+.pin-btn{padding:16px;border:1.5px solid var(--bd);border-radius:12px;background:var(--lt);font-family:'DM Sans',sans-serif;font-size:20px;font-weight:700;color:var(--dk);cursor:pointer;-webkit-tap-highlight-color:transparent;transition:.1s}
+.pin-btn:active{background:var(--gp);border-color:var(--g)}
+.pin-btn.del{font-size:18px;color:var(--gr)}
+.pin-btn.zero{grid-column:2}
+.login-err{color:var(--r);font-size:13px;font-weight:600;text-align:center;margin-top:10px;min-height:20px}
+.login-user{background:var(--gp);border-radius:8px;padding:8px 12px;font-size:13px;font-weight:600;color:var(--g);text-align:center;margin-bottom:12px}
+
+/* ── LOADING OVERLAY ── */
+#loadingOv{position:fixed;inset:0;background:rgba(26,43,140,.92);z-index:8888;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px}
+#loadingOv.hide{display:none}
+.loading-spin{width:40px;height:40px;border:4px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-txt{color:#fff;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600}
 </style>
 </head>
 <body>
@@ -165,6 +192,43 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     <button class="tab" onclick="go(3)">④ Resumen</button>
   </div>
 </header>
+<!-- ── LOGIN SCREEN ── -->
+<div id="loginScreen">
+  <div class="login-logo">eBerry <em>Field</em></div>
+  <div class="login-sub">HARVEST COMPANY LLC</div>
+  <div class="login-card">
+    <div class="login-title">🔐 Acceso al Sistema</div>
+    <div class="login-hint" id="loginHint">Ingresa tu PIN de 4 dígitos</div>
+    <div class="login-user" id="loginUserLabel" style="display:none">—</div>
+    <div class="pin-dots">
+      <div class="pin-dot" id="pd0"></div>
+      <div class="pin-dot" id="pd1"></div>
+      <div class="pin-dot" id="pd2"></div>
+      <div class="pin-dot" id="pd3"></div>
+    </div>
+    <div class="pin-grid">
+      <button class="pin-btn" onclick="pinPress('1')">1</button>
+      <button class="pin-btn" onclick="pinPress('2')">2</button>
+      <button class="pin-btn" onclick="pinPress('3')">3</button>
+      <button class="pin-btn" onclick="pinPress('4')">4</button>
+      <button class="pin-btn" onclick="pinPress('5')">5</button>
+      <button class="pin-btn" onclick="pinPress('6')">6</button>
+      <button class="pin-btn" onclick="pinPress('7')">7</button>
+      <button class="pin-btn" onclick="pinPress('8')">8</button>
+      <button class="pin-btn" onclick="pinPress('9')">9</button>
+      <button class="pin-btn zero" onclick="pinPress('0')">0</button>
+      <button class="pin-btn del" onclick="pinDel()">⌫</button>
+    </div>
+    <div class="login-err" id="loginErr"></div>
+  </div>
+</div>
+
+<!-- ── LOADING OVERLAY ── -->
+<div id="loadingOv">
+  <div class="loading-spin"></div>
+  <div class="loading-txt" id="loadingTxt">Cargando datos...</div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <!-- TIME MODAL -->
@@ -449,37 +513,301 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 </div>
 
 <script>
-var NAMES = ["Antonio Nava Santos","Benustiano Santos Pochoteco","Carlos Enrique Sanchez Reyna","Claudio Felipe Anaya","Daniel Sanjuan Ortiz","Deonisio Roman Lopez","Ediuvany Morales Rosales","Eduardo Hernandez Nava","Emanuel Morales Villalva","Emmanuel Genaro Gil","Gustavo Cruz Sanchez","Heriberto Mendoza Escutia","Ismael Antonio Victoriano","Javier Nava Carrizal","Jorge Alberto Hernandez Cruz","Jose Francisco Gomez Diaz","Jose Luis Dias Mateo","Jose Luis Marcos Nava","Jose Santos Ahuextle","Leonor Mendoza Rafael","Raul Carrizal Nava","Saul Narciso Miguel","Sergio Anastasio Justo","Victorino Ortiz Ortiz"];
+// ── GOOGLE SHEETS CONFIG ──
+var SHEET_ID = '1MuG59ue3F9OLasG-4I-lke0-orNiGrSAZ_n1kuSe5D4';
+var SHEETS_BASE = 'https://docs.google.com/spreadsheets/d/'+SHEET_ID+'/gviz/tq?tqx=out:json&sheet=';
 
-var ACTS = [
-  {es:"Busero",                         en:"Bus driver",               tipo:"Hora", p:16.23,hr:true},
-  {es:"Colocando estaca x hora",        en:"Stake placing/hr",         tipo:"Hora", p:16.23,hr:true},
-  {es:"Deshierbe",                      en:"Weeding",                  tipo:"Hora", p:16.23,hr:true},
-  {es:"Dompero",                        en:"Dumper",                   tipo:"Hora", p:16.23,hr:true},
-  {es:"Empaque calabaza amarilla x hora",en:"Yellow squash packing/hr",tipo:"Hora", p:16.23,hr:true},
-  {es:"Empaque calabaza verde x hora",  en:"Green squash packing/hr",  tipo:"Hora", p:16.23,hr:true},
-  {es:"Empaque chile morron x hora",    en:"Bell pepper packing/hr",   tipo:"Hora", p:16.23,hr:true},
-  {es:"Empaque de berenjena x hora",    en:"Eggplant packing/hr",       tipo:"Hora", p:16.23,hr:true},
-  {es:"Empaque de calabaza amarilla",   en:"Yellow squash packing",    tipo:"Caja", p:0.80, hr:false},
-  {es:"Empaque de calabaza verde",      en:"Green squash packing",     tipo:"Caja", p:0.80, hr:false},
-  {es:"Empaque de chile morron",        en:"Bell pepper packing",      tipo:"Caja", p:0.80, hr:false},
-  {es:"Emplayar",                       en:"Pallet wrapping",          tipo:"Hora", p:16.23,hr:true},
-  {es:"Extra / Bono",                   en:"Bonus",                    tipo:"$",    p:1.00, hr:false},
-  {es:"Fichero",                        en:"Ticket issuer",            tipo:"Hora", p:16.23,hr:true},
-  {es:"Montacarguista",                 en:"Forklift operator",        tipo:"Hora", p:16.23,hr:true},
-  {es:"Pisca berenjena x hora",         en:"Eggplant picking/hr",      tipo:"Hora", p:16.23,hr:true},
-  {es:"Pisca chile caliente x hora",    en:"Hot pepper picking/hr",    tipo:"Hora", p:16.23,hr:true},
-  {es:"Pisca chile morron x hora",      en:"Bell pepper picking/hr",   tipo:"Hora", p:16.23,hr:true},
-  {es:"Pisca de calabaza amarilla",     en:"Yellow squash picking",    tipo:"Ficha",p:0.90, hr:false},
-  {es:"Pisca de calabaza verde",        en:"Green squash picking",     tipo:"Ficha",p:0.90, hr:false},
-  {es:"Pisca de chile morron",          en:"Bell pepper picking",      tipo:"Ficha",p:0.70, hr:false},
-  {es:"Pisca de chile morron rojo",     en:"Red bell pepper picking",  tipo:"Ficha",p:1.00, hr:false},
-  {es:"Pisca de pepino",                en:"Cucumber picking",         tipo:"Ficha",p:0.65, hr:false},
-  {es:"Plantando pepino",               en:"Cucumber planting",        tipo:"Hora", p:16.23,hr:true},
-  {es:"Surquero",                       en:"Crew leader",              tipo:"Hora", p:16.23,hr:true},
-  {es:"Tractorista",                    en:"Tractor operator",         tipo:"Hora", p:16.23,hr:true},
-  {es:"Troquero",                       en:"Truck driver",             tipo:"Hora", p:16.23,hr:true}
+// ── SESSION ──
+var currentUser = null; // {name, pin, crew, isAdmin}
+
+// ── DATA (loaded from Sheets) ──
+var NAMES = []; // workers for current crew
+var ALL_WORKERS = []; // [{name, crew, empNum}]
+var ACTS = [];  // activities for current farm
+var ALL_ACTS = []; // all activities from sheet
+var LIDERES = []; // [{name, empNum, pin}]
+
+// ── FALLBACK DATA (in case Sheets is offline) ──
+var FALLBACK_NAMES = ["Antonio Nava Santos","Benustiano Santos Pochoteco","Carlos Enrique Sanchez Reyna","Claudio Felipe Anaya","Daniel Sanjuan Ortiz","Deonisio Roman Lopez","Ediuvany Morales Rosales","Eduardo Hernandez Nava","Emanuel Morales Villalva","Emmanuel Genaro Gil","Gustavo Cruz Sanchez","Heriberto Mendoza Escutia","Ismael Antonio Victoriano","Javier Nava Carrizal","Jorge Alberto Hernandez Cruz","Jose Francisco Gomez Diaz","Jose Luis Dias Mateo","Jose Luis Marcos Nava","Jose Santos Ahuextle","Leonor Mendoza Rafael","Raul Carrizal Nava","Saul Narciso Miguel","Sergio Anastasio Justo","Victorino Ortiz Ortiz"];
+var FALLBACK_ACTS = [
+  {es:"Busero",en:"Bus driver",tipo:"Hora",p:16.23,hr:true},
+  {es:"Colocando estaca x hora",en:"Stake placing/hr",tipo:"Hora",p:16.23,hr:true},
+  {es:"Deshierbe",en:"Weeding",tipo:"Hora",p:16.23,hr:true},
+  {es:"Dompero",en:"Dumper",tipo:"Hora",p:16.23,hr:true},
+  {es:"Empaque calabaza amarilla x hora",en:"Yellow squash packing/hr",tipo:"Hora",p:16.23,hr:true},
+  {es:"Empaque calabaza verde x hora",en:"Green squash packing/hr",tipo:"Hora",p:16.23,hr:true},
+  {es:"Empaque chile morron x hora",en:"Bell pepper packing/hr",tipo:"Hora",p:16.23,hr:true},
+  {es:"Empaque de berenjena x hora",en:"Eggplant packing/hr",tipo:"Hora",p:16.23,hr:true},
+  {es:"Empaque de calabaza amarilla",en:"Yellow squash packing",tipo:"Caja",p:0.80,hr:false},
+  {es:"Empaque de calabaza verde",en:"Green squash packing",tipo:"Caja",p:0.80,hr:false},
+  {es:"Empaque de chile morron",en:"Bell pepper packing",tipo:"Caja",p:0.80,hr:false},
+  {es:"Emplayar",en:"Pallet wrapping",tipo:"Hora",p:16.23,hr:true},
+  {es:"Extra / Bono",en:"Bonus",tipo:"$",p:1.00,hr:false},
+  {es:"Fichero",en:"Ticket issuer",tipo:"Hora",p:16.23,hr:true},
+  {es:"Montacarguista",en:"Forklift operator",tipo:"Hora",p:16.23,hr:true},
+  {es:"Pisca berenjena x hora",en:"Eggplant picking/hr",tipo:"Hora",p:16.23,hr:true},
+  {es:"Pisca chile caliente x hora",en:"Hot pepper picking/hr",tipo:"Hora",p:16.23,hr:true},
+  {es:"Pisca chile morron x hora",en:"Bell pepper picking/hr",tipo:"Hora",p:16.23,hr:true},
+  {es:"Pisca de calabaza amarilla",en:"Yellow squash picking",tipo:"Ficha",p:0.90,hr:false},
+  {es:"Pisca de calabaza verde",en:"Green squash picking",tipo:"Ficha",p:0.90,hr:false},
+  {es:"Pisca de chile morron",en:"Bell pepper picking",tipo:"Ficha",p:0.70,hr:false},
+  {es:"Pisca de chile morron rojo",en:"Red bell pepper picking",tipo:"Ficha",p:1.00,hr:false},
+  {es:"Pisca de pepino",en:"Cucumber picking",tipo:"Ficha",p:0.65,hr:false},
+  {es:"Plantando pepino",en:"Cucumber planting",tipo:"Hora",p:16.23,hr:true},
+  {es:"Surquero",en:"Crew leader",tipo:"Hora",p:16.23,hr:true},
+  {es:"Tractorista",en:"Tractor operator",tipo:"Hora",p:16.23,hr:true},
+  {es:"Troquero",en:"Truck driver",tipo:"Hora",p:16.23,hr:true}
 ];
+
+// ── PIN LOGIN SYSTEM ──
+var pinBuffer = '';
+
+function pinPress(d){
+  if(pinBuffer.length >= 4) return;
+  pinBuffer += d;
+  updPinDots();
+  if(pinBuffer.length === 4) setTimeout(checkPin, 150);
+}
+
+function pinDel(){
+  pinBuffer = pinBuffer.slice(0,-1);
+  updPinDots();
+  gEl('loginErr').textContent = '';
+}
+
+function updPinDots(){
+  for(var i=0;i<4;i++){
+    var d = gEl('pd'+i);
+    if(d) d.classList.toggle('filled', i < pinBuffer.length);
+  }
+}
+
+function checkPin(){
+  var pin = pinBuffer;
+  pinBuffer = '';
+  updPinDots();
+
+  // Admin PIN
+  if(pin === '2026'){
+    loginSuccess({name:'Administrador', pin:'2026', crew:'ALL', isAdmin:true});
+    return;
+  }
+
+  // Check against lideres list
+  for(var i=0;i<LIDERES.length;i++){
+    if(LIDERES[i].pin === pin){
+      loginSuccess({name:LIDERES[i].name, pin:pin, crew:LIDERES[i].crew, isAdmin:false, empNum:LIDERES[i].empNum});
+      return;
+    }
+  }
+
+  // Wrong PIN
+  gEl('loginErr').textContent = '❌ PIN incorrecto, intenta de nuevo';
+  setTimeout(function(){ gEl('loginErr').textContent=''; }, 2000);
+}
+
+function loginSuccess(user){
+  currentUser = user;
+  gEl('loginScreen').classList.add('hide');
+
+  // Set crew/farm based on user
+  if(!user.isAdmin){
+    // Set farm to user's crew
+    var ranchoEl = gEl('rancho');
+    if(ranchoEl && user.crew) ranchoEl.value = user.crew;
+    // Filter workers and activities for this crew
+    filterDataForCrew(user.crew);
+    // Set surquero default
+    var surqEl = gEl('surquero');
+    if(surqEl){
+      surqEl.innerHTML = '';
+      var opt = document.createElement('option');
+      opt.value = user.name; opt.textContent = user.name; opt.selected = true;
+      surqEl.appendChild(opt);
+    }
+  } else {
+    // Admin sees all workers and all activities
+    NAMES = ALL_WORKERS.map(function(w){ return w.name; });
+    ACTS = ALL_ACTS.slice();
+    populateSurqueroSelect();
+  }
+
+  toast('✅ Bienvenido, ' + (user.isAdmin ? 'Administrador' : user.name.split(' ')[0]) + '!');
+  load();
+}
+
+function filterDataForCrew(crew){
+  // Normalize crew name for matching (e.g. "Pennrose 2" → "Pennrose")
+  var crewBase = crew.replace(/\s*\d+$/, '').trim().toLowerCase();
+
+  // Filter workers: exact crew match
+  NAMES = [];
+  for(var i=0;i<ALL_WORKERS.length;i++){
+    var wCrew = (ALL_WORKERS[i].crew||'').toLowerCase();
+    if(wCrew === crew.toLowerCase() || wCrew === crewBase){
+      NAMES.push(ALL_WORKERS[i].name);
+    }
+  }
+  if(!NAMES.length) NAMES = FALLBACK_NAMES;
+
+  // Filter activities: match base crew name (Pennrose 2 → look for "Pennrose" in tasks)
+  ACTS = [];
+  for(var i=0;i<ALL_ACTS.length;i++){
+    var farm = (ALL_ACTS[i].farm||'').toLowerCase();
+    if(farm === crewBase || farm === crew.toLowerCase()){
+      ACTS.push(ALL_ACTS[i]);
+    }
+  }
+  if(!ACTS.length) ACTS = FALLBACK_ACTS;
+}
+
+function populateSurqueroSelect(){
+  var sel = gEl('surquero'); if(!sel) return;
+  var cur = sel.value || 'Jose Francisco Gomez Diaz';
+  sel.innerHTML = '';
+  for(var i=0;i<LIDERES.length;i++){
+    var o = document.createElement('option');
+    o.value = LIDERES[i].name; o.textContent = LIDERES[i].name;
+    if(LIDERES[i].name === cur) o.selected = true;
+    sel.appendChild(o);
+  }
+  if(!LIDERES.length){
+    var o2 = document.createElement('option');
+    o2.value = cur; o2.textContent = cur; o2.selected = true;
+    sel.appendChild(o2);
+  }
+}
+
+// ── LOAD DATA FROM GOOGLE SHEETS ──
+function parseSheetJSON(raw){
+  var start = raw.indexOf('(') + 1;
+  var end = raw.lastIndexOf(')');
+  return JSON.parse(raw.substring(start, end));
+}
+
+function fetchSheet(sheetName, callback){
+  var url = SHEETS_BASE + encodeURIComponent(sheetName);
+  var s = document.createElement('script');
+  var cbName = '_sheetCb_' + sheetName.replace(/\s/g,'_') + '_' + Date.now();
+  var fullUrl = url + '&tqx=out:json&responseHandler=' + cbName;
+  window[cbName] = function(data){
+    delete window[cbName];
+    document.head.removeChild(s);
+    callback(null, data);
+  };
+  s.onerror = function(){
+    delete window[cbName];
+    try{ document.head.removeChild(s); }catch(e){}
+    callback('error', null);
+  };
+  s.src = SHEETS_BASE + encodeURIComponent(sheetName) + '&responseHandler=' + cbName;
+  document.head.appendChild(s);
+}
+
+function loadSheetsData(){
+  setLoading(true, 'Cargando trabajadores...');
+  var loaded = {workers: false, tasks: false, lideres: false};
+
+  function checkDone(){
+    if(loaded.workers && loaded.tasks && loaded.lideres){
+      setLoading(false);
+      showLogin();
+    }
+  }
+
+  // Load Active Employee List
+  fetchSheet('Active Employee List', function(err, data){
+    if(!err && data && data.table && data.table.rows){
+      ALL_WORKERS = [];
+      var rows = data.table.rows;
+      for(var i=0;i<rows.length;i++){
+        var r = rows[i];
+        var name = r.c&&r.c[0]&&r.c[0].v ? String(r.c[0].v).trim() : '';
+        var empNum = r.c&&r.c[1]&&r.c[1].v ? String(r.c[1].v).trim() : '';
+        var crew = r.c&&r.c[3]&&r.c[3].v ? String(r.c[3].v).trim() : '';
+        if(name && name !== 'Name') ALL_WORKERS.push({name:name, empNum:empNum, crew:crew});
+      }
+    }
+    loaded.workers = true;
+    checkDone();
+  });
+
+  // Load Current Contracted Tasks by Farm
+  fetchSheet('Current Contracted Tasks by Farm', function(err, data){
+    if(!err && data && data.table && data.table.rows){
+      ALL_ACTS = [];
+      var rows = data.table.rows;
+      for(var i=0;i<rows.length;i++){
+        var r = rows[i];
+        var farm = r.c&&r.c[0]&&r.c[0].v ? String(r.c[0].v).trim() : '';
+        var es   = r.c&&r.c[1]&&r.c[1].v ? String(r.c[1].v).trim() : '';
+        var en   = r.c&&r.c[2]&&r.c[2].v ? String(r.c[2].v).trim() : '';
+        var tipo = r.c&&r.c[3]&&r.c[3].v ? String(r.c[3].v).trim() : '';
+        var rate = r.c&&r.c[4]&&r.c[4].v ? parseFloat(r.c[4].v) : 0;
+        if(!farm || farm==='Farm Location' || !es) continue;
+        // Map pay type
+        var tipoMap = {
+          'Hours':'Hora','Daywork':'Hora','Hour':'Hora',
+          'Pieces':'Ficha','Piece':'Ficha',
+          'Extra':'$',
+          'Boxes':'Caja','Box':'Caja'
+        };
+        var tipoNorm = tipoMap[tipo] || 'Hora';
+        var isHr = (tipoNorm === 'Hora');
+        ALL_ACTS.push({farm:farm, es:es, en:en||es, tipo:tipoNorm, p:rate||16.23, hr:isHr});
+      }
+    }
+    loaded.tasks = true;
+    checkDone();
+  });
+
+  // Load Lideres from Active Employee List col G = "Surquero" or "surquero"
+  // We already loaded ALL_WORKERS — now filter by Lider column (index 6 = col G)
+  // Re-fetch with all columns to get col G
+  fetchSheet('Active Employee List', function(err, data){
+    if(!err && data && data.table && data.table.rows){
+      LIDERES = [];
+      var rows = data.table.rows;
+      for(var i=0;i<rows.length;i++){
+        var r = rows[i];
+        var name   = r.c&&r.c[0]&&r.c[0].v ? String(r.c[0].v).trim() : '';
+        var empNum = r.c&&r.c[1]&&r.c[1].v ? String(r.c[1].v).trim() : '';
+        var crew   = r.c&&r.c[3]&&r.c[3].v ? String(r.c[3].v).trim() : '';
+        var lider  = r.c&&r.c[6]&&r.c[6].v ? String(r.c[6].v).trim().toLowerCase() : '';
+        if(!name || name==='Name') continue;
+        if(lider !== 'surquero') continue;
+        var pin = empNum.replace(/\D/g,'').slice(-4);
+        LIDERES.push({name:name, empNum:empNum, pin:pin, crew:crew});
+      }
+    }
+    // Fallback if none found
+    if(!LIDERES.length){
+      LIDERES = [
+        {name:'Jose Francisco Gomez Diaz', empNum:'H00523', pin:'0523', crew:'Pennrose 2'},
+        {name:'Moises Hernandez Hernandez', empNum:'H00734', pin:'0734', crew:'Acursio'}
+      ];
+    }
+    loaded.lideres = true;
+    checkDone();
+  });
+}
+
+function setLoading(show, msg){
+  var ov = gEl('loadingOv');
+  if(!ov) return;
+  if(show){
+    ov.classList.remove('hide');
+    if(msg) gEl('loadingTxt').textContent = msg;
+  } else {
+    ov.classList.add('hide');
+  }
+}
+
+function showLogin(){
+  // Pre-fill login hint with crew info count
+  gEl('loginHint').textContent = 'Ingresa tu PIN de 4 dígitos (' + LIDERES.length + ' surqueros registrados)';
+  gEl('loginScreen').classList.remove('hide');
+}
 
 var pg=0, workers=[], wid=0, estP=[], hilP=[], cajasP=[], grpActs=[], ptm=null, pcp=null, pendingUnk=null, _delPending=null;
 
@@ -543,16 +871,31 @@ function addFrom(){ var n=gEl('srch').value.trim(); if(!n){toast('⚠️ Escribe
 
 function doAdd(name){
   for(var i=0;i<workers.length;i++){ if(workers[i].name===name){toast('⚠️ Ya está en la lista');return;} }
-  var known=false;
-  for(var k=0;k<NAMES.length;k++){ if(NAMES[k].toLowerCase()===name.toLowerCase()){known=true;break;} }
-  if(!known){
-    pendingUnk=name;
-    gEl('unkS').textContent='¿Deseas agregar a "'+name+'" aunque no pertenece al grupo habitual?';
-    gEl('unkN').textContent=name;
-    gEl('unkOv').classList.add('on');
-    return;
+
+  // Check if in current crew
+  var inCrew = false;
+  for(var k=0;k<NAMES.length;k++){ if(NAMES[k].toLowerCase()===name.toLowerCase()){inCrew=true;break;} }
+  if(inCrew){ doAddConfirmed(name); return; }
+
+  // Check if in another crew (from ALL_WORKERS)
+  var otherCrew = '';
+  var foundInDB = false;
+  for(var k=0;k<ALL_WORKERS.length;k++){
+    if(ALL_WORKERS[k].name.toLowerCase()===name.toLowerCase()){
+      foundInDB=true; otherCrew=ALL_WORKERS[k].crew; break;
+    }
   }
-  doAddConfirmed(name);
+
+  pendingUnk = name;
+  if(foundInDB && otherCrew){
+    gEl('unkS').textContent='Esta persona pertenece al crew "'+otherCrew+'". ¿Confirmas que deseas agregarlo a este día?';
+  } else if(foundInDB){
+    gEl('unkS').textContent='Esta persona está en la base de datos de la empresa. ¿Confirmas agregarlo?';
+  } else {
+    gEl('unkS').textContent='Esta persona no está en la base de datos de la empresa. Revisa el nombre. ¿Deseas agregarlo de todas formas?';
+  }
+  gEl('unkN').textContent=name;
+  gEl('unkOv').classList.add('on');
 }
 function okUnk(){ if(pendingUnk){ doAddConfirmed(pendingUnk); pendingUnk=null; } gEl('unkOv').classList.remove('on'); }
 function noUnk(){ pendingUnk=null; gEl('unkOv').classList.remove('on'); }
@@ -1127,15 +1470,7 @@ function saveQuiet(){
 }
 
 window.addEventListener('DOMContentLoaded',function(){
-  var d=new Date();
-  gEl('fecha').value=d.getFullYear()+'-'+numStr(d.getMonth()+1)+'-'+numStr(d.getDate());
-  var surqEl=gEl('surquero');
-  if(surqEl&&!surqEl.value) surqEl.value='Jose Francisco Gomez Diaz';
-  migrateActsToNames(); updParam(); load(); updNav();
-  var surqLoaded=gEl('surquero');
-  if(surqLoaded&&surqLoaded.value) _prevSurquero=surqLoaded.value;
-
-  // Add save pill — FIXED insertBefore (uses dpill's actual parent)
+  // Save pill
   var htop=document.querySelector('.htop');
   if(htop){
     var pill=document.createElement('div');
@@ -1146,7 +1481,6 @@ window.addEventListener('DOMContentLoaded',function(){
     if(dpill&&dpill.parentNode){ dpill.parentNode.insertBefore(pill,dpill.nextSibling); }
     else { htop.appendChild(pill); }
   }
-
   var ids=['rancho','fecha','numBus','numCam','surquero','finca','notas','hEnt','hSal','lIni','lFin'];
   for(var i=0;i<ids.length;i++){
     (function(id){
@@ -1155,9 +1489,7 @@ window.addEventListener('DOMContentLoaded',function(){
       el.addEventListener('input',autoSave);
     })(ids[i]);
   }
-  window.addEventListener('pagehide',saveQuiet);
-  window.addEventListener('visibilitychange',function(){ if(document.visibilityState==='hidden') saveQuiet(); });
-  setInterval(saveQuiet,30000);
+  window.addEventListener('visibilitychange',function(){ if(document.visibilityState==='hidden'&&currentUser) saveQuiet(); });
 });
 
 function showHistory(){
@@ -1714,6 +2046,23 @@ function migrateActsToNames(){
     }
   }catch(e){}
 }
+
+// ── APP INIT ── load Sheets data → show login → user enters PIN → app starts
+window.addEventListener('DOMContentLoaded', function(){
+  migrateActsToNames();
+  // Set today's date
+  var now = new Date();
+  var mo = now.getMonth()+1; var dy = now.getDate();
+  var today = now.getFullYear()+'-'+(mo<10?'0'+mo:mo)+'-'+(dy<10?'0'+dy:dy);
+  var fEl = gEl('fecha'); if(fEl && !fEl.value) fEl.value = today;
+  updParam();
+  // Load data from Sheets then show login
+  loadSheetsData();
+});
+
+// Heartbeat autosave
+setInterval(function(){ if(currentUser) saveQuiet(); }, 30000);
+window.addEventListener('pagehide', function(){ if(currentUser) saveQuiet(); });
 </script>
 </body>
 </html>
