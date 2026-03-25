@@ -757,7 +757,12 @@ function checkPin(){
       return;
     }
     if(data.active){
-      // Show duplicate session modal
+      // Same device reloading? → enter directly, no modal needed
+      if(data.deviceId === DEVICE_ID){
+        proceedLogin(_pendingSessionUser);
+        return;
+      }
+      // Different device → show duplicate session modal
       var mins = data.minutesAgo || 0;
       var lastSeen = data.lastSeenMin || 0;
       gEl('dupSessMsg').textContent = '⚠️ ' + matchedUser.name.split(' ')[0] + ' ya tiene una sesión activa en otro dispositivo.';
