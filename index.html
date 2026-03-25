@@ -1418,14 +1418,13 @@ function okTime(){
 function noTime(){ ptm=null; gEl('tmOv').classList.remove('on'); }
 
 function detPat(){
-  // Collect ALL unique activities from previous workers (excluding last added)
-  // Key = ai + normalized finca — deduplicates same activity+labor across workers
   var seen = {}, pat = [];
   for(var i=0;i<workers.length-1;i++){
     var w=workers[i];
     for(var j=0;j<w.acts.length;j++){
       var a=w.acts[j];
-      var fincaNorm = (a.finca||'').trim().toLowerCase();
+      // Normalize: lowercase, strip spaces/dots/dashes for comparison only
+      var fincaNorm = (a.finca||'').trim().toLowerCase().replace(/[\s\.\-]+/g,'');
       var key = a.ai + '_' + fincaNorm;
       if(!seen[key]){
         seen[key]=true;
@@ -1460,7 +1459,7 @@ function saAll(){ var all=true; for(var i=0;i<pcp.sel.length;i++){if(!pcp.sel[i]
 function okCopy(){
   if(!pcp)return; var wi=pcp.wi,w=workers[wi];
   w.acts=[];
-  for(var i=0;i<pcp.pat.length;i++){ if(pcp.sel[i])w.acts.push({ai:pcp.pat[i].ai,qty:'',ini:pcp.pat[i].ini,fin:pcp.pat[i].fin,showTime:pcp.pat[i].showTime,pay:0,finca:gVal('finca')}); }
+  for(var i=0;i<pcp.pat.length;i++){ if(pcp.sel[i])w.acts.push({ai:pcp.pat[i].ai,qty:'',ini:pcp.pat[i].ini,fin:pcp.pat[i].fin,showTime:pcp.pat[i].showTime,pay:0,finca:pcp.pat[i].finca||gVal('finca')}); }
   w.open=true;
   var cont=gEl('ac'+w.id); if(cont){ cont.innerHTML=''; for(var i=0;i<w.acts.length;i++) mkActRow(w.id,i); }
   var c=gEl('wc'+w.id); if(c)c.classList.add('op');
