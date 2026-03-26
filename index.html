@@ -2451,17 +2451,20 @@ var ausencias = []; // [{name, empNum, motivo}]
 
 function getAusenciaCandidates(){
   var result = [];
-  // NAMES ya contiene solo los trabajadores de la cuadrilla del surquero logueado
-  var pool = (NAMES && NAMES.length) ? NAMES : ALL_WORKERS;
+  // NAMES es array de strings (nombres) de la cuadrilla del surquero
+  var pool = (NAMES && NAMES.length) ? NAMES : [];
   for(var i=0;i<pool.length;i++){
-    var w = pool[i]; if(!w.name) continue;
+    var name = pool[i]; if(!name) continue;
     var isWorker = false;
-    for(var j=0;j<workers.length;j++){ if(workers[j].name.toLowerCase()===w.name.toLowerCase()){isWorker=true;break;} }
+    for(var j=0;j<workers.length;j++){ if(workers[j].name.toLowerCase()===name.toLowerCase()){isWorker=true;break;} }
     if(isWorker) continue;
     var isAus = false;
-    for(var j=0;j<ausencias.length;j++){ if(ausencias[j].name.toLowerCase()===w.name.toLowerCase()){isAus=true;break;} }
+    for(var j=0;j<ausencias.length;j++){ if(ausencias[j].name.toLowerCase()===name.toLowerCase()){isAus=true;break;} }
     if(isAus) continue;
-    result.push({name:w.name, empNum:w.empNum||""});
+    // Buscar empNum en ALL_WORKERS
+    var empNum = "";
+    for(var k=0;k<ALL_WORKERS.length;k++){ if(ALL_WORKERS[k].name.toLowerCase()===name.toLowerCase()){empNum=ALL_WORKERS[k].empNum||"";break;} }
+    result.push({name:name, empNum:empNum});
   }
   return result;
 }
