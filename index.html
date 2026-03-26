@@ -210,7 +210,8 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 </head>
 <body>
 <header>
-  <div class="htop">
+  <div class="htop" style="position:relative">
+    <div id="adminBadge" style="display:none;position:absolute;left:50%;transform:translateX(-50%);top:2px;background:#cc2222;color:#fff;font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:2px;padding:2px 12px;border-radius:20px;z-index:10">ADMIN</div>
     <div>
       <div class="logo">eBerry <em>Field</em></div>
       <div style="font-size:9px;color:rgba(255,255,255,.6);letter-spacing:.5px;margin-top:-2px;font-weight:600">HARVEST COMPANY LLC</div>
@@ -679,6 +680,7 @@ function sessionCall(params, callback){
 }
 
 function startSessionHeartbeat(surquero){
+  if(!surquero || surquero === 'Administrador') return; // Admin no necesita heartbeat
   stopSessionHeartbeat();
   _sessionHeartbeat = setInterval(function(){
     sessionCall({cmd:'heartbeat', surquero:surquero, deviceId:DEVICE_ID}, function(){});
@@ -700,6 +702,7 @@ function logoutUser(){
   saveQuiet();
   closeSession();
   currentUser = null;
+  showAdminBadge(false);
   // Hide logout button
   var btn = gEl('logoutBtn'); if(btn) btn.style.display = 'none';
   // Reset pin state
@@ -743,7 +746,8 @@ function checkPin(){
   pinBuffer = '';
   updPinDots();
 
-  // Admin PIN — no session check needed
+  // Admin PIN — acceso directo, sin verificación de sesión
+  // Permite hasta 4 admins simultáneos (no registra sesión en Sheets)
   if(pin === '2026'){
     loginSuccess({name:'Administrador', pin:'2026', crew:'ALL', isAdmin:true});
     return;
@@ -845,11 +849,19 @@ function loginSuccess(user){
   } else {
     NAMES = ALL_WORKERS.map(function(w){ return w.name; });
     ACTS = ALL_ACTS.slice();
+    // Admin: poblar surquero con lista de lideres y mostrar badge ADMIN
+    populateSurqueroSelect();
+    showAdminBadge(true);
   }
 
   updParam();
   toast('✅ Bienvenido, ' + (user.isAdmin ? 'Administrador' : user.name.split(' ')[0]) + '!');
   load();
+}
+
+function showAdminBadge(show){
+  var b = gEl('adminBadge');
+  if(b) b.style.display = show ? 'block' : 'none';
 }
 
 function filterDataForCrew(crew){
