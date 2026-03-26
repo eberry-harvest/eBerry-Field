@@ -1947,11 +1947,11 @@ function buildPDFWindow(vals, wks, ep, hp, cp){
   }
   actCols.sort(function(a,b){ var ord={'Ficha':0,'Caja':1,'Hora':2,'$':3}; return (ord[a.tipo]||0)-(ord[b.tipo]||0); });
 
-  var th='<th style="width:30px;text-align:center">#</th><th style="min-width:130px">Nombre / Name</th>';
+  var th='<th style="width:28px;text-align:center">#</th><th style="min-width:130px;text-align:left">Nombre / Name</th>';
   for(i=0;i<actCols.length;i++){
     var col=actCols[i];
     var unitLbl=col.tipo==='Hora'?'Horas':col.tipo==='Ficha'?'Fichas':col.tipo==='Caja'?'Cajas':'$';
-    th+='<th style="text-align:center;min-width:80px">'+col.label+'<br><span style="font-weight:400;font-size:9px;opacity:.8">'+unitLbl+'</span></th>';
+    th+='<th style="text-align:center;min-width:75px">'+col.label+'<br><span style="font-weight:400;font-size:8px;opacity:.85">'+unitLbl+'</span></th>';
   }
   if(cp&&cp.length&&cajasT) th+='<th style="text-align:center;min-width:80px">Empaque Cajas<br><span style="font-weight:400;font-size:9px;opacity:.8">Cajas c/u</span></th>';
   if(ep&&ep.length&&estA&&estAn) th+='<th style="text-align:center;min-width:80px">Q. Estaca<br><span style="font-weight:400;font-size:9px;opacity:.8">Puertas c/u</span></th>';
@@ -1960,7 +1960,7 @@ function buildPDFWindow(vals, wks, ep, hp, cp){
   var rows='';
   for(i=0;i<wks.length;i++){
     var w=wks[i];
-    var td='<td style="text-align:center;font-weight:700">'+(i+1)+'</td><td style="font-weight:600">'+w.name+'</td>';
+    var td='<td class="numcol">'+(i+1)+'</td><td class="namecol">'+w.name+'</td>';
     for(j=0;j<actCols.length;j++){
       var col2=actCols[j]; var found2=null;
       for(var k2=0;k2<w.acts.length;k2++){ if(w.acts[k2].ai===col2.ai){found2=w.acts[k2];break;} }
@@ -1972,9 +1972,9 @@ function buildPDFWindow(vals, wks, ep, hp, cp){
         var actFinca = found2.finca||'';
         var dayFinca = vals.finca||'';
         var fincaBadge = (actFinca && actFinca !== dayFinca)
-          ? '<br><span style="font-size:8px;background:#eef4fd;color:#3a7fd4;border-radius:3px;padding:1px 4px;font-weight:600">'+actFinca+'</span>'
+          ? '<br><span class=\'lbl-badge\'>'+actFinca+'</span>'
           : '';
-        td+='<td style="text-align:center">'+cv+fincaBadge+'</td>';
+        td+='<td>'+cv+fincaBadge+'</td>';
       } else { td+='<td></td>'; }
     }
     if(cp&&cp.length&&cajasT) td+='<td style="text-align:center">'+(inA(cp,w.id)?cajasPerPerson.toFixed(1):'')+'</td>';
@@ -1983,12 +1983,12 @@ function buildPDFWindow(vals, wks, ep, hp, cp){
     rows+='<tr'+(i%2===1?' style="background:#f9f9f9"':'')+'>'+td+'</tr>';
   }
   for(i=0;i<3;i++){
-    var etd='<td style="text-align:center;color:#ccc">'+(wks.length+i+1)+'</td><td></td>';
+    var etd='<td class="numcol" style="color:#ddd">'+(wks.length+i+1)+'</td><td></td>';
     for(j=0;j<actCols.length;j++) etd+='<td></td>';
     if(cp&&cp.length&&cajasT) etd+='<td></td>';
     if(ep&&ep.length&&estA&&estAn) etd+='<td></td>';
     if(hp&&hp.length&&hilA&&hilAn) etd+='<td></td>';
-    rows+='<tr style="height:22px">'+etd+'</tr>';
+    rows+='<tr style="height:20px">'+etd+'</tr>';
   }
 
   var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Payroll '+vals.rancho+' '+vals.fecha+'</title>'
