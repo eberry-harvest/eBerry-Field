@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>eBerry Harvest</title>
+<title>Pennrose 2026</title>
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -210,8 +210,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 </head>
 <body>
 <header>
-  <div class="htop" style="position:relative">
-    <div id="adminBadge" style="display:none;position:absolute;left:50%;transform:translateX(-50%);top:2px;background:#cc2222;color:#fff;font-family:'Bebas Neue',sans-serif;font-size:13px;letter-spacing:2px;padding:2px 12px;border-radius:20px;z-index:10">ADMIN</div>
+  <div class="htop">
     <div>
       <div class="logo">eBerry <em>Field</em></div>
       <div style="font-size:9px;color:rgba(255,255,255,.6);letter-spacing:.5px;margin-top:-2px;font-weight:600">HARVEST COMPANY LLC</div>
@@ -680,7 +679,6 @@ function sessionCall(params, callback){
 }
 
 function startSessionHeartbeat(surquero){
-  if(!surquero || surquero === 'Administrador') return; // Admin no necesita heartbeat
   stopSessionHeartbeat();
   _sessionHeartbeat = setInterval(function(){
     sessionCall({cmd:'heartbeat', surquero:surquero, deviceId:DEVICE_ID}, function(){});
@@ -702,7 +700,6 @@ function logoutUser(){
   saveQuiet();
   closeSession();
   currentUser = null;
-  showAdminBadge(false);
   // Hide logout button
   var btn = gEl('logoutBtn'); if(btn) btn.style.display = 'none';
   // Reset pin state
@@ -746,8 +743,7 @@ function checkPin(){
   pinBuffer = '';
   updPinDots();
 
-  // Admin PIN — acceso directo, sin verificación de sesión
-  // Permite hasta 4 admins simultáneos (no registra sesión en Sheets)
+  // Admin PIN — no session check needed
   if(pin === '2026'){
     loginSuccess({name:'Administrador', pin:'2026', crew:'ALL', isAdmin:true});
     return;
@@ -849,19 +845,11 @@ function loginSuccess(user){
   } else {
     NAMES = ALL_WORKERS.map(function(w){ return w.name; });
     ACTS = ALL_ACTS.slice();
-    // Admin: poblar surquero con lista de lideres y mostrar badge ADMIN
-    populateSurqueroSelect();
-    showAdminBadge(true);
   }
 
   updParam();
   toast('✅ Bienvenido, ' + (user.isAdmin ? 'Administrador' : user.name.split(' ')[0]) + '!');
   load();
-}
-
-function showAdminBadge(show){
-  var b = gEl('adminBadge');
-  if(b) b.style.display = show ? 'block' : 'none';
 }
 
 function filterDataForCrew(crew){
@@ -1806,7 +1794,13 @@ function go(n){
   if(n===1){updBanner(); setTimeout(function(){ for(var i=0;i<workers.length;i++) updTot(workers[i].id); },50);}
   if(n===2){updParts();renderGrpActs();}
   if(n===3)buildSum();
-  if(n===4){ syncAusencias(); renderAusencias(); }
+  if(n===4){
+    if(currentUser && currentUser.isAdmin && !gVal('surquero')){
+      showAllEmployeesAsAbsent();
+    } else {
+      syncAusencias(); renderAusencias();
+    }
+  }
   var pgs=document.querySelectorAll('.pg'); for(var i=0;i<pgs.length;i++) pgs[i].classList.toggle('on',i===n);
   var tabs=document.querySelectorAll('.tab'); for(var i=0;i<tabs.length;i++){ tabs[i].classList.remove('act','done'); if(i===n)tabs[i].classList.add('act'); else if(i<n)tabs[i].classList.add('done'); }
   gEl('addbar').classList.toggle('on',n===1);
@@ -2596,40 +2590,60 @@ function getAusenciaCandidates(){
 
 function syncAusencias(){
   // 1) Limpiar ausencias que no pertenecen a la cuadrilla actual
-  //    PERO solo borrar las que NO tienen motivo asignado
-  //    (las que ya tienen motivo se conservan siempre — son datos importantes)
+  // Solo limpiar si NAMES ya está cargado con datos reales (no vacío)
   if(NAMES && NAMES.length > 1){
     var namesLow = NAMES.map(function(n){ return n.toLowerCase(); });
     ausencias = ausencias.filter(function(a){
-      // Siempre conservar si ya tiene motivo asignado
-      if(a.motivo) return true;
-      // Si no tiene motivo, solo conservar si pertenece a la cuadrilla
       return namesLow.indexOf(a.name.toLowerCase()) >= 0;
     });
   }
-  // 2) Quitar los que ya están trabajando (sin importar si tienen motivo)
+  // 2) Quitar los que ya estan trabajando
   ausencias = ausencias.filter(function(a){
-    for(var j=0;j<workers.length;j++){
-      if(workers[j].name.toLowerCase()===a.name.toLowerCase()) return false;
-    }
+    for(var j=0;j<workers.length;j++){ if(workers[j].name.toLowerCase()===a.name.toLowerCase()) return false; }
     return true;
   });
-  // 3) Auto-agregar faltantes de la cuadrilla que aún no están en la lista
+  // 3) Auto-agregar faltantes — preservando motivo si ya existía guardado
+  // Admin sin surquero seleccionado → no hacer sync (usa showAllEmployeesAsAbsent)
+  if(currentUser && currentUser.isAdmin && !gVal('surquero')) return;
   var candidates = getAusenciaCandidates();
   for(var i=0;i<candidates.length;i++){
     var c2 = candidates[i]; var already = false;
     for(var j=0;j<ausencias.length;j++){
       if(ausencias[j].name.toLowerCase()===c2.name.toLowerCase()){
-        already = true;
-        // Actualizar empNum si faltaba
+        already=true;
+        // Preservar empNum si faltaba
         if(!ausencias[j].empNum && c2.empNum) ausencias[j].empNum = c2.empNum;
         break;
       }
     }
     if(!already) ausencias.push({name:c2.name, empNum:c2.empNum, motivo:""});
   }
-  // 4) Guardar inmediatamente para no perder los motivos recién cargados
-  autoSave();
+}
+
+function showAllEmployeesAsAbsent(){
+  var list  = gEl('ausenciasList');
+  var empty = gEl('ausenciasEmpty');
+  var hdr   = gEl('ausHdr');
+  if(!list) return;
+  if(empty) empty.style.display='none';
+  if(!ALL_WORKERS.length){
+    list.innerHTML='<div style="text-align:center;padding:30px;color:var(--gr)"><div style="font-size:13px">Cargando empleados...</div></div>';
+    return;
+  }
+  if(hdr) hdr.textContent = ALL_WORKERS.length + ' empleados en total (vista empresa completa)';
+  list.innerHTML='';
+  for(var i=0;i<ALL_WORKERS.length;i++){
+    var w = ALL_WORKERS[i];
+    var card = document.createElement('div');
+    card.className = 'aus-card';
+    card.style.cssText='padding:10px 13px;display:flex;align-items:center;justify-content:space-between';
+    card.innerHTML = '<div>'
+      +'<span class="aus-name" style="font-size:13px">\U0001f464 '+w.name+'</span>'
+      +(w.empNum ? '<span class="aus-empnum">#'+w.empNum+'</span>' : '')
+      +'</div>'
+      +(w.crew ? '<span style="font-size:10px;color:var(--gr);background:var(--gp);border-radius:5px;padding:2px 7px">'+w.crew+'</span>' : '');
+    list.appendChild(card);
+  }
 }
 
 function onAusAC(v){
