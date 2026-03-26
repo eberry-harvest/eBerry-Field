@@ -468,6 +468,9 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
       <div><label># Camioneta</label><input type="text" id="numCam" placeholder="Opt."></div>
       <div><label>Surquero</label>
         <div id="surqueroDisplay" style="padding:11px 12px;border:1.5px solid var(--bd);border-radius:8px;font-size:15px;background:#f0f0f0;color:var(--dk);font-weight:600">—</div>
+        <select id="surqueroAdminSel" style="display:none" onchange="onAdminSurqueroChange(this.value)">
+          <option value="">— Selecciona un surquero —</option>
+        </select>
         <input type="hidden" id="surquero" value="">
       </div>
     </div>
@@ -850,6 +853,30 @@ function loginSuccess(user){
   updParam();
   toast('✅ Bienvenido, ' + (user.isAdmin ? 'Administrador' : user.name.split(' ')[0]) + '!');
   load();
+}
+
+function onAdminSurqueroChange(name){
+  var inp = gEl('surquero');
+  if(inp) inp.value = name;
+  if(!name){ NAMES=ALL_WORKERS.map(function(w){return w.name;}); ACTS=ALL_ACTS.slice(); return; }
+  var lider = null;
+  for(var i=0;i<LIDERES.length;i++){ if(LIDERES[i].name===name){lider=LIDERES[i];break;} }
+  if(lider && lider.crew){
+    filterDataForCrew(lider.crew);
+    var crewBase = lider.crew.replace(/\s*\d+$/,'').trim();
+    var rEl=gEl('rancho'); if(rEl&&crewBase) rEl.value=crewBase;
+  } else {
+    NAMES=ALL_WORKERS.map(function(w){return w.name;}); ACTS=ALL_ACTS.slice();
+  }
+  workers=[]; wid=0;
+  var wlist=gEl('wlist'); if(wlist){
+    wlist.innerHTML='';
+    var ph=document.createElement('div'); ph.id='wph';
+    ph.style.cssText='text-align:center;padding:40px 18px;color:var(--gr);font-size:14px';
+    ph.textContent='Escribe un nombre en la barra de abajo'; wlist.appendChild(ph);
+  }
+  updParam(); updParts();
+  toast('✅ Cuadrilla de '+name.split(' ')[0]+' cargada — '+NAMES.length+' personas');
 }
 
 function filterDataForCrew(crew){
@@ -1727,8 +1754,19 @@ function applyAutoFill(){
     var crewBase = currentUser.crew.replace(/\s*\d+$/,'').trim();
     var rEl = gEl('rancho'); if(rEl) rEl.value = crewBase;
   } else {
-    if(disp) disp.innerHTML = currentUser.name + ' <span style="font-size:11px;color:var(--a);font-weight:700">[ADMIN]</span>';
-    if(inp)  inp.value = currentUser.name;
+    // Admin: ocultar display, mostrar select con surqueros
+    if(disp) disp.style.display="none";
+    var adminSel = gEl("surqueroAdminSel");
+    if(adminSel){
+      adminSel.style.display="block";
+      adminSel.innerHTML = '<option value="">— Selecciona un surquero —</option>';
+      for(var li=0;li<LIDERES.length;li++){
+        var opt=document.createElement("option");
+        opt.value=LIDERES[li].name; opt.textContent=LIDERES[li].name;
+        adminSel.appendChild(opt);
+      }
+    }
+    if(inp) inp.value="";
   }
 
   // Auto-fill fecha with today if empty or different
