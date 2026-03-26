@@ -1945,7 +1945,30 @@ function buildPDFWindow(vals, wks, ep, hp, cp){
       if(!found && ACTS[ai]) actCols.push({ai:ai, label:ACTS[ai].en||ACTS[ai].es, tipo:ACTS[ai].tipo, hr:ACTS[ai].hr});
     }
   }
-  actCols.sort(function(a,b){ var ord={'Ficha':0,'Caja':1,'Hora':2,'$':3}; return (ord[a.tipo]||0)-(ord[b.tipo]||0); });
+  // Adjuntar horario de entrada a cada columna (para ordenar cronológicamente)
+  for(var ci=0;ci<actCols.length;ci++){
+    var firstIni='99:99';
+    for(var wi2=0;wi2<wks.length;wi2++){
+      for(var ai2=0;ai2<wks[wi2].acts.length;ai2++){
+        var act_=wks[wi2].acts[ai2];
+        if(act_.ai===actCols[ci].ai){
+          var ini_=act_.ini||((act_.shifts&&act_.shifts.length)?act_.shifts[0].ini:'');
+          if(ini_&&ini_<firstIni) firstIni=ini_;
+        }
+      }
+    }
+    actCols[ci]._ini = firstIni; // guardar para ordenar
+  }
+  // Ordenar: primero por hora de entrada, luego por tipo si no hay horario
+  actCols.sort(function(a,b){
+    var ord={'Ficha':0,'Caja':1,'Hora':2,'$':3};
+    var aHasTime = a._ini && a._ini!=='99:99';
+    var bHasTime = b._ini && b._ini!=='99:99';
+    if(aHasTime && bHasTime) return a._ini < b._ini ? -1 : a._ini > b._ini ? 1 : 0;
+    if(aHasTime) return -1;
+    if(bHasTime) return 1;
+    return (ord[a.tipo]||0)-(ord[b.tipo]||0);
+  });
 
   var th='<th style="width:28px;text-align:center">#</th><th style="min-width:130px;text-align:left">Nombre / Name</th>';
   for(i=0;i<actCols.length;i++){
@@ -2006,7 +2029,9 @@ function buildPDFWindow(vals, wks, ep, hp, cp){
   var trTotal='<tr style="background:#d0d8ff;font-weight:700;font-size:10px;border-top:2px solid #1a2b8c">'
     +'<td colspan="2" style="text-align:right;padding:5px 7px;border:1px solid #aab;color:#1a2b8c;font-size:10px;font-weight:900">TOTAL</td>';
   var trPrice='<tr style="font-size:10px;background:#fff">'
-    +'<td colspan="2" style="text-align:right;padding:4px 7px;border:1px solid #ddd;color:#666">Pago Unit.</td>';
+    +'<td colspan="2" style="text-align:right;padding:4px 7px;border:1px solid #ddd;color:#555;font-weight:600">Pago Unit.</td>';
+  var trLabor='<tr style="font-size:10px;background:#f5f8ff">'
+    +'<td colspan="2" style="text-align:right;padding:4px 7px;border:1px solid #ddd;color:#555;font-weight:600">Labor</td>';
   var trEntry='<tr style="font-size:10px;background:#f9f9f9">'
     +'<td colspan="2" style="text-align:right;padding:4px 7px;border:1px solid #ddd;color:#666">Entrada</td>';
   var trExit='<tr style="font-size:10px;background:#f9f9f9">'
@@ -2017,13 +2042,21 @@ function buildPDFWindow(vals, wks, ep, hp, cp){
     var tot=colTotals[col4.ai]||0;
     var totLbl=col4.hr?(tot%1===0?tot+' h':tot.toFixed(1)+' h'):tot.toFixed(1);
     var unitPr=''; var entLbl=''; var salLbl='';
+    var laborLbl='';
     for(var w2=0;w2<wks.length;w2++){
       for(var a2=0;a2<wks[w2].acts.length;a2++){
         if(wks[w2].acts[a2].ai===col4.ai){
           var act2=wks[w2].acts[a2];
-          if(act2.unitPrice) unitPr='$'+parseFloat(act2.unitPrice).toFixed(2);
+          // Precio unitario — puede venir de unitPrice o de ACTS global
+          if(act2.unitPrice){
+            unitPr='$'+parseFloat(act2.unitPrice).toFixed(2);
+          } else if(ACTS[col4.ai]&&ACTS[col4.ai].p){
+            unitPr='$'+parseFloat(ACTS[col4.ai].p).toFixed(2);
+          }
+          // Labor/Finca de la actividad
+          if(act2.finca) laborLbl=act2.finca;
+          // Horario — shifts[] o ini/fin directo
           if(col4.hr){
-            // Horario puede estar en shifts[] o directamente en ini/fin
             if(act2.shifts&&act2.shifts.length){
               entLbl=act2.shifts[0].ini||'';
               salLbl=act2.shifts[act2.shifts.length-1].fin||'';
@@ -2037,16 +2070,21 @@ function buildPDFWindow(vals, wks, ep, hp, cp){
       }
       if(unitPr) break;
     }
+    // Fallback: precio desde ACTS global si no se encontró en workers
+    if(!unitPr && ACTS[col4.ai] && ACTS[col4.ai].p){
+      unitPr='$'+parseFloat(ACTS[col4.ai].p).toFixed(2);
+    }
     trTotal+='<td style="text-align:center;border:1px solid #ccc;color:#1a2b8c;font-weight:700">'+totLbl+'</td>';
-    trPrice+='<td style="text-align:center;border:1px solid #ddd;color:#444">'+unitPr+'</td>';
+    trPrice+='<td style="text-align:center;border:1px solid #ddd;color:#c0392b;font-weight:700">'+unitPr+'</td>';
+    trLabor+='<td style="text-align:center;border:1px solid #ddd;color:#3a7fd4;font-size:9px">'+laborLbl+'</td>';
     trEntry+='<td style="text-align:center;border:1px solid #ddd;color:#444">'+entLbl+'</td>';
     trExit +='<td style="text-align:center;border:1px solid #ddd;color:#444">'+salLbl+'</td>';
   }
-  if(cp&&cp.length&&cajasT){ trTotal+='<td></td>'; trPrice+='<td></td>'; trEntry+='<td></td>'; trExit+='<td></td>'; }
-  if(ep&&ep.length&&estA&&estAn){ trTotal+='<td></td>'; trPrice+='<td></td>'; trEntry+='<td></td>'; trExit+='<td></td>'; }
-  if(hp&&hp.length&&hilA&&hilAn){ trTotal+='<td></td>'; trPrice+='<td></td>'; trEntry+='<td></td>'; trExit+='<td></td>'; }
-  trTotal+='</tr>'; trPrice+='</tr>'; trEntry+='</tr>'; trExit+='</tr>';
-  var metaRows=trTotal+trPrice+trEntry+trExit;
+  if(cp&&cp.length&&cajasT){ trTotal+='<td></td>'; trPrice+='<td></td>'; trLabor+='<td></td>'; trEntry+='<td></td>'; trExit+='<td></td>'; }
+  if(ep&&ep.length&&estA&&estAn){ trTotal+='<td></td>'; trPrice+='<td></td>'; trLabor+='<td></td>'; trEntry+='<td></td>'; trExit+='<td></td>'; }
+  if(hp&&hp.length&&hilA&&hilAn){ trTotal+='<td></td>'; trPrice+='<td></td>'; trLabor+='<td></td>'; trEntry+='<td></td>'; trExit+='<td></td>'; }
+  trTotal+='</tr>'; trPrice+='</tr>'; trLabor+='</tr>'; trEntry+='</tr>'; trExit+='</tr>';
+  var metaRows=trTotal+trPrice+trLabor+trEntry+trExit;
 
   var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Payroll '+vals.rancho+' '+vals.fecha+'</title>'
     +'<style>'
