@@ -2451,10 +2451,10 @@ var ausencias = []; // [{name, empNum, motivo}]
 
 function getAusenciaCandidates(){
   var result = [];
-  for(var i=0;i<ALL_WORKERS.length;i++){
-    var w = ALL_WORKERS[i]; if(!w.name) continue;
-    var curSurq = (gVal("surquero")||"").toLowerCase().trim();
-    if(curSurq && w.lider && w.lider.toLowerCase().trim() !== curSurq) continue;
+  // NAMES ya contiene solo los trabajadores de la cuadrilla del surquero logueado
+  var pool = (NAMES && NAMES.length) ? NAMES : ALL_WORKERS;
+  for(var i=0;i<pool.length;i++){
+    var w = pool[i]; if(!w.name) continue;
     var isWorker = false;
     for(var j=0;j<workers.length;j++){ if(workers[j].name.toLowerCase()===w.name.toLowerCase()){isWorker=true;break;} }
     if(isWorker) continue;
