@@ -1977,6 +1977,30 @@ function buildPDFWindow(vals, wks, ep, hp, cp){
   if(ep&&ep.length&&estA&&estAn) th+='<th style="text-align:center;min-width:80px">Q. Estaca<br><span style="font-weight:400;font-size:9px;opacity:.8">Puertas c/u</span></th>';
   if(hp&&hp.length&&hilA&&hilAn) th+='<th style="text-align:center;min-width:80px">Q. Hilo<br><span style="font-weight:400;font-size:9px;opacity:.8">Puertas c/u</span></th>';
 
+  // ── Fila TOTAL / Pago Unit. ──
+  var totalRow='<td colspan="2" style="background:#1a2b8c;color:#fff;font-weight:700;font-size:10px;padding:4px 6px">TOTAL &nbsp;/&nbsp; Pago Unit.</td>';
+  for(i=0;i<actCols.length;i++){
+    var colT=actCols[i];
+    var unitP=ACTS[colT.ai]?ACTS[colT.ai].p:0;
+    // Sumar total horas/unidades de esta columna
+    var colTotal=0;
+    for(var wi=0;wi<wks.length;wi++){
+      for(var ai2=0;ai2<wks[wi].acts.length;ai2++){
+        if(wks[wi].acts[ai2].ai===colT.ai){
+          if(colT.hr){ colTotal+=totalShiftHours(wks[wi].acts[ai2])||0; }
+          else { colTotal+=parseFloat(wks[wi].acts[ai2].qty)||0; }
+        }
+      }
+    }
+    totalRow+='<td style="text-align:center;background:#1a2b8c;color:#fff;font-size:10px;padding:4px 3px">'
+      +'<span style="font-weight:700">'+(colTotal?colTotal+' h':'—')+'</span>'
+      +(unitP?'<br><span style="color:#ff8080;font-weight:700">$'+unitP.toFixed(2)+'</span>':'')
+      +'</td>';
+  }
+  if(cp&&cp.length&&cajasT) totalRow+='<td style="background:#1a2b8c"></td>';
+  if(ep&&ep.length&&estA&&estAn) totalRow+='<td style="background:#1a2b8c"></td>';
+  if(hp&&hp.length&&hilA&&hilAn) totalRow+='<td style="background:#1a2b8c"></td>';
+
   var rows='';
   for(i=0;i<wks.length;i++){
     var w=wks[i];
@@ -2014,7 +2038,7 @@ function buildPDFWindow(vals, wks, ep, hp, cp){
   var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Payroll '+vals.rancho+' '+vals.fecha+'</title>'
     +'<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:12px;padding:15px;color:#111}.hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;border-bottom:3px solid #1a7a4a;padding-bottom:10px}table{width:100%;border-collapse:collapse;font-size:11px}th{padding:6px 5px;text-align:left;font-size:10px;font-weight:700;border:1px solid #ccc}td{padding:5px;border:1px solid #ddd;vertical-align:middle}.ft{font-size:9px;color:#888;text-align:center;margin-top:8px;border-top:1px solid #ddd;padding-top:6px}@media print{.nopr{display:none}thead{display:table-header-group}@page{margin:8mm;size:letter landscape}}</style></head><body>'
     +'<div class="hdr"><div style="display:flex;align-items:center;gap:12px"><img src="'+EBERRY_LOGO+'" style="height:60px;width:auto" alt="eBerry"><div><div style="font-size:18px;font-weight:700;color:#1a2b8c">eberry harvest company llc</div><div style="font-size:15px;font-weight:900;letter-spacing:.5px">DAILY PAYROLL SHEET</div><div style="font-size:11px;color:#555">Farm: '+vals.rancho+' &nbsp;|&nbsp; Bus #'+vals.numBus+' &nbsp;|&nbsp; Lunch: '+lunchMin+' min</div></div></div><div style="text-align:right"><div style="font-size:9px;font-weight:700;color:#888;text-transform:uppercase">Date / Fecha</div><div style="font-size:20px;font-weight:900;color:#1a2b8c">'+vals.fecha+'</div></div></div>'
-    +'<table><thead><tr style="background:#1a2b8c;color:#fff">'+th+'</tr></thead><tbody>'+rows+'</tbody></table>'
+    +'<table><thead><tr style="background:#1a2b8c;color:#fff">'+th+'</tr><tr>'+totalRow+'</tr></thead><tbody>'+rows+'</tbody></table>'
     // ── Bloque de ausencias en el PDF ──
     +(ausencias.length ? (function(){
       var motLabel = {'cambio':'🔄 Cambio de rancho','enfermedad':'🤒 Enfermedad','injustificada':'❌ Falta injustificada','notrabajo':'🚫 No hubo trabajo','':'Sin motivo'};
@@ -2474,7 +2498,8 @@ function getAusenciaCandidates(){
 
 function syncAusencias(){
   // 1) Limpiar ausencias que no pertenecen a la cuadrilla actual
-  if(NAMES && NAMES.length){
+  // Solo limpiar si NAMES ya está cargado con datos reales (no vacío)
+  if(NAMES && NAMES.length > 1){
     var namesLow = NAMES.map(function(n){ return n.toLowerCase(); });
     ausencias = ausencias.filter(function(a){
       return namesLow.indexOf(a.name.toLowerCase()) >= 0;
@@ -2485,11 +2510,18 @@ function syncAusencias(){
     for(var j=0;j<workers.length;j++){ if(workers[j].name.toLowerCase()===a.name.toLowerCase()) return false; }
     return true;
   });
-  // 3) Auto-agregar faltantes de la cuadrilla
+  // 3) Auto-agregar faltantes — preservando motivo si ya existía guardado
   var candidates = getAusenciaCandidates();
   for(var i=0;i<candidates.length;i++){
     var c2 = candidates[i]; var already = false;
-    for(var j=0;j<ausencias.length;j++){ if(ausencias[j].name.toLowerCase()===c2.name.toLowerCase()){already=true;break;} }
+    for(var j=0;j<ausencias.length;j++){
+      if(ausencias[j].name.toLowerCase()===c2.name.toLowerCase()){
+        already=true;
+        // Preservar empNum si faltaba
+        if(!ausencias[j].empNum && c2.empNum) ausencias[j].empNum = c2.empNum;
+        break;
+      }
+    }
     if(!already) ausencias.push({name:c2.name, empNum:c2.empNum, motivo:""});
   }
 }
