@@ -2470,18 +2470,25 @@ function getAusenciaCandidates(){
 }
 
 function syncAusencias(){
-  // Auto-agregar faltantes
+  // 1) Limpiar ausencias que no pertenecen a la cuadrilla actual
+  if(NAMES && NAMES.length){
+    var namesLow = NAMES.map(function(n){ return n.toLowerCase(); });
+    ausencias = ausencias.filter(function(a){
+      return namesLow.indexOf(a.name.toLowerCase()) >= 0;
+    });
+  }
+  // 2) Quitar los que ya estan trabajando
+  ausencias = ausencias.filter(function(a){
+    for(var j=0;j<workers.length;j++){ if(workers[j].name.toLowerCase()===a.name.toLowerCase()) return false; }
+    return true;
+  });
+  // 3) Auto-agregar faltantes de la cuadrilla
   var candidates = getAusenciaCandidates();
   for(var i=0;i<candidates.length;i++){
     var c2 = candidates[i]; var already = false;
     for(var j=0;j<ausencias.length;j++){ if(ausencias[j].name.toLowerCase()===c2.name.toLowerCase()){already=true;break;} }
     if(!already) ausencias.push({name:c2.name, empNum:c2.empNum, motivo:""});
   }
-  // Quitar los que ya se agregaron como trabajadores
-  ausencias = ausencias.filter(function(a){
-    for(var j=0;j<workers.length;j++){ if(workers[j].name.toLowerCase()===a.name.toLowerCase()) return false; }
-    return true;
-  });
 }
 
 function onAusAC(v){
