@@ -2584,32 +2584,40 @@ function getAusenciaCandidates(){
 
 function syncAusencias(){
   // 1) Limpiar ausencias que no pertenecen a la cuadrilla actual
-  // Solo limpiar si NAMES ya está cargado con datos reales (no vacío)
+  //    PERO solo borrar las que NO tienen motivo asignado
+  //    (las que ya tienen motivo se conservan siempre — son datos importantes)
   if(NAMES && NAMES.length > 1){
     var namesLow = NAMES.map(function(n){ return n.toLowerCase(); });
     ausencias = ausencias.filter(function(a){
+      // Siempre conservar si ya tiene motivo asignado
+      if(a.motivo) return true;
+      // Si no tiene motivo, solo conservar si pertenece a la cuadrilla
       return namesLow.indexOf(a.name.toLowerCase()) >= 0;
     });
   }
-  // 2) Quitar los que ya estan trabajando
+  // 2) Quitar los que ya están trabajando (sin importar si tienen motivo)
   ausencias = ausencias.filter(function(a){
-    for(var j=0;j<workers.length;j++){ if(workers[j].name.toLowerCase()===a.name.toLowerCase()) return false; }
+    for(var j=0;j<workers.length;j++){
+      if(workers[j].name.toLowerCase()===a.name.toLowerCase()) return false;
+    }
     return true;
   });
-  // 3) Auto-agregar faltantes — preservando motivo si ya existía guardado
+  // 3) Auto-agregar faltantes de la cuadrilla que aún no están en la lista
   var candidates = getAusenciaCandidates();
   for(var i=0;i<candidates.length;i++){
     var c2 = candidates[i]; var already = false;
     for(var j=0;j<ausencias.length;j++){
       if(ausencias[j].name.toLowerCase()===c2.name.toLowerCase()){
-        already=true;
-        // Preservar empNum si faltaba
+        already = true;
+        // Actualizar empNum si faltaba
         if(!ausencias[j].empNum && c2.empNum) ausencias[j].empNum = c2.empNum;
         break;
       }
     }
     if(!already) ausencias.push({name:c2.name, empNum:c2.empNum, motivo:""});
   }
+  // 4) Guardar inmediatamente para no perder los motivos recién cargados
+  autoSave();
 }
 
 function onAusAC(v){
