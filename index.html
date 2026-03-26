@@ -186,6 +186,11 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .aus-opt.sel-cambio .aus-lbl{color:#3a7fd4}
 .aus-opt.sel-enfermedad .aus-lbl{color:var(--b)}
 .aus-opt.sel-injustificada .aus-lbl{color:var(--r)}
+.aus-opt.sel-notrabajo{background:#fff8e1;border-color:#f39c12}
+.aus-opt.sel-notrabajo .aus-dot{background:#f39c12;border-color:#f39c12}
+.aus-opt.sel-notrabajo .aus-lbl{color:#f39c12}
+.aus-empnum{font-size:10px;font-weight:600;color:var(--gr);background:var(--gp);border-radius:5px;padding:2px 7px;margin-left:8px}
+.aus-motivo-req{font-size:11px;color:var(--r);margin-top:6px;font-weight:600}
 /* ── END STYLES ── */
 .loading-txt{color:#fff;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600}
 </style>
@@ -529,7 +534,6 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     <div class="ct">📤 Enviar</div>
     <button class="btn" style="background:#3a7fd4;color:#fff" onclick="openNewDay()">🌅 Nuevo Día</button>
     <button class="btn pdf" onclick="genPDF()">📄 Generar PDF para Payroll</button>
-    <button class="btn" style="background:#25D366;color:#fff" onclick="sharePDFWhatsApp()">📲 Enviar PDF por WhatsApp</button>
     <!-- ── PAYROLL FIELD MASTER BUTTON ── -->
     <button id="sheetsSendBtn" class="btn" style="background:#1a3a5c;color:#fff" onclick="sendToSheets()">📊 Enviar a Payroll Field Master</button>
     <button class="btn bg" onclick="save()">💾 Guardar</button>
@@ -546,7 +550,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 <!-- PAGE 4 — AUSENCIAS -->
 <div class="pg" id="p4">
   <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px;margin-bottom:3px">Ausencias del Día</div>
-  <div style="font-size:13px;color:var(--gr);margin-bottom:14px">Personas de tu equipo que no trabajaron hoy</div>
+  <div id="ausHdr" style="font-size:13px;color:var(--gr);margin-bottom:14px">Personas de tu equipo que no trabajaron hoy</div>
   <div id="ausenciasList"></div>
   <div id="ausenciasEmpty" style="text-align:center;padding:40px 20px;color:var(--gr)">
     <div style="font-size:40px;margin-bottom:12px">✅</div>
@@ -1775,7 +1779,7 @@ function go(n){
   if(n===1){updBanner(); setTimeout(function(){ for(var i=0;i<workers.length;i++) updTot(workers[i].id); },50);}
   if(n===2){updParts();renderGrpActs();}
   if(n===3)buildSum();
-  if(n===4)renderAusencias();
+  if(n===4){ syncAusencias(); renderAusencias(); }
   var pgs=document.querySelectorAll('.pg'); for(var i=0;i<pgs.length;i++) pgs[i].classList.toggle('on',i===n);
   var tabs=document.querySelectorAll('.tab'); for(var i=0;i<tabs.length;i++){ tabs[i].classList.remove('act','done'); if(i===n)tabs[i].classList.add('act'); else if(i<n)tabs[i].classList.add('done'); }
   gEl('addbar').classList.toggle('on',n===1);
@@ -1924,150 +1928,6 @@ function genPDF(){
   buildPDFWindow(vals, workers, estP, hilP, cajasP);
 }
 
-function sharePDFWhatsApp(){
-  // Verificar soporte
-  if(!navigator.share){
-    toast('Tu dispositivo no soporta compartir archivos directo. Usa Generar PDF → Imprimir → Guardar como PDF y comparte manualmente.');
-    return;
-  }
-  toast('Generando PDF...');
-  var vals={rancho:gVal('rancho'),fecha:gVal('fecha'),surquero:gVal('surquero'),finca:gVal('finca'),numBus:gVal('numBus'),hEnt:gVal('hEnt'),hSal:gVal('hSal'),lIni:gVal('lIni'),lFin:gVal('lFin')};
-
-  // Necesitamos html2canvas + jsPDF para generar el PDF en memoria
-  // Primero cargamos los scripts si no están ya cargados
-  function loadScript(url, cb){
-    if(document.querySelector('script[src="'+url+'"]')){ cb(); return; }
-    var s=document.createElement('script'); s.src=url;
-    s.onload=cb; s.onerror=function(){ toast('Error cargando librerías PDF'); };
-    document.head.appendChild(s);
-  }
-
-  loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js', function(){
-    loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js', function(){
-      // Construir el HTML del PDF en un div temporal oculto
-      var tmpDiv = document.createElement('div');
-      tmpDiv.style.cssText = 'position:fixed;left:-9999px;top:0;width:1100px;background:#fff;padding:12px;font-family:Arial,sans-serif;font-size:10px';
-      document.body.appendChild(tmpDiv);
-
-      // Reutilizamos buildPDFContent para obtener el HTML interior
-      var htmlContent = buildPDFContent(vals, workers, estP, hilP, cajasP);
-      tmpDiv.innerHTML = htmlContent;
-
-      setTimeout(function(){
-        html2canvas(tmpDiv, {scale:1.5, useCORS:true, backgroundColor:'#ffffff'}).then(function(canvas){
-          document.body.removeChild(tmpDiv);
-          var { jsPDF } = window.jspdf;
-          var pdf = new jsPDF({ orientation:'landscape', unit:'mm', format:'letter' });
-          var imgW = 279; // letter landscape width mm
-          var imgH = canvas.height * imgW / canvas.width;
-          // Si el contenido es muy alto, dividir en páginas
-          var pageH = 215; // letter landscape height mm
-          var posY = 0;
-          while(posY < imgH){
-            if(posY > 0) pdf.addPage();
-            pdf.addImage(canvas.toDataURL('image/jpeg', 0.92), 'JPEG', 0, -posY, imgW, imgH);
-            posY += pageH;
-          }
-          var fileName = 'Payroll_'+vals.rancho+'_'+vals.fecha+'.pdf';
-          var pdfBlob = pdf.output('blob');
-          var file = new File([pdfBlob], fileName, {type:'application/pdf'});
-          navigator.share({ files:[file], title:'Payroll '+vals.rancho+' '+vals.fecha })
-            .then(function(){ toast('¡PDF compartido!'); })
-            .catch(function(err){ if(err.name!=='AbortError') toast('Error al compartir: '+err.message); });
-        }).catch(function(){ document.body.removeChild(tmpDiv); toast('Error generando imagen del PDF'); });
-      }, 300);
-    });
-  });
-}
-
-// Construye solo el contenido HTML interior del PDF (sin <html><head><body>)
-// para poder renderizarlo en un div y capturarlo con html2canvas
-function buildPDFContent(vals, wks, ep, hp, cp){
-  var lunchMin=0;
-  try{ var li=vals.lIni?parseInt(vals.lIni.split(':')[0])*60+parseInt(vals.lIni.split(':')[1]):0; var lf=vals.lFin?parseInt(vals.lFin.split(':')[0])*60+parseInt(vals.lFin.split(':')[1]):0; lunchMin=Math.max(0,lf-li); }catch(e){}
-  var cajasT=0,cajasP2=0.80,estA=0,estAn=0,hilA=0,hilAn=0;
-  try{ cajasT=parseFloat(gEl('cajasTotal').value)||0; cajasP2=parseFloat(gEl('cajasPrecio').value)||0.80; estA=parseFloat(gEl('estAcres').value)||0; estAn=parseFloat(gEl('estAncho').value)||0; hilA=parseFloat(gEl('hilAcres').value)||0; hilAn=parseFloat(gEl('hilAncho').value)||0; }catch(e){}
-  var estPuertas=estA*estAn, hilPuertas=hilA*hilAn;
-  var cajasPerPerson=cajasT&&cp&&cp.length?cajasT/cp.length:0;
-  var estPerPerson=estPuertas&&ep&&ep.length?estPuertas/ep.length:0;
-  var hilPerPerson=hilPuertas&&hp&&hp.length?hilPuertas/hp.length:0;
-  function inA(arr,id){ for(var x=0;x<arr.length;x++) if(arr[x]===id) return true; return false; }
-  var actCols=[]; var i,j;
-  for(i=0;i<wks.length;i++){
-    for(j=0;j<wks[i].acts.length;j++){
-      var ai=wks[i].acts[j].ai; var found=false;
-      for(var k=0;k<actCols.length;k++){ if(actCols[k].ai===ai){found=true;break;} }
-      if(!found && ACTS[ai]) actCols.push({ai:ai, label:ACTS[ai].en||ACTS[ai].es, tipo:ACTS[ai].tipo, hr:ACTS[ai].hr});
-    }
-  }
-  for(var ci=0;ci<actCols.length;ci++){
-    var firstIni='99:99';
-    for(var wi2=0;wi2<wks.length;wi2++){
-      for(var ai2=0;ai2<wks[wi2].acts.length;ai2++){
-        var act_=wks[wi2].acts[ai2];
-        if(act_.ai===actCols[ci].ai){
-          var ini_=act_.ini||((act_.shifts&&act_.shifts.length)?act_.shifts[0].ini:'');
-          if(ini_&&ini_<firstIni) firstIni=ini_;
-        }
-      }
-    }
-    actCols[ci]._ini=firstIni;
-  }
-  actCols.sort(function(a,b){
-    var ord={'Ficha':0,'Caja':1,'Hora':2,'$':3};
-    var aH=a._ini&&a._ini!=='99:99', bH=b._ini&&b._ini!=='99:99';
-    if(aH&&bH){ if(a._ini!==b._ini) return a._ini<b._ini?-1:1; return a.label<b.label?-1:a.label>b.label?1:0; }
-    if(aH) return -1; if(bH) return 1;
-    return (ord[a.tipo]||0)-(ord[b.tipo]||0);
-  });
-  // Build same table HTML as buildPDFWindow but without full page wrapper
-  var th='<th style="width:28px;text-align:center">#</th><th style="min-width:130px;text-align:left">Nombre / Name</th>';
-  for(i=0;i<actCols.length;i++){
-    var col=actCols[i];
-    var unitLbl=col.tipo==='Hora'?'Horas':col.tipo==='Ficha'?'Fichas':col.tipo==='Caja'?'Cajas':'$';
-    th+='<th style="text-align:center;min-width:75px">'+col.label+'<br><span style="font-weight:400;font-size:8px;opacity:.85">'+unitLbl+'</span></th>';
-  }
-  var rows='';
-  for(i=0;i<wks.length;i++){
-    var w=wks[i];
-    var td='<td style="text-align:center;color:#aaa;font-size:9px">'+(i+1)+'</td><td style="font-weight:600">'+w.name+'</td>';
-    for(j=0;j<actCols.length;j++){
-      var col2=actCols[j]; var found2=null;
-      for(var k2=0;k2<w.acts.length;k2++){ if(w.acts[k2].ai===col2.ai){found2=w.acts[k2];break;} }
-      if(found2){ var cv=''; if(col2.hr){ var h2=totalShiftHours(found2); cv=h2+' h'; } else { cv=found2.qty||''; } td+='<td style="text-align:center">'+cv+'</td>'; }
-      else { td+='<td></td>'; }
-    }
-    rows+='<tr'+(i%2===1?' style="background:#f9f9f9"':'')+'>'+td+'</tr>';
-  }
-  // metaRows
-  var colTotals={};
-  for(i=0;i<actCols.length;i++) colTotals[actCols[i].ai]=0;
-  for(i=0;i<wks.length;i++){ for(j=0;j<actCols.length;j++){ var col3=actCols[j]; var found3=null; for(var k3=0;k3<wks[i].acts.length;k3++){ if(wks[i].acts[k3].ai===col3.ai){found3=wks[i].acts[k3];break;} } if(found3){ colTotals[col3.ai]+=col3.hr?(totalShiftHours(found3)||0):(parseFloat(found3.qty)||0); } } }
-  var trT='<tr style="background:#d0d8ff;font-weight:700"><td></td><td style="text-align:right;font-weight:900;color:#1a2b8c">TOTAL</td>';
-  var trP='<tr style="background:#fff"><td></td><td style="text-align:right;color:#555">Pago Unit.</td>';
-  var trL='<tr style="background:#f5f8ff"><td></td><td style="text-align:right;color:#555">Labor</td>';
-  var trEn='<tr style="background:#f9f9f9"><td></td><td style="text-align:right;color:#666">Entrada</td>';
-  var trEx='<tr style="background:#f9f9f9"><td></td><td style="text-align:right;color:#666">Salida</td>';
-  for(i=0;i<actCols.length;i++){
-    var col4=actCols[i]; var tot=colTotals[col4.ai]||0;
-    var totLbl=col4.hr?(tot%1===0?tot+' h':tot.toFixed(1)+' h'):tot.toFixed(1);
-    var unitPr='',entLbl='',salLbl='',laborLbl='';
-    for(var w2=0;w2<wks.length;w2++){ for(var a2=0;a2<wks[w2].acts.length;a2++){ if(wks[w2].acts[a2].ai===col4.ai){ var act2=wks[w2].acts[a2]; if(act2.unitPrice) unitPr='$'+parseFloat(act2.unitPrice).toFixed(2); else if(ACTS[col4.ai]&&ACTS[col4.ai].p) unitPr='$'+parseFloat(ACTS[col4.ai].p).toFixed(2); if(act2.finca) laborLbl=act2.finca; if(col4.hr){ if(act2.shifts&&act2.shifts.length>1){ var eL=[],sL=[]; for(var si=0;si<act2.shifts.length;si++){ if(act2.shifts[si].ini)eL.push(act2.shifts[si].ini); if(act2.shifts[si].fin)sL.push(act2.shifts[si].fin); } entLbl=eL.join('<br>'); salLbl=sL.join('<br>'); } else if(act2.shifts&&act2.shifts.length===1){ entLbl=act2.shifts[0].ini||''; salLbl=act2.shifts[0].fin||''; } else if(act2.ini||act2.fin){ entLbl=act2.ini||''; salLbl=act2.fin||''; } } break; } } if(unitPr) break; }
-    if(!unitPr&&ACTS[col4.ai]&&ACTS[col4.ai].p) unitPr='$'+parseFloat(ACTS[col4.ai].p).toFixed(2);
-    trT+='<td style="text-align:center;color:#1a2b8c;font-weight:700">'+totLbl+'</td>';
-    trP+='<td style="text-align:center;color:#c0392b;font-weight:700">'+unitPr+'</td>';
-    trL+='<td style="text-align:center;color:#3a7fd4;font-size:9px">'+laborLbl+'</td>';
-    trEn+='<td style="text-align:center;color:#444">'+entLbl+'</td>';
-    trEx+='<td style="text-align:center;color:#444">'+salLbl+'</td>';
-  }
-  trT+='</tr>'; trP+='</tr>'; trL+='</tr>'; trEn+='</tr>'; trEx+='</tr>';
-  var metaRows=trT+trP+trL+trEn+trEx;
-  return '<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:11px;color:#111}.hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;border-bottom:3px solid #1a2b8c;padding-bottom:8px}table{width:100%;border-collapse:collapse;font-size:10px}th{padding:5px 4px;text-align:center;font-size:9px;font-weight:700;border:1px solid #bbb;background:#1a2b8c;color:#fff;line-height:1.3}td{padding:4px 5px;border:1px solid #ddd;vertical-align:middle;text-align:center}.ft{font-size:8px;color:#888;text-align:center;margin-top:6px;border-top:1px solid #ddd;padding-top:5px}</style>'
-    +'<div class="hdr"><div style="display:flex;align-items:center;gap:10px"><img src="'+EBERRY_LOGO+'" style="height:50px;width:auto"><div><div style="font-size:15px;font-weight:700;color:#1a2b8c">eberry harvest company llc</div><div style="font-size:12px;font-weight:900">DAILY PAYROLL SHEET</div><div style="font-size:10px;color:#555">Farm: '+vals.rancho+' | Bus #'+vals.numBus+' | '+vals.surquero+' | Lunch: '+lunchMin+' min</div></div></div><div style="text-align:right"><div style="font-size:8px;font-weight:700;color:#888;text-transform:uppercase">DATE / FECHA</div><div style="font-size:20px;font-weight:900;color:#1a2b8c">'+vals.fecha+'</div></div></div>'
-    +'<table><thead><tr style="background:#1a2b8c;color:#fff">'+th+'</tr></thead><tbody>'+metaRows+rows+'</tbody></table>'
-    +'<div class="ft">'+vals.rancho+' | '+vals.fecha+' | '+wks.length+' trabajadores | Bus: #'+vals.numBus+' | Surquero: '+vals.surquero+' | Generado: '+new Date().toLocaleString()+'</div>';
-}
-
 function buildPDFWindow(vals, wks, ep, hp, cp){
   var EBERRY_LOGO="data:image/jpeg;base64,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";
   var lunchMin=0;
@@ -2090,40 +1950,13 @@ function buildPDFWindow(vals, wks, ep, hp, cp){
       if(!found && ACTS[ai]) actCols.push({ai:ai, label:ACTS[ai].en||ACTS[ai].es, tipo:ACTS[ai].tipo, hr:ACTS[ai].hr});
     }
   }
-  // Adjuntar horario de entrada a cada columna (para ordenar cronológicamente)
-  for(var ci=0;ci<actCols.length;ci++){
-    var firstIni='99:99';
-    for(var wi2=0;wi2<wks.length;wi2++){
-      for(var ai2=0;ai2<wks[wi2].acts.length;ai2++){
-        var act_=wks[wi2].acts[ai2];
-        if(act_.ai===actCols[ci].ai){
-          var ini_=act_.ini||((act_.shifts&&act_.shifts.length)?act_.shifts[0].ini:'');
-          if(ini_&&ini_<firstIni) firstIni=ini_;
-        }
-      }
-    }
-    actCols[ci]._ini = firstIni; // guardar para ordenar
-  }
-  // Ordenar: primero por hora de entrada, luego alfabético si hay empate, luego por tipo
-  actCols.sort(function(a,b){
-    var ord={'Ficha':0,'Caja':1,'Hora':2,'$':3};
-    var aHasTime = a._ini && a._ini!=='99:99';
-    var bHasTime = b._ini && b._ini!=='99:99';
-    if(aHasTime && bHasTime){
-      if(a._ini !== b._ini) return a._ini < b._ini ? -1 : 1;
-      // Empate de hora → alfabético por label (Harvest antes que Pack)
-      return a.label < b.label ? -1 : a.label > b.label ? 1 : 0;
-    }
-    if(aHasTime) return -1;
-    if(bHasTime) return 1;
-    return (ord[a.tipo]||0)-(ord[b.tipo]||0);
-  });
+  actCols.sort(function(a,b){ var ord={'Ficha':0,'Caja':1,'Hora':2,'$':3}; return (ord[a.tipo]||0)-(ord[b.tipo]||0); });
 
-  var th='<th style="width:28px;text-align:center">#</th><th style="min-width:130px;text-align:left">Nombre / Name</th>';
+  var th='<th style="width:30px;text-align:center">#</th><th style="min-width:130px">Nombre / Name</th>';
   for(i=0;i<actCols.length;i++){
     var col=actCols[i];
     var unitLbl=col.tipo==='Hora'?'Horas':col.tipo==='Ficha'?'Fichas':col.tipo==='Caja'?'Cajas':'$';
-    th+='<th style="text-align:center;min-width:75px">'+col.label+'<br><span style="font-weight:400;font-size:8px;opacity:.85">'+unitLbl+'</span></th>';
+    th+='<th style="text-align:center;min-width:80px">'+col.label+'<br><span style="font-weight:400;font-size:9px;opacity:.8">'+unitLbl+'</span></th>';
   }
   if(cp&&cp.length&&cajasT) th+='<th style="text-align:center;min-width:80px">Empaque Cajas<br><span style="font-weight:400;font-size:9px;opacity:.8">Cajas c/u</span></th>';
   if(ep&&ep.length&&estA&&estAn) th+='<th style="text-align:center;min-width:80px">Q. Estaca<br><span style="font-weight:400;font-size:9px;opacity:.8">Puertas c/u</span></th>';
@@ -2132,7 +1965,7 @@ function buildPDFWindow(vals, wks, ep, hp, cp){
   var rows='';
   for(i=0;i<wks.length;i++){
     var w=wks[i];
-    var td='<td class="numcol">'+(i+1)+'</td><td class="namecol">'+w.name+'</td>';
+    var td='<td style="text-align:center;font-weight:700">'+(i+1)+'</td><td style="font-weight:600">'+w.name+'</td>';
     for(j=0;j<actCols.length;j++){
       var col2=actCols[j]; var found2=null;
       for(var k2=0;k2<w.acts.length;k2++){ if(w.acts[k2].ai===col2.ai){found2=w.acts[k2];break;} }
@@ -2141,7 +1974,12 @@ function buildPDFWindow(vals, wks, ep, hp, cp){
         if(col2.hr){ var h2=totalShiftHours(found2); cv=h2+' h'; }
         else { cv=found2.qty||''; }
         // Show labor badge if different from day's finca
-        td+='<td>'+cv+'</td>';
+        var actFinca = found2.finca||'';
+        var dayFinca = vals.finca||'';
+        var fincaBadge = (actFinca && actFinca !== dayFinca)
+          ? '<br><span style="font-size:8px;background:#eef4fd;color:#3a7fd4;border-radius:3px;padding:1px 4px;font-weight:600">'+actFinca+'</span>'
+          : '';
+        td+='<td style="text-align:center">'+cv+fincaBadge+'</td>';
       } else { td+='<td></td>'; }
     }
     if(cp&&cp.length&&cajasT) td+='<td style="text-align:center">'+(inA(cp,w.id)?cajasPerPerson.toFixed(1):'')+'</td>';
@@ -2150,139 +1988,39 @@ function buildPDFWindow(vals, wks, ep, hp, cp){
     rows+='<tr'+(i%2===1?' style="background:#f9f9f9"':'')+'>'+td+'</tr>';
   }
   for(i=0;i<3;i++){
-    var etd='<td class="numcol" style="color:#ddd">'+(wks.length+i+1)+'</td><td></td>';
+    var etd='<td style="text-align:center;color:#ccc">'+(wks.length+i+1)+'</td><td></td>';
     for(j=0;j<actCols.length;j++) etd+='<td></td>';
     if(cp&&cp.length&&cajasT) etd+='<td></td>';
     if(ep&&ep.length&&estA&&estAn) etd+='<td></td>';
     if(hp&&hp.length&&hilA&&hilAn) etd+='<td></td>';
-    rows+='<tr style="height:20px">'+etd+'</tr>';
+    rows+='<tr style="height:22px">'+etd+'</tr>';
   }
-
-  // ── Totales por columna ───────────────────────────────────
-  var colTotals={};
-  for(i=0;i<actCols.length;i++) colTotals[actCols[i].ai]=0;
-  for(i=0;i<wks.length;i++){
-    for(j=0;j<actCols.length;j++){
-      var col3=actCols[j]; var found3=null;
-      for(var k3=0;k3<wks[i].acts.length;k3++){ if(wks[i].acts[k3].ai===col3.ai){found3=wks[i].acts[k3];break;} }
-      if(found3){ colTotals[col3.ai]+= col3.hr?(totalShiftHours(found3)||0):(parseFloat(found3.qty)||0); }
-    }
-  }
-
-  // ── Filas de cabecera: TOTAL / Pago Unit. / Entrada / Salida
-  // Nota: usamos 2 celdas separadas (# + label) para NO romper el alineado de columnas
-  var trTotal='<tr style="background:#d0d8ff;font-weight:700;font-size:10px;border-top:2px solid #1a2b8c">'
-    +'<td style="border:1px solid #aab"></td>'
-    +'<td style="text-align:right;padding:5px 7px;border:1px solid #aab;color:#1a2b8c;font-size:10px;font-weight:900">TOTAL</td>';
-  var trPrice='<tr style="font-size:10px;background:#fff">'
-    +'<td style="border:1px solid #ddd"></td>'
-    +'<td style="text-align:right;padding:4px 7px;border:1px solid #ddd;color:#555;font-weight:600">Pago Unit.</td>';
-  var trLabor='<tr style="font-size:10px;background:#f5f8ff">'
-    +'<td style="border:1px solid #ddd"></td>'
-    +'<td style="text-align:right;padding:4px 7px;border:1px solid #ddd;color:#555;font-weight:600">Labor</td>';
-  var trEntry='<tr style="font-size:10px;background:#f9f9f9">'
-    +'<td style="border:1px solid #ddd"></td>'
-    +'<td style="text-align:right;padding:4px 7px;border:1px solid #ddd;color:#666">Entrada</td>';
-  var trExit='<tr style="font-size:10px;background:#f9f9f9">'
-    +'<td style="border:1px solid #ddd"></td>'
-    +'<td style="text-align:right;padding:4px 7px;border:1px solid #ddd;color:#666">Salida</td>';
-
-  for(i=0;i<actCols.length;i++){
-    var col4=actCols[i];
-    var tot=colTotals[col4.ai]||0;
-    var totLbl=col4.hr?(tot%1===0?tot+' h':tot.toFixed(1)+' h'):tot.toFixed(1);
-    var unitPr=''; var entLbl=''; var salLbl='';
-    var laborLbl='';
-    for(var w2=0;w2<wks.length;w2++){
-      for(var a2=0;a2<wks[w2].acts.length;a2++){
-        if(wks[w2].acts[a2].ai===col4.ai){
-          var act2=wks[w2].acts[a2];
-          // Precio unitario — puede venir de unitPrice o de ACTS global
-          if(act2.unitPrice){
-            unitPr='$'+parseFloat(act2.unitPrice).toFixed(2);
-          } else if(ACTS[col4.ai]&&ACTS[col4.ai].p){
-            unitPr='$'+parseFloat(ACTS[col4.ai].p).toFixed(2);
-          }
-          // Labor/Finca de la actividad
-          if(act2.finca) laborLbl=act2.finca;
-          // Horario — shifts[] o ini/fin directo
-          if(col4.hr){
-            if(act2.shifts&&act2.shifts.length>1){
-              // Múltiples turnos: mostrar cada uno en su línea
-              var entLines=[]; var salLines=[];
-              for(var si=0;si<act2.shifts.length;si++){
-                if(act2.shifts[si].ini) entLines.push(act2.shifts[si].ini);
-                if(act2.shifts[si].fin) salLines.push(act2.shifts[si].fin);
-              }
-              entLbl=entLines.join('<br>');
-              salLbl=salLines.join('<br>');
-            } else if(act2.shifts&&act2.shifts.length===1){
-              entLbl=act2.shifts[0].ini||'';
-              salLbl=act2.shifts[0].fin||'';
-            } else if(act2.ini||act2.fin){
-              entLbl=act2.ini||'';
-              salLbl=act2.fin||'';
-            }
-          }
-          break;
-        }
-      }
-      if(unitPr) break;
-    }
-    // Fallback: precio desde ACTS global si no se encontró en workers
-    if(!unitPr && ACTS[col4.ai] && ACTS[col4.ai].p){
-      unitPr='$'+parseFloat(ACTS[col4.ai].p).toFixed(2);
-    }
-    trTotal+='<td style="text-align:center;border:1px solid #ccc;color:#1a2b8c;font-weight:700">'+totLbl+'</td>';
-    trPrice+='<td style="text-align:center;border:1px solid #ddd;color:#c0392b;font-weight:700">'+unitPr+'</td>';
-    trLabor+='<td style="text-align:center;border:1px solid #ddd;color:#3a7fd4;font-size:9px">'+laborLbl+'</td>';
-    trEntry+='<td style="text-align:center;border:1px solid #ddd;color:#444">'+entLbl+'</td>';
-    trExit +='<td style="text-align:center;border:1px solid #ddd;color:#444">'+salLbl+'</td>';
-  }
-  if(cp&&cp.length&&cajasT){ trTotal+='<td></td>'; trPrice+='<td></td>'; trLabor+='<td></td>'; trEntry+='<td></td>'; trExit+='<td></td>'; }
-  if(ep&&ep.length&&estA&&estAn){ trTotal+='<td></td>'; trPrice+='<td></td>'; trLabor+='<td></td>'; trEntry+='<td></td>'; trExit+='<td></td>'; }
-  if(hp&&hp.length&&hilA&&hilAn){ trTotal+='<td></td>'; trPrice+='<td></td>'; trLabor+='<td></td>'; trEntry+='<td></td>'; trExit+='<td></td>'; }
-  trTotal+='</tr>'; trPrice+='</tr>'; trLabor+='</tr>'; trEntry+='</tr>'; trExit+='</tr>';
-  var metaRows=trTotal+trPrice+trLabor+trEntry+trExit;
 
   var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Payroll '+vals.rancho+' '+vals.fecha+'</title>'
-    +'<style>'
-    +'*{box-sizing:border-box;margin:0;padding:0}'
-    +'body{font-family:Arial,sans-serif;font-size:11px;padding:12px;color:#111}'
-    +'.hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;border-bottom:3px solid #1a2b8c;padding-bottom:8px}'
-    +'table{width:100%;border-collapse:collapse;font-size:10px}'
-    +'th{padding:5px 4px;text-align:center;font-size:9px;font-weight:700;border:1px solid #bbb;background:#1a2b8c;color:#fff;line-height:1.3}'
-    +'td{padding:4px 5px;border:1px solid #ddd;vertical-align:middle;text-align:center}'
-    +'.namecol{text-align:left!important;font-weight:600}'
-    +'.numcol{text-align:center!important;color:#aaa;font-size:9px}'
-    +'.lbl-badge{display:inline-block;font-size:7px;background:#eef4fd;color:#3a7fd4;border-radius:3px;padding:1px 3px;font-weight:600;margin-top:2px}'
-    +'.ft{font-size:8px;color:#888;text-align:center;margin-top:6px;border-top:1px solid #ddd;padding-top:5px}'
-    +'@media print{.nopr{display:none}thead{display:table-header-group}@page{margin:7mm;size:letter landscape}}'
-    +'</style></head><body>'
-    +'<div class="hdr">'
-    +'<div style="display:flex;align-items:center;gap:10px">'
-    +'<img src="'+EBERRY_LOGO+'" style="height:55px;width:auto" alt="eBerry">'
-    +'<div>'
-    +'<div style="font-size:16px;font-weight:700;color:#1a2b8c;line-height:1.1">eberry harvest company llc</div>'
-    +'<div style="font-size:13px;font-weight:900;letter-spacing:.5px">DAILY PAYROLL SHEET</div>'
-    +'<div style="font-size:10px;color:#555;margin-top:2px">Farm: '+vals.rancho+' &nbsp;|&nbsp; Bus #'+vals.numBus+' &nbsp;|&nbsp; '+vals.surquero+' &nbsp;|&nbsp; Lunch: '+lunchMin+' min</div>'
-    +'</div></div>'
-    +'<div style="text-align:right">'
-    +'<div style="font-size:8px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:1px">DATE / FECHA</div>'
-    +'<div style="font-size:22px;font-weight:900;color:#1a2b8c;letter-spacing:1px">'+vals.fecha+'</div>'
-    +'</div>'
-    +'</div>'
-    +'<table>'
-    +'<thead><tr style="background:#1a2b8c;color:#fff">'+th+'</tr></thead>'
-    +'<tbody>'+metaRows+rows+'</tbody>'
-    +'</table>'
-    +'<div class="ft">'+vals.rancho+' &nbsp;|&nbsp; '+vals.fecha+' &nbsp;|&nbsp; '+wks.length+' trabajadores &nbsp;|&nbsp; # Bus: '+vals.numBus+' &nbsp;|&nbsp; Surquero: '+vals.surquero+' &nbsp;|&nbsp; Generado: '+new Date().toLocaleString()+'</div>'
-    +'<div class="nopr" style="text-align:center;margin-top:14px">'
-    +'<button onclick="window.print()" style="background:#1a2b8c;color:#fff;border:none;padding:11px 26px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-right:10px">🖨️ Imprimir / Guardar PDF</button>'
-    +'<button onclick="window.close()" style="background:#eee;color:#555;border:none;padding:11px 18px;border-radius:8px;font-size:14px;cursor:pointer">Cerrar</button>'
-    +'</div>'
+    +'<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:12px;padding:15px;color:#111}.hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;border-bottom:3px solid #1a7a4a;padding-bottom:10px}table{width:100%;border-collapse:collapse;font-size:11px}th{padding:6px 5px;text-align:left;font-size:10px;font-weight:700;border:1px solid #ccc}td{padding:5px;border:1px solid #ddd;vertical-align:middle}.ft{font-size:9px;color:#888;text-align:center;margin-top:8px;border-top:1px solid #ddd;padding-top:6px}@media print{.nopr{display:none}thead{display:table-header-group}@page{margin:8mm;size:letter landscape}}</style></head><body>'
+    +'<div class="hdr"><div style="display:flex;align-items:center;gap:12px"><img src="'+EBERRY_LOGO+'" style="height:60px;width:auto" alt="eBerry"><div><div style="font-size:18px;font-weight:700;color:#1a2b8c">eberry harvest company llc</div><div style="font-size:15px;font-weight:900;letter-spacing:.5px">DAILY PAYROLL SHEET</div><div style="font-size:11px;color:#555">Farm: '+vals.rancho+' &nbsp;|&nbsp; Bus #'+vals.numBus+' &nbsp;|&nbsp; Lunch: '+lunchMin+' min</div></div></div><div style="text-align:right"><div style="font-size:9px;font-weight:700;color:#888;text-transform:uppercase">Date / Fecha</div><div style="font-size:20px;font-weight:900;color:#1a2b8c">'+vals.fecha+'</div></div></div>'
+    +'<table><thead><tr style="background:#1a2b8c;color:#fff">'+th+'</tr></thead><tbody>'+rows+'</tbody></table>'
+    // ── Bloque de ausencias en el PDF ──
+    +(ausencias.length ? (function(){
+      var motLabel = {'cambio':'🔄 Cambio de rancho','enfermedad':'🤒 Enfermedad','injustificada':'❌ Falta injustificada','notrabajo':'🚫 No hubo trabajo','':'Sin motivo'};
+      var rows2 = ausencias.map(function(a,i){
+        return '<tr style="'+(i%2?'background:#fafafa':'')+'">'
+          +'<td style="padding:4px 8px;border:1px solid #eee;font-size:10px;font-weight:600">'+a.name+'</td>'
+          +'<td style="padding:4px 8px;border:1px solid #eee;font-size:10px;color:var(--gr)">'+( a.empNum?'#'+a.empNum:'')+'</td>'
+          +'<td style="padding:4px 8px;border:1px solid #eee;font-size:10px">'+( motLabel[a.motivo]||a.motivo||'<span style="color:#c00">Sin motivo</span>')+'</td>'
+          +'</tr>';
+      }).join('');
+      return '<div style="margin-top:14px;border:1.5px solid #1a2b8c;border-radius:8px;overflow:hidden">'
+        +'<div style="background:#1a2b8c;color:#fff;padding:7px 12px;font-weight:700;font-size:11px">🚫 AUSENCIAS DEL DÍA &mdash; '+ausencias.length+' persona(s)</div>'
+        +'<table style="width:100%;border-collapse:collapse">'
+        +'<tr style="background:#eef1ff"><th style="padding:4px 8px;font-size:9px;text-align:left;border:1px solid #ccd">Nombre</th><th style="padding:4px 8px;font-size:9px;text-align:left;border:1px solid #ccd"># Empleado</th><th style="padding:4px 8px;font-size:9px;text-align:left;border:1px solid #ccd">Motivo</th></tr>'
+        +rows2
+        +'</table></div>';
+    })() : '')
+    +'<div class="ft">'+vals.rancho+' &nbsp;|&nbsp; '+vals.fecha+' &nbsp;|&nbsp; '+wks.length+' trabajadores &nbsp;|&nbsp; Bus: #'+vals.numBus+' &nbsp;|&nbsp; Surquero: '+vals.surquero+' &nbsp;|&nbsp; Generado: '+new Date().toLocaleString()+'</div>'
+    +'<div class="nopr" style="text-align:center;margin-top:16px"><button onclick="window.print()" style="background:#1a7a4a;color:#fff;border:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-right:10px">🖨️ Imprimir / Guardar PDF</button><button onclick="window.close()" style="background:#eee;color:#555;border:none;padding:12px 20px;border-radius:8px;font-size:14px;cursor:pointer">Cerrar</button></div>'
     +'</body></html>';
-  var win=window.open('','_blank','width=1100,height=750');
+  var win=window.open('','_blank','width=1000,height=700');
   win.document.write(html); win.document.close(); win.focus();
 }
 
@@ -2696,117 +2434,127 @@ function migrateActsToNames(){
 }
 
 // ── AUSENCIAS SYSTEM ──
-var ausencias = []; // [{name, motivo}]
+var ausencias = []; // [{name, empNum, motivo}]
 
 function getAusenciaCandidates(){
-  // People in crew NOT already added as workers AND not already in ausencias
   var result = [];
-  for(var i=0;i<NAMES.length;i++){
-    var name = NAMES[i];
-    // Skip if already a worker
+  for(var i=0;i<ALL_WORKERS.length;i++){
+    var w = ALL_WORKERS[i]; if(!w.name) continue;
+    var curSurq = (gVal("surquero")||"").toLowerCase().trim();
+    if(curSurq && w.lider && w.lider.toLowerCase().trim() !== curSurq) continue;
     var isWorker = false;
-    for(var j=0;j<workers.length;j++){
-      if(workers[j].name.toLowerCase()===name.toLowerCase()){ isWorker=true; break; }
-    }
+    for(var j=0;j<workers.length;j++){ if(workers[j].name.toLowerCase()===w.name.toLowerCase()){isWorker=true;break;} }
     if(isWorker) continue;
-    // Skip if already in ausencias
     var isAus = false;
-    for(var j=0;j<ausencias.length;j++){
-      if(ausencias[j].name.toLowerCase()===name.toLowerCase()){ isAus=true; break; }
-    }
+    for(var j=0;j<ausencias.length;j++){ if(ausencias[j].name.toLowerCase()===w.name.toLowerCase()){isAus=true;break;} }
     if(isAus) continue;
-    result.push(name);
+    result.push({name:w.name, empNum:w.empNum||""});
   }
   return result;
 }
 
+function syncAusencias(){
+  // Auto-agregar faltantes
+  var candidates = getAusenciaCandidates();
+  for(var i=0;i<candidates.length;i++){
+    var c2 = candidates[i]; var already = false;
+    for(var j=0;j<ausencias.length;j++){ if(ausencias[j].name.toLowerCase()===c2.name.toLowerCase()){already=true;break;} }
+    if(!already) ausencias.push({name:c2.name, empNum:c2.empNum, motivo:""});
+  }
+  // Quitar los que ya se agregaron como trabajadores
+  ausencias = ausencias.filter(function(a){
+    for(var j=0;j<workers.length;j++){ if(workers[j].name.toLowerCase()===a.name.toLowerCase()) return false; }
+    return true;
+  });
+}
+
 function onAusAC(v){
-  var dr = gEl('ausDrop'); if(!dr) return;
-  if(v.length < 2){ dr.classList.remove('on'); return; }
+  var dr = gEl("ausDrop"); if(!dr) return;
+  if(v.length < 2){ dr.classList.remove("on"); return; }
   var q = v.toLowerCase();
   var candidates = getAusenciaCandidates();
   var res = [];
   for(var i=0;i<candidates.length;i++){
-    if(candidates[i].toLowerCase().indexOf(q)>=0) res.push(candidates[i]);
+    if(candidates[i].name.toLowerCase().indexOf(q)>=0) res.push(candidates[i]);
     if(res.length>=7) break;
   }
-  if(!res.length){ dr.classList.remove('on'); return; }
-  var esc = v.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
-  var rx = new RegExp('('+esc+')','gi');
-  dr.innerHTML = '';
+  if(!res.length){ dr.classList.remove("on"); return; }
+  dr.innerHTML = "";
   for(var k=0;k<res.length;k++){
-    var d = document.createElement('div'); d.className='di';
-    d.innerHTML = res[k].replace(rx,'<mark>$1</mark>');
-    (function(nm){
-      d.addEventListener('mousedown', function(){ addAusenciaConfirmed(nm); gEl('ausSearch').value=''; dr.classList.remove('on'); });
-    })(res[k]);
+    var d = document.createElement("div"); d.className="di";
+    (function(nm, en){
+      d.innerHTML = nm + (en ? " <span style=\"font-size:10px;color:var(--gr)\">#"+en+"</span>" : "");
+      d.addEventListener("mousedown", function(){ addAusenciaConfirmed(nm, en); gEl("ausSearch").value=""; dr.classList.remove("on"); });
+    })(res[k].name, res[k].empNum||"");
     dr.appendChild(d);
   }
-  dr.classList.add('on');
+  dr.classList.add("on");
 }
 
-function closeAusAC(){ setTimeout(function(){ var dr=gEl('ausDrop'); if(dr)dr.classList.remove('on'); },200); }
+function closeAusAC(){ setTimeout(function(){ var dr=gEl("ausDrop"); if(dr)dr.classList.remove("on"); },200); }
 
 function addAusenciaFromBar(){
-  var v = gEl('ausSearch').value.trim();
-  if(!v){ toast('⚠️ Escribe un nombre'); return; }
+  var v = gEl("ausSearch").value.trim();
+  if(!v){ toast("⚠️ Escribe un nombre"); return; }
   addAusenciaConfirmed(v);
-  gEl('ausSearch').value='';
-  var dr=gEl('ausDrop'); if(dr)dr.classList.remove('on');
+  gEl("ausSearch").value="";
+  var dr=gEl("ausDrop"); if(dr)dr.classList.remove("on");
 }
 
-function addAusenciaConfirmed(name){
-  // Check not duplicate
+function addAusenciaConfirmed(name, empNum){
   for(var i=0;i<ausencias.length;i++){
-    if(ausencias[i].name.toLowerCase()===name.toLowerCase()){ toast('⚠️ Ya está en ausencias'); return; }
+    if(ausencias[i].name.toLowerCase()===name.toLowerCase()){ toast("⚠️ Ya está en ausencias"); return; }
   }
-  ausencias.push({name:name, motivo:''});
-  renderAusencias();
-  autoSave();
+  var num = empNum||"";
+  if(!num){ for(var k=0;k<ALL_WORKERS.length;k++){ if(ALL_WORKERS[k].name.toLowerCase()===name.toLowerCase()){num=ALL_WORKERS[k].empNum||"";break;} } }
+  ausencias.push({name:name, empNum:num, motivo:""});
+  renderAusencias(); autoSave();
 }
 
 function setMotivo(idx, motivo){
   if(ausencias[idx]) ausencias[idx].motivo = motivo;
-  renderAusencias();
-  autoSave();
+  renderAusencias(); autoSave();
 }
 
 function removeAusencia(idx){
-  ausencias.splice(idx,1);
-  renderAusencias();
-  autoSave();
+  toast("ℹ️ Los faltantes se quitan solos cuando los agregas a la lista de trabajo");
 }
 
 function renderAusencias(){
-  var list = gEl('ausenciasList');
-  var empty = gEl('ausenciasEmpty');
+  var list = gEl("ausenciasList");
+  var empty = gEl("ausenciasEmpty");
   if(!list) return;
-  list.innerHTML = '';
-  if(!ausencias.length){ if(empty) empty.style.display='block'; return; }
-  if(empty) empty.style.display='none';
+  list.innerHTML = "";
+  if(!ausencias.length){ if(empty) empty.style.display="block"; return; }
+  if(empty) empty.style.display="none";
+  var hdr = gEl("ausHdr");
+  if(hdr) hdr.textContent = ausencias.length + " persona(s) sin trabajar hoy";
+  var motivos = [
+    {key:"cambio",        label:"🔄 Cambio de rancho",   cls:"sel-cambio"},
+    {key:"enfermedad",    label:"🤒 Enfermedad",          cls:"sel-enfermedad"},
+    {key:"injustificada", label:"❌ Falta injustificada", cls:"sel-injustificada"},
+    {key:"notrabajo",     label:"🚫 No hubo trabajo",     cls:"sel-notrabajo"}
+  ];
   for(var i=0;i<ausencias.length;i++){
     var a = ausencias[i];
-    var card = document.createElement('div');
-    card.className = 'aus-card';
-    var motivos = [
-      {key:'cambio',        label:'🔄 Cambio de rancho',     cls:'sel-cambio'},
-      {key:'enfermedad',    label:'🤒 Falta por enfermedad',  cls:'sel-enfermedad'},
-      {key:'injustificada', label:'❌ Falta no justificada',  cls:'sel-injustificada'}
-    ];
-    var optsHtml = '';
+    var card = document.createElement("div");
+    card.className = "aus-card";
+    var optsHtml = "";
     for(var j=0;j<motivos.length;j++){
       var m = motivos[j];
-      var sel = a.motivo===m.key ? m.cls : '';
-      optsHtml += '<div class="aus-opt '+sel+'" onclick="setMotivo('+i+',\''+m.key+'\')">'
-        +'<div class="aus-dot"></div>'
-        +'<span class="aus-lbl">'+m.label+'</span>'
-        +'</div>';
+      var sel = a.motivo===m.key ? m.cls : "";
+      optsHtml += "<div class=\"aus-opt "+sel+"\" onclick=\"setMotivo("+i+",'"+m.key+"')\">" 
+        +"<div class=\"aus-dot\"></div>"
+        +"<span class=\"aus-lbl\">"+m.label+"</span>"
+        +"</div>";
     }
-    card.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
-      +'<div class="aus-name">👤 '+a.name+'</div>'
-      +'<button onclick="removeAusencia('+i+')" style="background:var(--rp);color:var(--r);border:none;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer">✕ Quitar</button>'
-      +'</div>'
-      +'<div class="aus-opts">'+optsHtml+'</div>';
+    var reqMsg = !a.motivo ? "<div class=\"aus-motivo-req\">⚠️ Selecciona un motivo</div>" : "";
+    card.innerHTML = "<div style=\"display:flex;align-items:center;margin-bottom:10px\">"
+      +"<span class=\"aus-name\">👤 "+a.name+"</span>"
+      +(a.empNum ? "<span class=\"aus-empnum\">#"+a.empNum+"</span>" : "")
+      +"</div>"
+      +"<div class=\"aus-opts\">"+optsHtml+"</div>"
+      +reqMsg;
     list.appendChild(card);
   }
 }
