@@ -2058,9 +2058,18 @@ function buildPDFWindow(vals, wks, ep, hp, cp){
           if(act2.finca) laborLbl=act2.finca;
           // Horario — shifts[] o ini/fin directo
           if(col4.hr){
-            if(act2.shifts&&act2.shifts.length){
+            if(act2.shifts&&act2.shifts.length>1){
+              // Múltiples turnos: mostrar cada uno en su línea
+              var entLines=[]; var salLines=[];
+              for(var si=0;si<act2.shifts.length;si++){
+                if(act2.shifts[si].ini) entLines.push(act2.shifts[si].ini);
+                if(act2.shifts[si].fin) salLines.push(act2.shifts[si].fin);
+              }
+              entLbl=entLines.join('<br>');
+              salLbl=salLines.join('<br>');
+            } else if(act2.shifts&&act2.shifts.length===1){
               entLbl=act2.shifts[0].ini||'';
-              salLbl=act2.shifts[act2.shifts.length-1].fin||'';
+              salLbl=act2.shifts[0].fin||'';
             } else if(act2.ini||act2.fin){
               entLbl=act2.ini||'';
               salLbl=act2.fin||'';
