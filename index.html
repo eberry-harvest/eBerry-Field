@@ -171,26 +171,39 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .loading-spin{width:40px;height:40px;border:4px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 /* ── AUSENCIAS ── */
-.aus-card{background:#fff;border:1.5px solid var(--bd);border-radius:12px;padding:13px;margin-bottom:10px}
-.aus-name{font-weight:700;font-size:14px;margin-bottom:8px;color:var(--dk)}
-.aus-opts{display:flex;flex-direction:column;gap:6px}
-.aus-opt{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:8px;border:1.5px solid var(--bd);cursor:pointer;background:#fff;-webkit-tap-highlight-color:transparent}
-.aus-opt.sel-cambio{background:#eef4fd;border-color:#3a7fd4}
-.aus-opt.sel-enfermedad{background:var(--bp);border-color:var(--b)}
-.aus-opt.sel-injustificada{background:var(--rp);border-color:var(--r)}
+.aus-card{background:#fff;border:1.5px solid var(--bd);border-radius:12px;margin-bottom:8px;overflow:hidden;transition:border-color .2s}
+.aus-card.open{border-color:var(--g)}
+.aus-card.has-motivo{border-color:var(--bd)}
+.aus-header{display:flex;align-items:center;padding:11px 13px;cursor:pointer;gap:8px;-webkit-tap-highlight-color:transparent;user-select:none}
+.aus-name{font-weight:700;font-size:14px;color:var(--dk);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.aus-empnum{font-size:10px;font-weight:600;color:var(--gr);background:var(--gp);border-radius:5px;padding:2px 7px;flex-shrink:0}
+.aus-chip{font-size:11px;font-weight:700;border-radius:20px;padding:3px 9px;flex-shrink:0;white-space:nowrap}
+.aus-chip.none{background:var(--rp);color:var(--r)}
+.aus-chip.cambio{background:#eef4fd;color:#3a7fd4}
+.aus-chip.enfermedad{background:var(--bp);color:var(--b)}
+.aus-chip.injustificada{background:var(--rp);color:var(--r)}
+.aus-chip.notrabajo{background:#fff8e1;color:#f39c12}
+.aus-arrow{font-size:13px;color:var(--gr);transition:transform .2s;flex-shrink:0}
+.aus-card.open .aus-arrow{transform:rotate(180deg)}
+.aus-opts{display:none;flex-direction:column;gap:0;border-top:1px solid var(--bd)}
+.aus-card.open .aus-opts{display:flex}
+.aus-opt{display:flex;align-items:center;gap:10px;padding:10px 13px;cursor:pointer;background:#fff;border-bottom:1px solid var(--bd);-webkit-tap-highlight-color:transparent}
+.aus-opt:last-child{border-bottom:none}
+.aus-opt:active{background:var(--lt)}
+.aus-opt.sel-cambio{background:#eef4fd}
+.aus-opt.sel-enfermedad{background:var(--bp)}
+.aus-opt.sel-injustificada{background:var(--rp)}
+.aus-opt.sel-notrabajo{background:#fff8e1}
 .aus-dot{width:14px;height:14px;border-radius:50%;border:2px solid var(--bd);flex-shrink:0}
 .aus-opt.sel-cambio .aus-dot{background:#3a7fd4;border-color:#3a7fd4}
 .aus-opt.sel-enfermedad .aus-dot{background:var(--b);border-color:var(--b)}
 .aus-opt.sel-injustificada .aus-dot{background:var(--r);border-color:var(--r)}
+.aus-opt.sel-notrabajo .aus-dot{background:#f39c12;border-color:#f39c12}
 .aus-lbl{font-size:13px;font-weight:600;color:var(--gr)}
 .aus-opt.sel-cambio .aus-lbl{color:#3a7fd4}
 .aus-opt.sel-enfermedad .aus-lbl{color:var(--b)}
 .aus-opt.sel-injustificada .aus-lbl{color:var(--r)}
-.aus-opt.sel-notrabajo{background:#fff8e1;border-color:#f39c12}
-.aus-opt.sel-notrabajo .aus-dot{background:#f39c12;border-color:#f39c12}
 .aus-opt.sel-notrabajo .aus-lbl{color:#f39c12}
-.aus-empnum{font-size:10px;font-weight:600;color:var(--gr);background:var(--gp);border-radius:5px;padding:2px 7px;margin-left:8px}
-.aus-motivo-req{font-size:11px;color:var(--r);margin-top:6px;font-weight:600}
 /* ── END STYLES ── */
 .loading-txt{color:#fff;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600}
 </style>
@@ -2530,33 +2543,52 @@ function renderAusencias(){
   var hdr = gEl("ausHdr");
   if(hdr) hdr.textContent = ausencias.length + " persona(s) sin trabajar hoy";
   var motivos = [
-    {key:"cambio",        label:"🔄 Cambio de rancho",   cls:"sel-cambio"},
-    {key:"enfermedad",    label:"🤒 Enfermedad",          cls:"sel-enfermedad"},
-    {key:"injustificada", label:"❌ Falta injustificada", cls:"sel-injustificada"},
-    {key:"notrabajo",     label:"🚫 No hubo trabajo",     cls:"sel-notrabajo"}
+    {key:"cambio",        label:"🔄 Cambio de rancho",   chip:"cambio"},
+    {key:"enfermedad",    label:"🤒 Enfermedad",          chip:"enfermedad"},
+    {key:"injustificada", label:"❌ Falta injustificada", chip:"injustificada"},
+    {key:"notrabajo",     label:"🚫 No hubo trabajo",     chip:"notrabajo"}
   ];
+  var chipLabels = {
+    cambio:"🔄 Cambio de rancho", enfermedad:"🤒 Enfermedad",
+    injustificada:"❌ Falta injustificada", notrabajo:"🚫 No hubo trabajo"
+  };
   for(var i=0;i<ausencias.length;i++){
     var a = ausencias[i];
     var card = document.createElement("div");
-    card.className = "aus-card";
+    card.className = "aus-card" + (a.motivo ? " has-motivo" : "");
+    // Chip showing current selection
+    var chipHtml = a.motivo
+      ? "<span class=\"aus-chip "+a.motivo+"\">"+chipLabels[a.motivo]+"</span>"
+      : "<span class=\"aus-chip none\">⚠️ Sin motivo</span>";
+    // Options
     var optsHtml = "";
     for(var j=0;j<motivos.length;j++){
       var m = motivos[j];
-      var sel = a.motivo===m.key ? m.cls : "";
-      optsHtml += "<div class=\"aus-opt "+sel+"\" onclick=\"setMotivo("+i+",'"+m.key+"')\">" 
+      var sel = a.motivo===m.key ? "sel-"+m.key : "";
+      optsHtml += "<div class=\"aus-opt "+sel+"\" onclick=\"setMotivoClose("+i+",'"+m.key+"')\">"
         +"<div class=\"aus-dot\"></div>"
         +"<span class=\"aus-lbl\">"+m.label+"</span>"
         +"</div>";
     }
-    var reqMsg = !a.motivo ? "<div class=\"aus-motivo-req\">⚠️ Selecciona un motivo</div>" : "";
-    card.innerHTML = "<div style=\"display:flex;align-items:center;margin-bottom:10px\">"
+    card.innerHTML = "<div class=\"aus-header\" onclick=\"toggleAusCard(this)\">"
       +"<span class=\"aus-name\">👤 "+a.name+"</span>"
       +(a.empNum ? "<span class=\"aus-empnum\">#"+a.empNum+"</span>" : "")
+      +chipHtml
+      +"<span class=\"aus-arrow\">▼</span>"
       +"</div>"
-      +"<div class=\"aus-opts\">"+optsHtml+"</div>"
-      +reqMsg;
+      +"<div class=\"aus-opts\">"+optsHtml+"</div>";
     list.appendChild(card);
   }
+}
+
+function toggleAusCard(header){
+  var card = header.parentNode;
+  card.classList.toggle("open");
+}
+
+function setMotivoClose(idx, motivo){
+  if(ausencias[idx]) ausencias[idx].motivo = motivo;
+  renderAusencias(); autoSave();
 }
 
 // ── LOCAL CACHE (instant load on return visits) ──
