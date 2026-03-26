@@ -1991,14 +1991,95 @@ function buildPDFWindow(vals, wks, ep, hp, cp){
     rows+='<tr style="height:20px">'+etd+'</tr>';
   }
 
+  // ── Totales por columna ───────────────────────────────────
+  var colTotals={};
+  for(i=0;i<actCols.length;i++) colTotals[actCols[i].ai]=0;
+  for(i=0;i<wks.length;i++){
+    for(j=0;j<actCols.length;j++){
+      var col3=actCols[j]; var found3=null;
+      for(var k3=0;k3<wks[i].acts.length;k3++){ if(wks[i].acts[k3].ai===col3.ai){found3=wks[i].acts[k3];break;} }
+      if(found3){ colTotals[col3.ai]+= col3.hr?(totalShiftHours(found3)||0):(parseFloat(found3.qty)||0); }
+    }
+  }
+
+  // ── Filas de cabecera: TOTAL / Pago Unit. / Entrada / Salida
+  var trTotal='<tr style="background:#eef1ff;font-weight:700;font-size:10px">'
+    +'<td colspan="2" style="text-align:right;padding:4px 7px;border:1px solid #ccc;color:#1a2b8c;font-size:10px">TOTAL</td>';
+  var trPrice='<tr style="font-size:10px;background:#fff">'
+    +'<td colspan="2" style="text-align:right;padding:4px 7px;border:1px solid #ddd;color:#666">Pago Unit.</td>';
+  var trEntry='<tr style="font-size:10px;background:#f9f9f9">'
+    +'<td colspan="2" style="text-align:right;padding:4px 7px;border:1px solid #ddd;color:#666">Entrada</td>';
+  var trExit='<tr style="font-size:10px;background:#f9f9f9">'
+    +'<td colspan="2" style="text-align:right;padding:4px 7px;border:1px solid #ddd;color:#666">Salida</td>';
+
+  for(i=0;i<actCols.length;i++){
+    var col4=actCols[i];
+    var tot=colTotals[col4.ai]||0;
+    var totLbl=col4.hr?(tot%1===0?tot+' h':tot.toFixed(1)+' h'):tot.toFixed(1);
+    var unitPr=''; var entLbl=''; var salLbl='';
+    for(var w2=0;w2<wks.length;w2++){
+      for(var a2=0;a2<wks[w2].acts.length;a2++){
+        if(wks[w2].acts[a2].ai===col4.ai){
+          var act2=wks[w2].acts[a2];
+          if(act2.unitPrice) unitPr='$'+parseFloat(act2.unitPrice).toFixed(2);
+          if(col4.hr&&act2.shifts&&act2.shifts.length){
+            entLbl=act2.shifts[0].ini||'';
+            salLbl=act2.shifts[act2.shifts.length-1].fin||'';
+          }
+          break;
+        }
+      }
+      if(unitPr) break;
+    }
+    trTotal+='<td style="text-align:center;border:1px solid #ccc;color:#1a2b8c;font-weight:700">'+totLbl+'</td>';
+    trPrice+='<td style="text-align:center;border:1px solid #ddd;color:#444">'+unitPr+'</td>';
+    trEntry+='<td style="text-align:center;border:1px solid #ddd;color:#444">'+entLbl+'</td>';
+    trExit +='<td style="text-align:center;border:1px solid #ddd;color:#444">'+salLbl+'</td>';
+  }
+  if(cp&&cp.length&&cajasT){ trTotal+='<td></td>'; trPrice+='<td></td>'; trEntry+='<td></td>'; trExit+='<td></td>'; }
+  if(ep&&ep.length&&estA&&estAn){ trTotal+='<td></td>'; trPrice+='<td></td>'; trEntry+='<td></td>'; trExit+='<td></td>'; }
+  if(hp&&hp.length&&hilA&&hilAn){ trTotal+='<td></td>'; trPrice+='<td></td>'; trEntry+='<td></td>'; trExit+='<td></td>'; }
+  trTotal+='</tr>'; trPrice+='</tr>'; trEntry+='</tr>'; trExit+='</tr>';
+  var metaRows=trTotal+trPrice+trEntry+trExit;
+
   var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Payroll '+vals.rancho+' '+vals.fecha+'</title>'
-    +'<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:12px;padding:15px;color:#111}.hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;border-bottom:3px solid #1a7a4a;padding-bottom:10px}table{width:100%;border-collapse:collapse;font-size:11px}th{padding:6px 5px;text-align:left;font-size:10px;font-weight:700;border:1px solid #ccc}td{padding:5px;border:1px solid #ddd;vertical-align:middle}.ft{font-size:9px;color:#888;text-align:center;margin-top:8px;border-top:1px solid #ddd;padding-top:6px}@media print{.nopr{display:none}thead{display:table-header-group}@page{margin:8mm;size:letter landscape}}</style></head><body>'
-    +'<div class="hdr"><div style="display:flex;align-items:center;gap:12px"><img src="'+EBERRY_LOGO+'" style="height:60px;width:auto" alt="eBerry"><div><div style="font-size:18px;font-weight:700;color:#1a2b8c">eberry harvest company llc</div><div style="font-size:15px;font-weight:900;letter-spacing:.5px">DAILY PAYROLL SHEET</div><div style="font-size:11px;color:#555">Farm: '+vals.rancho+' &nbsp;|&nbsp; Bus #'+vals.numBus+' &nbsp;|&nbsp; Lunch: '+lunchMin+' min</div></div></div><div style="text-align:right"><div style="font-size:9px;font-weight:700;color:#888;text-transform:uppercase">Date / Fecha</div><div style="font-size:20px;font-weight:900;color:#1a2b8c">'+vals.fecha+'</div></div></div>'
-    +'<table><thead><tr style="background:#1a2b8c;color:#fff">'+th+'</tr></thead><tbody>'+rows+'</tbody></table>'
-    +'<div class="ft">'+vals.rancho+' &nbsp;|&nbsp; '+vals.fecha+' &nbsp;|&nbsp; '+wks.length+' trabajadores &nbsp;|&nbsp; Bus: #'+vals.numBus+' &nbsp;|&nbsp; Surquero: '+vals.surquero+' &nbsp;|&nbsp; Generado: '+new Date().toLocaleString()+'</div>'
-    +'<div class="nopr" style="text-align:center;margin-top:16px"><button onclick="window.print()" style="background:#1a7a4a;color:#fff;border:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-right:10px">🖨️ Imprimir / Guardar PDF</button><button onclick="window.close()" style="background:#eee;color:#555;border:none;padding:12px 20px;border-radius:8px;font-size:14px;cursor:pointer">Cerrar</button></div>'
+    +'<style>'
+    +'*{box-sizing:border-box;margin:0;padding:0}'
+    +'body{font-family:Arial,sans-serif;font-size:11px;padding:12px;color:#111}'
+    +'.hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;border-bottom:3px solid #1a2b8c;padding-bottom:8px}'
+    +'table{width:100%;border-collapse:collapse;font-size:10px}'
+    +'th{padding:5px 4px;text-align:center;font-size:9px;font-weight:700;border:1px solid #bbb;background:#1a2b8c;color:#fff;line-height:1.3}'
+    +'td{padding:4px 5px;border:1px solid #ddd;vertical-align:middle;text-align:center}'
+    +'.namecol{text-align:left!important;font-weight:600}'
+    +'.numcol{text-align:center!important;color:#aaa;font-size:9px}'
+    +'.lbl-badge{display:inline-block;font-size:7px;background:#eef4fd;color:#3a7fd4;border-radius:3px;padding:1px 3px;font-weight:600;margin-top:2px}'
+    +'.ft{font-size:8px;color:#888;text-align:center;margin-top:6px;border-top:1px solid #ddd;padding-top:5px}'
+    +'@media print{.nopr{display:none}thead{display:table-header-group}@page{margin:7mm;size:letter landscape}}'
+    +'</style></head><body>'
+    +'<div class="hdr">'
+    +'<div style="display:flex;align-items:center;gap:10px">'
+    +'<img src="'+EBERRY_LOGO+'" style="height:55px;width:auto" alt="eBerry">'
+    +'<div>'
+    +'<div style="font-size:16px;font-weight:700;color:#1a2b8c;line-height:1.1">eberry harvest company llc</div>'
+    +'<div style="font-size:13px;font-weight:900;letter-spacing:.5px">DAILY PAYROLL SHEET</div>'
+    +'<div style="font-size:10px;color:#555;margin-top:2px">Farm: '+vals.rancho+' &nbsp;|&nbsp; Bus #'+vals.numBus+' &nbsp;|&nbsp; '+vals.surquero+' &nbsp;|&nbsp; Lunch: '+lunchMin+' min</div>'
+    +'</div></div>'
+    +'<div style="text-align:right">'
+    +'<div style="font-size:8px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:1px">DATE / FECHA</div>'
+    +'<div style="font-size:22px;font-weight:900;color:#1a2b8c;letter-spacing:1px">'+vals.fecha+'</div>'
+    +'</div>'
+    +'</div>'
+    +'<table>'
+    +'<thead><tr style="background:#1a2b8c;color:#fff">'+th+'</tr></thead>'
+    +'<tbody>'+metaRows+rows+'</tbody>'
+    +'</table>'
+    +'<div class="ft">'+vals.rancho+' &nbsp;|&nbsp; '+vals.fecha+' &nbsp;|&nbsp; '+wks.length+' trabajadores &nbsp;|&nbsp; # Bus: '+vals.numBus+' &nbsp;|&nbsp; Surquero: '+vals.surquero+' &nbsp;|&nbsp; Generado: '+new Date().toLocaleString()+'</div>'
+    +'<div class="nopr" style="text-align:center;margin-top:14px">'
+    +'<button onclick="window.print()" style="background:#1a2b8c;color:#fff;border:none;padding:11px 26px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-right:10px">🖨️ Imprimir / Guardar PDF</button>'
+    +'<button onclick="window.close()" style="background:#eee;color:#555;border:none;padding:11px 18px;border-radius:8px;font-size:14px;cursor:pointer">Cerrar</button>'
+    +'</div>'
     +'</body></html>';
-  var win=window.open('','_blank','width=1000,height=700');
+  var win=window.open('','_blank','width=1100,height=750');
   win.document.write(html); win.document.close(); win.focus();
 }
 
