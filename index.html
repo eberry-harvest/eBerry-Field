@@ -2003,8 +2003,8 @@ function buildPDFWindow(vals, wks, ep, hp, cp){
   }
 
   // ── Filas de cabecera: TOTAL / Pago Unit. / Entrada / Salida
-  var trTotal='<tr style="background:#eef1ff;font-weight:700;font-size:10px">'
-    +'<td colspan="2" style="text-align:right;padding:4px 7px;border:1px solid #ccc;color:#1a2b8c;font-size:10px">TOTAL</td>';
+  var trTotal='<tr style="background:#d0d8ff;font-weight:700;font-size:10px;border-top:2px solid #1a2b8c">'
+    +'<td colspan="2" style="text-align:right;padding:5px 7px;border:1px solid #aab;color:#1a2b8c;font-size:10px;font-weight:900">TOTAL</td>';
   var trPrice='<tr style="font-size:10px;background:#fff">'
     +'<td colspan="2" style="text-align:right;padding:4px 7px;border:1px solid #ddd;color:#666">Pago Unit.</td>';
   var trEntry='<tr style="font-size:10px;background:#f9f9f9">'
@@ -2022,9 +2022,15 @@ function buildPDFWindow(vals, wks, ep, hp, cp){
         if(wks[w2].acts[a2].ai===col4.ai){
           var act2=wks[w2].acts[a2];
           if(act2.unitPrice) unitPr='$'+parseFloat(act2.unitPrice).toFixed(2);
-          if(col4.hr&&act2.shifts&&act2.shifts.length){
-            entLbl=act2.shifts[0].ini||'';
-            salLbl=act2.shifts[act2.shifts.length-1].fin||'';
+          if(col4.hr){
+            // Horario puede estar en shifts[] o directamente en ini/fin
+            if(act2.shifts&&act2.shifts.length){
+              entLbl=act2.shifts[0].ini||'';
+              salLbl=act2.shifts[act2.shifts.length-1].fin||'';
+            } else if(act2.ini||act2.fin){
+              entLbl=act2.ini||'';
+              salLbl=act2.fin||'';
+            }
           }
           break;
         }
