@@ -547,6 +547,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     <div class="ct">📤 Enviar</div>
     <button class="btn" style="background:#3a7fd4;color:#fff" onclick="openNewDay()">🌅 Nuevo Día</button>
     <button class="btn pdf" onclick="genPDF()">📄 Generar PDF para Payroll</button>
+    <button class="btn bw" onclick="sendPDFWhatsApp()">📲 Enviar PDF por WhatsApp</button>
     <!-- ── PAYROLL FIELD MASTER BUTTON ── -->
     <button id="sheetsSendBtn" class="btn" style="background:#1a3a5c;color:#fff" onclick="sendToSheets()">📊 Enviar a Payroll Field Master</button>
     <button class="btn bg" onclick="save()">💾 Guardar</button>
@@ -1592,6 +1593,7 @@ function mkReport(){
   lines.push('\n_Pennrose 2026 App_');
   return lines.join('\n');
 }
+function sendPDFWhatsApp(){ sendWA(); }
 function sendWA(){
   var text=encodeURIComponent(mkReport());
   var a=document.createElement('a');
