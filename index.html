@@ -1992,12 +1992,7 @@ function buildPDFWindow(vals, wks, ep, hp, cp){
         if(col2.hr){ var h2=totalShiftHours(found2); cv=h2+' h'; }
         else { cv=found2.qty||''; }
         // Show labor badge if different from day's finca
-        var actFinca = found2.finca||'';
-        var dayFinca = vals.finca||'';
-        var fincaBadge = (actFinca && actFinca !== dayFinca)
-          ? '<br><span class=\'lbl-badge\'>'+actFinca+'</span>'
-          : '';
-        td+='<td>'+cv+fincaBadge+'</td>';
+        td+='<td>'+cv+'</td>';
       } else { td+='<td></td>'; }
     }
     if(cp&&cp.length&&cajasT) td+='<td style="text-align:center">'+(inA(cp,w.id)?cajasPerPerson.toFixed(1):'')+'</td>';
