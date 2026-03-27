@@ -978,6 +978,8 @@ function loadSheetsData(){
   var configTimeout = setTimeout(function(){
     if(configDone) return;
     configDone = true;
+    // Config no llegó — PIN admin deshabilitado hasta próxima carga
+    ADMIN_PIN = 'SIN_ACCESO';
     loaded.config = true;
     checkDone();
   }, 3000);
