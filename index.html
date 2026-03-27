@@ -446,7 +446,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
   <div class="card">
     <div class="ct">📋 Operación</div>
     <label>Rancho</label>
-    <input type="text" id="rancho" value="Pennrose">
+    <input type="text" id="rancho" placeholder="Ej: Pennrose">
     <div class="r2">
       <div><label>Fecha</label><input type="date" id="fecha" onchange="updDate()"></div>
       <div><label># Bus</label><input type="text" id="numBus" placeholder="951"></div>
@@ -467,12 +467,12 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     <div class="ct">⏰ Horario Base del Grupo</div>
     <p style="font-size:12px;color:var(--gr);margin-bottom:9px">Cada actividad puede tener su propio horario.</p>
     <div class="r2">
-      <div><label>Entrada</label><input type="time" id="hEnt" value="07:00" onchange="updParam()"></div>
-      <div><label>Salida</label><input type="time" id="hSal" value="18:00" onchange="updParam()"></div>
+      <div><label>Entrada</label><input type="time" id="hEnt" step="1800" onchange="updParam()"></div>
+      <div><label>Salida</label><input type="time" id="hSal" step="1800" onchange="updParam()"></div>
     </div>
     <div class="r2">
-      <div><label>Inicio Lonche</label><input type="time" id="lIni" value="12:00" onchange="updParam()"></div>
-      <div><label>Fin Lonche</label><input type="time" id="lFin" value="13:00" onchange="updParam()"></div>
+      <div><label>Inicio Lonche</label><input type="time" id="lIni" step="1800" onchange="updParam()"></div>
+      <div><label>Fin Lonche</label><input type="time" id="lFin" step="1800" onchange="updParam()"></div>
     </div>
     <div id="hpill"></div>
   </div>
@@ -1018,8 +1018,7 @@ function buildLideres(){
     }
   }
   if(!LIDERES.length){
-    // Fallback
-    LIDERES = [{name:'Jose Francisco Gomez Diaz', empNum:'H00523', pin:'0523', crew:'Pennrose 2'}];
+    LIDERES = []; // sin fallback — los surqueros vienen de Sheets
   }
 }
 
@@ -1257,7 +1256,7 @@ function mkActRow(wid_,ai){
     div.appendChild(tog);
     var tf=document.createElement('div'); tf.className='tinp'+(a.showTime?' on':''); tf.id='tf'+wid_+'_'+ai;
     var id1='ini'+wid_+'_'+ai, id2='fin'+wid_+'_'+ai;
-    tf.innerHTML='<div><label style="margin:0;font-size:10px">🟢 Inicio</label><input type="time" id="'+id1+'" value="'+(a.ini||'')+'"></div><div><label style="margin:0;font-size:10px">🏁 Fin</label><input type="time" id="'+id2+'" value="'+(a.fin||'')+'"></div>';
+    tf.innerHTML='<div><label style="margin:0;font-size:10px">🟢 Inicio</label><input type="time" step="1800" id="'+id1+'" value="'+(a.ini||'')+'"></div><div><label style="margin:0;font-size:10px">🏁 Fin</label><input type="time" step="1800" id="'+id2+'" value="'+(a.fin||'')+'"></div>';
     div.appendChild(tf);
     var _wi=wid_,_ai=ai;
     setTimeout(function(){
@@ -2200,7 +2199,9 @@ function startNewDay(keepWorkers){
   var resetFields=['numBus','numCam','finca','notas','estAcres','estAncho','hilAcres','hilAncho','cajasTotal'];
   for(var i=0;i<resetFields.length;i++){ var el=gEl(resetFields[i]); if(el) el.value=''; }
   gEl('fecha').value=today;
-  gEl('lIni').value='12:00'; gEl('lFin').value='13:00';
+  // ✅ Limpiar horarios — el surquero los captura manualmente
+  var timeFields=['hEnt','hSal','lIni','lFin'];
+  for(var i=0;i<timeFields.length;i++){ var te=gEl(timeFields[i]); if(te) te.value=''; }
   estP=[]; hilP=[]; cajasP=[]; grpActs=[];
   workers=savedWorkers;
   if(!keepWorkers) wid=0;
@@ -2232,7 +2233,7 @@ function renderShifts(wi, ai){
     var sh=a.shifts[s];
     var row=document.createElement('div'); row.className='shift-row';
     var lbl=a.shifts.length>1?'Turno '+(s+1):'';
-    row.innerHTML='<div><label style="margin:0;font-size:10px">🟢 '+(lbl?lbl+' Inicio':'Inicio')+'</label><input type="time" value="'+(sh.ini||'')+'" id="shi'+wi+'_'+ai+'_'+s+'"></div><div><label style="margin:0;font-size:10px">🏁 '+(lbl?lbl+' Fin':'Fin')+'</label><input type="time" value="'+(sh.fin||'')+'" id="shf'+wi+'_'+ai+'_'+s+'"></div>'+(a.shifts.length>1?'<button class="shift-del" onclick="delShift('+wi+','+ai+','+s+')">✕</button>':'<div></div>');
+    row.innerHTML='<div><label style="margin:0;font-size:10px">🟢 '+(lbl?lbl+' Inicio':'Inicio')+'</label><input type="time" step="1800" value="'+(sh.ini||'')+'" id="shi'+wi+'_'+ai+'_'+s+'"></div><div><label style="margin:0;font-size:10px">🏁 '+(lbl?lbl+' Fin':'Fin')+'</label><input type="time" step="1800" value="'+(sh.fin||'')+'" id="shf'+wi+'_'+ai+'_'+s+'"></div>'+(a.shifts.length>1?'<button class="shift-del" onclick="delShift('+wi+','+ai+','+s+')">✕</button>':'<div></div>');
     tf.appendChild(row);
     (function(wi2,ai2,si){
       setTimeout(function(){
@@ -2286,7 +2287,7 @@ function totalShiftHours(a){
   return Math.round(total*10)/10;
 }
 
-var _prevSurquero = 'Jose Francisco Gomez Diaz';
+var _prevSurquero = '';
 var _pendingSurquero = '';
 
 function onSurqueroChange(sel){
