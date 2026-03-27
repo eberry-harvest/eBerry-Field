@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Pennrose 2026</title>
+<title>eBerry Harvest v4.1d</title>
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -891,6 +891,8 @@ function filterDataForCrew(crew){
   }
   if(!ACTS.length) ACTS = FALLBACK_ACTS.filter(function(a){ return a.modo !== 'Grupal'; });
   if(!GRUPAL_ACTS.length) GRUPAL_ACTS = FALLBACK_GRUPAL_ACTS;
+  // 🔍 diagnóstico — quitar después de confirmar que funciona
+  console.log('[Delta] filterDataForCrew:', crew, '→ ACTS:', ACTS.length, 'GRUPAL:', GRUPAL_ACTS.length, 'source:', GRUPAL_ACTS === FALLBACK_GRUPAL_ACTS ? 'FALLBACK' : 'SHEETS');
 }
 
 function populateSurqueroSelect(){
@@ -2624,10 +2626,10 @@ function renderGrpActs(){
 
     // Participantes
     var partHtml = '<div style="font-size:11px;font-weight:700;color:var(--gr);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Participantes</div>'
-      +'<div class="gpl" id="gpl'+gi+'"></div>';
+      +'<div class="pl gpl" id="gpl'+gi+'"></div>';
 
     // Resultado
-    var resHtml = '<div class="gaR" id="gaR'+gi+'" style="display:none"></div>';
+    var resHtml = '<div class="gr2 gaR" id="gaR'+gi+'" style="display:none"></div>';
 
     card.innerHTML = headerHtml + varsHtml + partHtml + resHtml;
     list.appendChild(card);
@@ -2981,7 +2983,9 @@ function setMotivoClose(idx, motivo){
 }
 
 // ── LOCAL CACHE (instant load on return visits) ──
-var CACHE_KEY = 'eb_appdata_v1';
+// ✅ v4.2: Cambiamos la key del caché para forzar recarga fresca
+// (borra el caché viejo que no tenía el campo "modo")
+var CACHE_KEY = 'eb_appdata_v2';
 
 function saveCache(workers, acts, lideres){
   try{
@@ -3069,7 +3073,8 @@ function refreshDataBackground(){
       var tipoMap={'Hours':'Hora','Daywork':'Hora','Hour':'Hora','Pieces':'Ficha','Piece':'Ficha','Extra':'$','Boxes':'Caja','Box':'Caja'};
       for(var i=0;i<data.tasks.length;i++){
         var t=data.tasks[i]; var tipoNorm=tipoMap[t.tipo]||'Hora';
-        ALL_ACTS.push({farm:t.farm,es:t.es,en:t.en||t.es,tipo:tipoNorm,p:t.rate||16.23,hr:tipoNorm==='Hora'});
+        var modo=(t.modo||'Individual').trim(); // ✅ incluir modo
+        ALL_ACTS.push({farm:t.farm,es:t.es,en:t.en||t.es,tipo:tipoNorm,p:t.rate||16.23,hr:tipoNorm==='Hora',modo:modo});
       }
       saveCache(ALL_WORKERS, ALL_ACTS, LIDERES);
     }
