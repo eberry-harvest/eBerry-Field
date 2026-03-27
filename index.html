@@ -878,7 +878,7 @@ function filterDataForCrew(crew){
 
   // Filter activities: match base crew name
   ACTS = [];
-  var GRUPAL_ACTS = []; // actividades grupales del rancho
+  GRUPAL_ACTS = []; // usar la variable global, NO declarar con var
   for(var i=0;i<ALL_ACTS.length;i++){
     var farm = (ALL_ACTS[i].farm||'').toLowerCase();
     if(farm === crewBase || farm === crew.toLowerCase()){
