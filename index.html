@@ -980,12 +980,25 @@ function loadSheetsData(){
     }
   }
 
-  // Load config from Apps Script (admin PIN, session timeout, etc.)
+  // Load config from Apps Script — timeout propio de 5 seg para no bloquear login
+  var configDone = false;
+  var configTimeout = setTimeout(function(){
+    if(configDone) return;
+    configDone = true;
+    // Config tardó mucho — usar PIN de respaldo
+    CONFIG_LOADED = true;
+    loaded.config = true;
+    checkDone();
+  }, 5000);
+
   fetchFromScript('config', function(err, data){
+    if(configDone) return;
+    configDone = true;
+    clearTimeout(configTimeout);
     if(!err && data && data.success && data.config){
       if(data.config.admin_pin) ADMIN_PIN = String(data.config.admin_pin).trim();
     }
-    CONFIG_LOADED = true; // ✅ config listo — PIN habilitado
+    CONFIG_LOADED = true;
     loaded.config = true;
     checkDone();
   });
