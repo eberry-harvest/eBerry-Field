@@ -599,7 +599,7 @@ var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwjC6Gjcb3_VRmjnV
 var currentUser = null; // {name, pin, crew, isAdmin}
 
 // ── CONFIG (loaded from Sheets CONFIG tab) ──
-var ADMIN_PIN = '1999'; // PIN de respaldo — se sobreescribe con el de Sheets al cargar
+var ADMIN_PIN = ''; // viene exclusivamente de Sheets — sin PIN de respaldo
 
 // ── DATA (loaded from Sheets) ──
 var NAMES = []; // workers for current crew
@@ -973,16 +973,14 @@ function loadSheetsData(){
     }
   }
 
-  // Load config from Apps Script — timeout propio de 5 seg para no bloquear login
+  // Load config — timeout de 3 seg máximo para no retrasar el login
   var configDone = false;
   var configTimeout = setTimeout(function(){
     if(configDone) return;
     configDone = true;
-    // Config tardó mucho — usar PIN de respaldo
-    
     loaded.config = true;
     checkDone();
-  }, 5000);
+  }, 3000);
 
   fetchFromScript('config', function(err, data){
     if(configDone) return;
