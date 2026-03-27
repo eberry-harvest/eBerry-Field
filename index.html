@@ -1672,7 +1672,8 @@ function load(){
       workers=[]; wid=0; estP=[]; hilP=[]; cajasP=[]; grpActs=[]; ausencias=[];
       // Restore only bus and schedule from old data
       if(d.v){
-        var keepFields = ['numBus','numCam','hEnt','hSal','lIni','lFin'];
+        // ✅ Solo conservar bus y lonche — horario de entrada/salida lo captura el surquero
+        var keepFields = ['numBus','numCam','lIni','lFin'];
         for(var ki=0;ki<keepFields.length;ki++){
           var ke=gEl(keepFields[ki]);
           if(ke && d.v[keepFields[ki]]) ke.value = d.v[keepFields[ki]];
@@ -1683,9 +1684,10 @@ function load(){
       updParam();
       return;
     }
-    // Load params but preserve auto-filled surquero/rancho for non-admin
+    // Load params — siempre saltar hEnt/hSal (el surquero los captura manualmente)
     if(d.v){
-      var skip = currentUser && !currentUser.isAdmin ? ['surquero','rancho'] : [];
+      var skip = ['hEnt','hSal'];
+      if(currentUser && !currentUser.isAdmin) skip.push('surquero','rancho');
       var k=Object.keys(d.v);
       for(var i=0;i<k.length;i++){
         if(skip.indexOf(k[i])>=0) continue;
