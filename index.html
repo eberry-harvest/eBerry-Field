@@ -436,20 +436,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
   <div class="md">
     <div class="mt">➕ Actividad Grupal</div>
     <div class="ms">¿Qué actividad realizó el grupo?</div>
-    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px">
-      <button onclick="addGrpAct('cajas')" style="background:var(--ap);border:1.5px solid var(--a);border-radius:10px;padding:14px;text-align:left;cursor:pointer;font-family:'DM Sans',sans-serif">
-        <div style="font-size:16px;font-weight:700;color:var(--dk)">📦 Empaque por Cajas</div>
-        <div style="font-size:12px;color:var(--gr);margin-top:3px">Total cajas ÷ personas × precio/caja</div>
-      </button>
-      <button onclick="addGrpAct('est')" style="background:var(--ap);border:1.5px solid var(--a);border-radius:10px;padding:14px;text-align:left;cursor:pointer;font-family:'DM Sans',sans-serif">
-        <div style="font-size:16px;font-weight:700;color:var(--dk)">🪝 Quitar Estaca</div>
-        <div style="font-size:12px;color:var(--gr);margin-top:3px">Acres × ancho de puerta ÷ personas × $1.50</div>
-      </button>
-      <button onclick="addGrpAct('hil')" style="background:var(--ap);border:1.5px solid var(--a);border-radius:10px;padding:14px;text-align:left;cursor:pointer;font-family:'DM Sans',sans-serif">
-        <div style="font-size:16px;font-weight:700;color:var(--dk)">🧵 Quitar Hilo</div>
-        <div style="font-size:12px;color:var(--gr);margin-top:3px">Acres × ancho de puerta ÷ personas × $0.60</div>
-      </button>
-    </div>
+    <div id="grpPickList" style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px"></div>
     <button class="mca" style="width:100%" onclick="gEl('grpPickOv').classList.remove('on')">Cancelar</button>
   </div>
 </div>
@@ -614,40 +601,29 @@ var currentUser = null; // {name, pin, crew, isAdmin}
 // ── DATA (loaded from Sheets) ──
 var NAMES = []; // workers for current crew
 var ALL_WORKERS = []; // [{name, crew, empNum}]
-var ACTS = [];  // activities for current farm
+var ACTS = [];  // actividades individuales del rancho actual
+var GRUPAL_ACTS = []; // actividades grupales del rancho actual
 var ALL_ACTS = []; // all activities from sheet
 var LIDERES = []; // [{name, empNum, pin}]
 
 // ── FALLBACK DATA (in case Sheets is offline) ──
-var FALLBACK_NAMES = ["Antonio Nava Santos","Benustiano Santos Pochoteco","Carlos Enrique Sanchez Reyna","Claudio Felipe Anaya","Daniel Sanjuan Ortiz","Deonisio Roman Lopez","Ediuvany Morales Rosales","Eduardo Hernandez Nava","Emanuel Morales Villalva","Emmanuel Genaro Gil","Gustavo Cruz Sanchez","Heriberto Mendoza Escutia","Ismael Antonio Victoriano","Javier Nava Carrizal","Jorge Alberto Hernandez Cruz","Jose Francisco Gomez Diaz","Jose Luis Dias Mateo","Jose Luis Marcos Nava","Jose Santos Ahuextle","Leonor Mendoza Rafael","Raul Carrizal Nava","Saul Narciso Miguel","Sergio Anastasio Justo","Victorino Ortiz Ortiz"];
+// Nota: FALLBACK_NAMES vacío a propósito — si Sheets falla, el surquero
+// puede agregar nombres manualmente. No queremos nombres hardcodeados de
+// un rancho específico que quizás ya no apliquen.
+var FALLBACK_NAMES = [];
+
 var FALLBACK_ACTS = [
-  {es:"Busero",en:"Bus driver",tipo:"Hora",p:16.23,hr:true},
-  {es:"Colocando estaca x hora",en:"Stake placing/hr",tipo:"Hora",p:16.23,hr:true},
-  {es:"Deshierbe",en:"Weeding",tipo:"Hora",p:16.23,hr:true},
-  {es:"Dompero",en:"Dumper",tipo:"Hora",p:16.23,hr:true},
-  {es:"Empaque calabaza amarilla x hora",en:"Yellow squash packing/hr",tipo:"Hora",p:16.23,hr:true},
-  {es:"Empaque calabaza verde x hora",en:"Green squash packing/hr",tipo:"Hora",p:16.23,hr:true},
-  {es:"Empaque chile morron x hora",en:"Bell pepper packing/hr",tipo:"Hora",p:16.23,hr:true},
-  {es:"Empaque de berenjena x hora",en:"Eggplant packing/hr",tipo:"Hora",p:16.23,hr:true},
-  {es:"Empaque de calabaza amarilla",en:"Yellow squash packing",tipo:"Caja",p:0.80,hr:false},
-  {es:"Empaque de calabaza verde",en:"Green squash packing",tipo:"Caja",p:0.80,hr:false},
-  {es:"Empaque de chile morron",en:"Bell pepper packing",tipo:"Caja",p:0.80,hr:false},
-  {es:"Emplayar",en:"Pallet wrapping",tipo:"Hora",p:16.23,hr:true},
-  {es:"Extra / Bono",en:"Bonus",tipo:"$",p:1.00,hr:false},
-  {es:"Fichero",en:"Ticket issuer",tipo:"Hora",p:16.23,hr:true},
-  {es:"Montacarguista",en:"Forklift operator",tipo:"Hora",p:16.23,hr:true},
-  {es:"Pisca berenjena x hora",en:"Eggplant picking/hr",tipo:"Hora",p:16.23,hr:true},
-  {es:"Pisca chile caliente x hora",en:"Hot pepper picking/hr",tipo:"Hora",p:16.23,hr:true},
-  {es:"Pisca chile morron x hora",en:"Bell pepper picking/hr",tipo:"Hora",p:16.23,hr:true},
-  {es:"Pisca de calabaza amarilla",en:"Yellow squash picking",tipo:"Ficha",p:0.90,hr:false},
-  {es:"Pisca de calabaza verde",en:"Green squash picking",tipo:"Ficha",p:0.90,hr:false},
-  {es:"Pisca de chile morron",en:"Bell pepper picking",tipo:"Ficha",p:0.70,hr:false},
-  {es:"Pisca de chile morron rojo",en:"Red bell pepper picking",tipo:"Ficha",p:1.00,hr:false},
-  {es:"Pisca de pepino",en:"Cucumber picking",tipo:"Ficha",p:0.65,hr:false},
-  {es:"Plantando pepino",en:"Cucumber planting",tipo:"Hora",p:16.23,hr:true},
-  {es:"Surquero",en:"Crew leader",tipo:"Hora",p:16.23,hr:true},
-  {es:"Tractorista",en:"Tractor operator",tipo:"Hora",p:16.23,hr:true},
-  {es:"Troquero",en:"Truck driver",tipo:"Hora",p:16.23,hr:true}
+  {es:"Deshierbe",en:"Weeding",tipo:"Hora",p:16.23,hr:true,modo:"Individual"},
+  {es:"Surquero",en:"Crew leader",tipo:"Hora",p:16.23,hr:true,modo:"Individual"},
+  {es:"Busero",en:"Bus driver",tipo:"Hora",p:16.23,hr:true,modo:"Individual"},
+  {es:"Extra / Bono",en:"Bonus",tipo:"$",p:1.00,hr:false,modo:"Individual"}
+];
+
+// Actividades grupales de fallback — solo para cuando Sheets está offline
+var FALLBACK_GRUPAL_ACTS = [
+  {es:"Quitar estaca",en:"Remove stake",tipo:"Ficha",p:1.50,hr:false,modo:"Grupal",calc:"puertas"},
+  {es:"Quitar hilo",en:"Remove wire",tipo:"Ficha",p:0.60,hr:false,modo:"Grupal",calc:"puertas"},
+  {es:"Empaque por cajas",en:"Box packing",tipo:"Caja",p:0.80,hr:false,modo:"Grupal",calc:"cajas"}
 ];
 
 // ── SESSION MANAGEMENT ──────────────────────────────────────
@@ -846,8 +822,10 @@ function loginSuccess(user){
   if(!user.isAdmin){
     filterDataForCrew(user.crew);
   } else {
-    NAMES = ALL_WORKERS.map(function(w){ return w.name; });
-    ACTS = ALL_ACTS.slice();
+    ACTS       = ALL_ACTS.filter(function(a){ return (a.modo||'Individual').toLowerCase()!=='grupal'; });
+    GRUPAL_ACTS= ALL_ACTS.filter(function(a){ return (a.modo||'Individual').toLowerCase()==='grupal'; });
+    if(!ACTS.length)        ACTS        = FALLBACK_ACTS;
+    if(!GRUPAL_ACTS.length) GRUPAL_ACTS = FALLBACK_GRUPAL_ACTS;
   }
 
   updParam();
@@ -858,7 +836,12 @@ function loginSuccess(user){
 function onAdminSurqueroChange(name){
   var inp = gEl('surquero');
   if(inp) inp.value = name;
-  if(!name){ NAMES=ALL_WORKERS.map(function(w){return w.name;}); ACTS=ALL_ACTS.slice(); return; }
+  if(!name){
+    NAMES=ALL_WORKERS.map(function(w){return w.name;});
+    ACTS=ALL_ACTS.filter(function(a){return (a.modo||'Individual').toLowerCase()!=='grupal';});
+    GRUPAL_ACTS=ALL_ACTS.filter(function(a){return (a.modo||'Individual').toLowerCase()==='grupal';});
+    return;
+  }
   var lider = null;
   for(var i=0;i<LIDERES.length;i++){ if(LIDERES[i].name===name){lider=LIDERES[i];break;} }
   if(lider && lider.crew){
@@ -893,15 +876,21 @@ function filterDataForCrew(crew){
   }
   if(!NAMES.length) NAMES = FALLBACK_NAMES;
 
-  // Filter activities: match base crew name (Pennrose 2 → look for "Pennrose" in tasks)
+  // Filter activities: match base crew name
   ACTS = [];
+  var GRUPAL_ACTS = []; // actividades grupales del rancho
   for(var i=0;i<ALL_ACTS.length;i++){
     var farm = (ALL_ACTS[i].farm||'').toLowerCase();
     if(farm === crewBase || farm === crew.toLowerCase()){
-      ACTS.push(ALL_ACTS[i]);
+      if((ALL_ACTS[i].modo||'Individual').toLowerCase() === 'grupal'){
+        GRUPAL_ACTS.push(ALL_ACTS[i]);
+      } else {
+        ACTS.push(ALL_ACTS[i]);
+      }
     }
   }
-  if(!ACTS.length) ACTS = FALLBACK_ACTS;
+  if(!ACTS.length) ACTS = FALLBACK_ACTS.filter(function(a){ return a.modo !== 'Grupal'; });
+  if(!GRUPAL_ACTS.length) GRUPAL_ACTS = FALLBACK_GRUPAL_ACTS;
 }
 
 function populateSurqueroSelect(){
@@ -1002,9 +991,11 @@ function loadSheetsData(){
       for(var i=0;i<data.tasks.length;i++){
         var t = data.tasks[i];
         var tipoNorm = tipoMap[t.tipo] || 'Hora';
+        var modo = (t.modo || 'Individual').trim();
         ALL_ACTS.push({
           farm:t.farm, es:t.es, en:t.en||t.es,
-          tipo:tipoNorm, p:t.rate||16.23, hr:tipoNorm==='Hora'
+          tipo:tipoNorm, p:t.rate||16.23, hr:tipoNorm==='Hora',
+          modo: modo  // 'Individual' | 'Grupal'
         });
       }
     } else {
@@ -1521,21 +1512,12 @@ function okCopy(){
 function noCopy(){ pcp=null; gEl('cpOv').classList.remove('on'); }
 
 function updParts(){
-  var _types=['cajas','est','hil'];
-  for(var _ti=0;_ti<_types.length;_ti++){
-    var t=_types[_ti];
-    var arr=t==='cajas'?cajasP:(t==='est'?estP:hilP);
-    var el=gEl(t+'Pl'); if(!el)continue;
-    var h='';
-    for(var i=0;i<workers.length;i++){
-      var w=workers[i];
-      h+='<div class="pc'+(inArr(arr,w.id)?' on':'')+'" onclick="togPart(\''+t+'\','+w.id+')">'+w.name.split(' ')[0]+' '+w.name.split(' ')[1]+'</div>';
-    }
-    el.innerHTML=h||'<span style="color:var(--gr);font-size:12px">Agrega trabajadores primero</span>';
-    calcGrp(t);
+  for(var gi=0;gi<grpActs.length;gi++){
+    renderGrpPart(gi);
+    calcGrpAct(gi);
   }
 }
-function togPart(t,id){ var arr=t==='cajas'?cajasP:(t==='est'?estP:hilP); if(inArr(arr,id))rmArr(arr,id);else arr.push(id); updParts(); autoSave(); }
+function togPart(t,id){ /* legacy — no-op en delta */ }
 function calcGrp(t){
   var res=gEl(t+'R'), calc=gEl(t+'Calc');
   if(t==='cajas'){
@@ -2525,28 +2507,232 @@ function sendToSheets() {
   }
 }
 
-// ── GROUP ACTIVITY SYSTEM ──
+// ── GROUP ACTIVITY SYSTEM (dinámico desde GRUPAL_ACTS) ──
+// grpActs = [{gai: índice en GRUPAL_ACTS, participantes:[wid,...], vars:{}}]
 var grpActs = [];
 
-function showGrpPicker(){ gEl('grpPickOv').classList.add('on'); }
+// Detecta el tipo de cálculo de una actividad grupal
+// 'puertas' = acres × ancho × precio ÷ personas
+// 'cajas'   = total cajas × precio ÷ personas
+// 'hora'    = horas × precio (por persona)
+// 'pieza'   = cantidad ÷ personas × precio
+function grpCalcType(act){
+  if(!act) return 'pieza';
+  var es = (act.es||'').toLowerCase();
+  if(act.calc) return act.calc; // si viene de fallback con calc explícito
+  if(es.indexOf('estaca')>=0||es.indexOf('hilo')>=0||es.indexOf('drip')>=0||es.indexOf('wire')>=0) return 'puertas';
+  if(es.indexOf('caja')>=0||es.indexOf('box')>=0||es.indexOf('empaque')>=0) return 'cajas';
+  if(act.hr) return 'hora';
+  return 'pieza';
+}
 
-function addGrpAct(type){
-  for(var i=0;i<grpActs.length;i++){
-    if(grpActs[i]===type){ toast('⚠️ Ya está agregada'); gEl('grpPickOv').classList.remove('on'); return; }
+function showGrpPicker(){
+  var list = gEl('grpPickList'); if(!list) return;
+  list.innerHTML = '';
+  if(!GRUPAL_ACTS.length){
+    list.innerHTML = '<div style="color:var(--gr);font-size:13px;text-align:center;padding:10px">No hay actividades grupales para este rancho</div>';
+    gEl('grpPickOv').classList.add('on'); return;
   }
-  grpActs.push(type);
+  var icons = {puertas:'🪝', cajas:'📦', hora:'⏰', pieza:'🔢'};
+  for(var i=0;i<GRUPAL_ACTS.length;i++){
+    var act = GRUPAL_ACTS[i];
+    var ct  = grpCalcType(act);
+    var desc = ct==='puertas' ? 'Acres × ancho ÷ personas × $'+act.p
+             : ct==='cajas'   ? 'Total ÷ personas × $'+act.p+'/'+act.tipo
+             : ct==='hora'    ? 'Horas × $'+act.p+'/hr'
+             : 'Cantidad ÷ personas × $'+act.p+'/'+act.tipo;
+    var btn = document.createElement('button');
+    btn.style.cssText='background:var(--ap);border:1.5px solid var(--a);border-radius:10px;padding:14px;text-align:left;cursor:pointer;font-family:\'DM Sans\',sans-serif;width:100%';
+    btn.innerHTML='<div style="font-size:15px;font-weight:700;color:var(--dk)">'+(icons[ct]||'🌿')+' '+act.es+'</div>'
+      +'<div style="font-size:11px;color:var(--gr);margin-top:3px">'+desc+'</div>';
+    (function(idx){ btn.addEventListener('click',function(){ addGrpAct(idx); }); })(i);
+    list.appendChild(btn);
+  }
+  gEl('grpPickOv').classList.add('on');
+}
+
+function addGrpAct(gai){
+  for(var i=0;i<grpActs.length;i++){
+    if(grpActs[i].gai===gai){ toast('⚠️ Ya está agregada'); gEl('grpPickOv').classList.remove('on'); return; }
+  }
+  grpActs.push({gai:gai, participantes:[], vars:{}});
   gEl('grpPickOv').classList.remove('on');
   renderGrpActs(); autoSave();
 }
 
-function removeGrpAct(type){
+function removeGrpAct(gai){
   for(var i=0;i<grpActs.length;i++){
-    if(grpActs[i]===type){ grpActs.splice(i,1); break; }
+    if(grpActs[i].gai===gai){ grpActs.splice(i,1); break; }
   }
-  if(type==='cajas'){ gEl('cajasTotal').value=''; gEl('cajasPrecio').value='0.80'; gEl('cajasIni').value=''; gEl('cajasFin').value=''; cajasP=[]; }
-  if(type==='est'){ gEl('estAcres').value=''; gEl('estAncho').value=''; gEl('estIni').value=''; gEl('estFin').value=''; estP=[]; }
-  if(type==='hil'){ gEl('hilAcres').value=''; gEl('hilAncho').value=''; gEl('hilIni').value=''; gEl('hilFin').value=''; hilP=[]; }
-  renderGrpActs(); autoSave();
+  renderGrpActs(); updParts(); autoSave();
+}
+
+function renderGrpActs(){
+  var list  = gEl('grpActList');
+  var empty = gEl('grpEmpty');
+  if(!list) return;
+  list.innerHTML='';
+  if(!grpActs.length){ if(empty) empty.style.display='block'; return; }
+  if(empty) empty.style.display='none';
+
+  for(var gi=0;gi<grpActs.length;gi++){
+    var g   = grpActs[gi];
+    var act = GRUPAL_ACTS[g.gai];
+    if(!act) continue;
+    var ct  = grpCalcType(act);
+    var card = document.createElement('div');
+    card.className = 'ga'; card.style.marginBottom='12px';
+
+    var headerHtml = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
+      +'<div class="gat" style="margin:0">🌿 '+act.es+'</div>'
+      +'<button data-gai="'+g.gai+'" onclick="removeGrpAct(parseInt(this.dataset.gai))" style="background:var(--rp);color:var(--r);border:none;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer">✕ Quitar</button>'
+      +'</div>';
+
+    var varsHtml = '';
+    if(ct === 'puertas'){
+      var acres = g.vars.acres||''; var ancho = g.vars.ancho||'';
+      var puertas = (parseFloat(acres)||0)*(parseFloat(ancho)||0);
+      varsHtml = '<div class="r2" style="margin-bottom:8px">'
+        +'<div><label style="font-size:10px">Acres</label>'
+        +'<input type="number" min="0" step="0.1" value="'+acres+'" placeholder="0" data-gi="'+gi+'" data-v="acres" onchange="setGrpVar(this)" style="font-size:14px;padding:10px 11px"></div>'
+        +'<div><label style="font-size:10px">Ancho puerta</label>'
+        +'<input type="number" min="0" step="1" value="'+ancho+'" placeholder="0" data-gi="'+gi+'" data-v="ancho" onchange="setGrpVar(this)" style="font-size:14px;padding:10px 11px"></div>'
+        +'</div>'
+        +(puertas?'<div class="shift-total" style="margin-bottom:8px"><span>Puertas totales</span><b>'+puertas.toFixed(1)+'</b></div>':'');
+    } else if(ct === 'cajas'){
+      var totalC = g.vars.totalC||''; var precioC = g.vars.precioC||act.p||0.80;
+      varsHtml = '<div class="r2" style="margin-bottom:8px">'
+        +'<div><label style="font-size:10px">Total cajas</label>'
+        +'<input type="number" min="0" step="1" value="'+totalC+'" placeholder="0" data-gi="'+gi+'" data-v="totalC" onchange="setGrpVar(this)" style="font-size:14px;padding:10px 11px"></div>'
+        +'<div><label style="font-size:10px">$/caja</label>'
+        +'<input type="number" min="0" step="0.01" value="'+precioC+'" data-gi="'+gi+'" data-v="precioC" onchange="setGrpVar(this)" style="font-size:14px;padding:10px 11px"></div>'
+        +'</div>';
+    } else if(ct === 'hora'){
+      var hIni = g.vars.ini||''; var hFin = g.vars.fin||'';
+      varsHtml = '<div class="r2" style="margin-bottom:8px">'
+        +'<div><label style="font-size:10px">🟢 Inicio</label>'
+        +'<input type="time" value="'+hIni+'" data-gi="'+gi+'" data-v="ini" onchange="setGrpVar(this)" style="font-size:14px;padding:10px 11px"></div>'
+        +'<div><label style="font-size:10px">🏁 Fin</label>'
+        +'<input type="time" value="'+hFin+'" data-gi="'+gi+'" data-v="fin" onchange="setGrpVar(this)" style="font-size:14px;padding:10px 11px"></div>'
+        +'</div>';
+    } else {
+      // pieza — cantidad total a dividir
+      var totalP = g.vars.totalP||'';
+      varsHtml = '<div style="margin-bottom:8px"><label style="font-size:10px">Cantidad total ('+act.tipo+')</label>'
+        +'<input type="number" min="0" step="1" value="'+totalP+'" placeholder="0" data-gi="'+gi+'" data-v="totalP" onchange="setGrpVar(this)" style="font-size:14px;padding:10px 11px;width:100%"></div>';
+    }
+
+    // Participantes
+    var partHtml = '<div style="font-size:11px;font-weight:700;color:var(--gr);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Participantes</div>'
+      +'<div class="gpl" id="gpl'+gi+'"></div>';
+
+    // Resultado
+    var resHtml = '<div class="gaR" id="gaR'+gi+'" style="display:none"></div>';
+
+    card.innerHTML = headerHtml + varsHtml + partHtml + resHtml;
+    list.appendChild(card);
+
+    // Render participantes
+    renderGrpPart(gi);
+    calcGrpAct(gi);
+  }
+  updParts();
+}
+
+function setGrpVar(inp){
+  var gi = parseInt(inp.dataset.gi);
+  var v  = inp.dataset.v;
+  if(!grpActs[gi]) return;
+  grpActs[gi].vars[v] = inp.value;
+  calcGrpAct(gi);
+  autoSave();
+}
+
+function renderGrpPart(gi){
+  var el = gEl('gpl'+gi); if(!el) return;
+  var g  = grpActs[gi]; if(!g) return;
+  var h  = '';
+  for(var i=0;i<workers.length;i++){
+    var w   = workers[i];
+    var on  = g.participantes.indexOf(w.id)>=0;
+    h += '<div class="pc'+(on?' on':'')+'" onclick="togGrpPart('+gi+','+w.id+')">'
+       + w.name.split(' ')[0]+' '+w.name.split(' ')[1]+'</div>';
+  }
+  el.innerHTML = h||'<span style="color:var(--gr);font-size:12px">Agrega trabajadores primero</span>';
+}
+
+function togGrpPart(gi, wid_){
+  var g = grpActs[gi]; if(!g) return;
+  var idx = g.participantes.indexOf(wid_);
+  if(idx>=0) g.participantes.splice(idx,1);
+  else g.participantes.push(wid_);
+  renderGrpPart(gi);
+  calcGrpAct(gi);
+  autoSave();
+}
+
+function calcGrpAct(gi){
+  var g   = grpActs[gi]; if(!g) return;
+  var act = GRUPAL_ACTS[g.gai]; if(!act) return;
+  var ct  = grpCalcType(act);
+  var np  = g.participantes.length;
+  var res = gEl('gaR'+gi); if(!res) return;
+  var ppp = 0; // pago por persona
+
+  if(ct==='puertas'){
+    var acres   = parseFloat(g.vars.acres)||0;
+    var ancho   = parseFloat(g.vars.ancho)||0;
+    var puertas = acres*ancho;
+    if(!puertas||!np){ res.style.display='none'; return; }
+    ppp = puertas*act.p/np;
+    res.innerHTML = puertas.toFixed(1)+' puertas × $'+act.p+' = <strong>$'+(puertas*act.p).toFixed(2)+'</strong> ÷ '+np+' = <strong style="color:var(--a)">$'+ppp.toFixed(2)+' c/u</strong>';
+  } else if(ct==='cajas'){
+    var totalC  = parseFloat(g.vars.totalC)||0;
+    var precioC = parseFloat(g.vars.precioC)||act.p||0.80;
+    if(!totalC||!np){ res.style.display='none'; return; }
+    ppp = totalC/np*precioC;
+    res.innerHTML = totalC+' cajas ÷ '+np+' = <strong>'+(totalC/np).toFixed(1)+'</strong> × $'+precioC+' = <strong style="color:var(--a)">$'+ppp.toFixed(2)+' c/u</strong>';
+  } else if(ct==='hora'){
+    var ini = g.vars.ini||''; var fin = g.vars.fin||'';
+    var h   = nh(ini,fin);
+    if(!h||!np){ res.style.display='none'; return; }
+    ppp = h*act.p;
+    res.innerHTML = h+' h × $'+act.p+' = <strong style="color:var(--a)">$'+ppp.toFixed(2)+' c/u</strong>';
+  } else {
+    var totalP = parseFloat(g.vars.totalP)||0;
+    if(!totalP||!np){ res.style.display='none'; return; }
+    ppp = totalP/np*act.p;
+    res.innerHTML = totalP+' '+act.tipo+' ÷ '+np+' = <strong>'+(totalP/np).toFixed(1)+'</strong> × $'+act.p+' = <strong style="color:var(--a)">$'+ppp.toFixed(2)+' c/u</strong>';
+  }
+  res.style.display='block';
+  // Actualizar totales de todos los participantes
+  for(var i=0;i<workers.length;i++) updTot(workers[i].id);
+}
+
+function grpPay(wid_){
+  var ex = 0;
+  for(var gi=0;gi<grpActs.length;gi++){
+    var g   = grpActs[gi];
+    var act = GRUPAL_ACTS[g.gai]; if(!act) continue;
+    if(g.participantes.indexOf(wid_)<0) continue;
+    var ct  = grpCalcType(act);
+    var np  = g.participantes.length; if(!np) continue;
+    if(ct==='puertas'){
+      var puertas=(parseFloat(g.vars.acres)||0)*(parseFloat(g.vars.ancho)||0);
+      if(puertas) ex+=puertas*act.p/np;
+    } else if(ct==='cajas'){
+      var totalC=parseFloat(g.vars.totalC)||0;
+      var precioC=parseFloat(g.vars.precioC)||act.p||0.80;
+      if(totalC) ex+=totalC/np*precioC;
+    } else if(ct==='hora'){
+      var h=nh(g.vars.ini||'',g.vars.fin||'');
+      if(h) ex+=h*act.p;
+    } else {
+      var totalP=parseFloat(g.vars.totalP)||0;
+      if(totalP) ex+=totalP/np*act.p;
+    }
+  }
+  return ex;
 }
 
 function renderGrpActs(){
