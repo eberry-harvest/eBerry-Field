@@ -1967,27 +1967,49 @@ function showHistory(){
     }
   }
   keys.sort().reverse();
-  if(!keys.length){
+
+  // ✅ Fix: deduplicar por fecha real — si dos keys tienen la misma fecha,
+  // preferir la key nueva (pr9_u_xxx_hist_) sobre la legacy (pr9_hist_)
+  var seen = {}; // fecha → key ganadora
+  for(i=0;i<keys.length;i++){
+    var fecha_ = keys[i].split('_hist_').pop();
+    if(!seen[fecha_]){
+      seen[fecha_] = keys[i];
+    } else {
+      // Preferir la key nueva (más larga / con '_u_') sobre la legacy
+      var prev = seen[fecha_];
+      if(keys[i].indexOf('_u_') >= 0 && prev.indexOf('_u_') < 0){
+        seen[fecha_] = keys[i]; // nueva gana
+      }
+      // si la legacy ganó antes y la nueva llega después, ya la tomó arriba
+    }
+  }
+  // Reconstruir lista deduplicada ordenada por fecha desc
+  var dedupKeys = [];
+  for(var f_ in seen){ dedupKeys.push(seen[f_]); }
+  dedupKeys.sort().reverse();
+
+  if(!dedupKeys.length){
     gEl('histList').innerHTML='<div style="text-align:center;color:var(--gr);padding:20px;font-size:14px">No hay días guardados aún.<br>Guarda el día actual y aparecerá aquí.</div>';
   } else {
     var h='';
-    for(i=0;i<keys.length;i++){
+    for(i=0;i<dedupKeys.length;i++){
       // Extraer fecha de la clave — siempre es lo último después de '_hist_'
-      var date = keys[i].split('_hist_').pop() || keys[i];
-      var raw=localStorage.getItem(keys[i]);
+      var date = dedupKeys[i].split('_hist_').pop() || dedupKeys[i];
+      var raw=localStorage.getItem(dedupKeys[i]);
       var info={};
       try{ info=JSON.parse(raw); }catch(e){}
       var wCount=info.w?info.w.length:0;
       var rancho=info.v?info.v.rancho:'';
       var surquero=info.v?info.v.surquero:'';
-      h+='<div style="display:flex;align-items:center;justify-content:space-between;padding:11px 13px;background:#fff;border-radius:8px;margin-bottom:8px;border:1.5px solid var(--bd);cursor:pointer" data-hkey="'+keys[i]+'" onclick="loadDay(this.dataset.hkey)">'
+      h+='<div style="display:flex;align-items:center;justify-content:space-between;padding:11px 13px;background:#fff;border-radius:8px;margin-bottom:8px;border:1.5px solid var(--bd);cursor:pointer" data-hkey="'+dedupKeys[i]+'" onclick="loadDay(this.dataset.hkey)">'
         +'<div>'
           +'<div style="font-weight:700;font-size:15px;color:var(--dk)">'+date+'</div>'
           +'<div style="font-size:12px;color:var(--gr)">'+rancho+(surquero?' · '+surquero.split(' ')[0]:'')+' · '+wCount+' trabajadores</div>'
         +'</div>'
         +'<div style="display:flex;gap:8px;align-items:center">'
-          +'<button data-pkey="'+keys[i]+'" onclick="event.stopPropagation();genPDFFromKey(this.dataset.pkey)" style="background:var(--r);color:#fff;border:none;border-radius:6px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer">📄 PDF</button>'
-          +'<button data-dkey="'+keys[i]+'" onclick="event.stopPropagation();deleteDay(this.dataset.dkey)" style="background:var(--rp);color:var(--r);border:none;border-radius:6px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer">🗑️</button>'
+          +'<button data-pkey="'+dedupKeys[i]+'" onclick="event.stopPropagation();genPDFFromKey(this.dataset.pkey)" style="background:var(--r);color:#fff;border:none;border-radius:6px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer">📄 PDF</button>'
+          +'<button data-dkey="'+dedupKeys[i]+'" onclick="event.stopPropagation();deleteDay(this.dataset.dkey)" style="background:var(--rp);color:var(--r);border:none;border-radius:6px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer">🗑️</button>'
           +'<span style="color:var(--g);font-size:20px">›</span>'
         +'</div>'
       +'</div>';
