@@ -699,16 +699,9 @@ window.addEventListener('beforeunload', function(){ closeSession(); });
 
 // ── PIN LOGIN SYSTEM ──
 var pinBuffer = '';
-var CONFIG_LOADED = false; // bloquea el PIN hasta que llegue el config de Sheets
 
 function pinPress(d){
   if(pinBuffer.length >= 4) return;
-  // Si el config aún no cargó, mostrar aviso y no procesar
-  if(!CONFIG_LOADED){
-    gEl('loginErr').textContent = '⏳ Cargando configuración...';
-    setTimeout(function(){ gEl('loginErr').textContent=''; }, 1500);
-    return;
-  }
   pinBuffer += d;
   updPinDots();
   if(pinBuffer.length === 4) setTimeout(checkPin, 150);
@@ -961,7 +954,7 @@ function loadSheetsData(){
     if(done) return; done = true;
     if(!loaded.workers){ ALL_WORKERS=[]; NAMES=FALLBACK_NAMES.slice(); }
     if(!loaded.tasks){ ALL_ACTS=FALLBACK_ACTS.slice(); }
-    CONFIG_LOADED = true; // habilitar PIN aunque no llegue config (usa respaldo 1999)
+     // habilitar PIN aunque no llegue config (usa respaldo 1999)
     buildLideres();
     setLoading(false);
     showLogin();
@@ -986,7 +979,7 @@ function loadSheetsData(){
     if(configDone) return;
     configDone = true;
     // Config tardó mucho — usar PIN de respaldo
-    CONFIG_LOADED = true;
+    
     loaded.config = true;
     checkDone();
   }, 5000);
@@ -1003,7 +996,7 @@ function loadSheetsData(){
         ADMIN_PIN = String(cfg.admin_pin).trim();
       }
     }
-    CONFIG_LOADED = true;
+    
     loaded.config = true;
     checkDone();
   });
