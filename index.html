@@ -215,6 +215,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
       <div class="logo">eBerry <em>Field</em></div>
       <div style="font-size:9px;color:rgba(255,255,255,.6);letter-spacing:.5px;margin-top:-2px;font-weight:600">HARVEST COMPANY LLC</div>
     </div>
+    <div id="adminBadge" style="display:none;background:var(--a);border-radius:20px;padding:4px 12px;font-size:12px;font-weight:700;color:#fff;letter-spacing:1px">🔐 ADMIN</div>
     <div style="display:flex;align-items:center;gap:6px">
       <div class="dpill" id="hdate">—</div>
       <button onclick="showHistory()" style="background:rgba(255,255,255,.15);border:none;border-radius:20px;padding:4px 10px;color:#fff;font-size:12px;font-weight:600;cursor:pointer">📅</button>
@@ -684,6 +685,7 @@ function logoutUser(){
   currentUser = null;
   // Hide logout button
   var btn = gEl('logoutBtn'); if(btn) btn.style.display = 'none';
+  var badge = gEl('adminBadge'); if(badge) badge.style.display = 'none';
   // Reset pin state
   pinBuffer = '';
   updPinDots();
@@ -819,8 +821,10 @@ function proceedLogin(user){
 function loginSuccess(user){
   currentUser = user;
   gEl('loginScreen').classList.add('hide');
-  // Show logout button
   var btn = gEl('logoutBtn'); if(btn) btn.style.display = 'block';
+  // Mostrar badge ADMIN solo para administrador
+  var badge = gEl('adminBadge');
+  if(badge) badge.style.display = user.isAdmin ? 'block' : 'none';
 
   if(!user.isAdmin){
     filterDataForCrew(user.crew);
