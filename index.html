@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>eBerry Harvest v4.1d</title>
+<title>eBerry Field App</title>
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -537,7 +537,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     <div class="ct">📤 Enviar</div>
     <button class="btn" style="background:#3a7fd4;color:#fff" onclick="openNewDay()">🌅 Nuevo Día</button>
     <button class="btn pdf" onclick="genPDF()">📄 Generar PDF para Payroll</button>
-    <button class="btn bw" onclick="sendPDFWhatsApp()">📲 Enviar PDF por WhatsApp</button>
+    <button class="btn bw" style="display:none" onclick="sendPDFWhatsApp()">📲 Enviar PDF por WhatsApp</button>
     <!-- ── PAYROLL FIELD MASTER BUTTON ── -->
     <button id="sheetsSendBtn" class="btn" style="background:#1a3a5c;color:#fff" onclick="sendToSheets()">📊 Enviar a Payroll Field Master</button>
     <button class="btn bg" onclick="save()">💾 Guardar</button>
@@ -597,6 +597,9 @@ var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwjC6Gjcb3_VRmjnV
 
 // ── SESSION ──
 var currentUser = null; // {name, pin, crew, isAdmin}
+
+// ── CONFIG (loaded from Sheets CONFIG tab) ──
+var ADMIN_PIN = '1999'; // PIN de respaldo — se sobreescribe con el de Sheets al cargar
 
 // ── DATA (loaded from Sheets) ──
 var NAMES = []; // workers for current crew
@@ -723,8 +726,8 @@ function checkPin(){
   updPinDots();
 
   // Admin PIN — no session check needed
-  if(pin === '2026'){
-    loginSuccess({name:'Administrador', pin:'2026', crew:'ALL', isAdmin:true});
+  if(pin === ADMIN_PIN){
+    loginSuccess({name:'Administrador', pin:ADMIN_PIN, crew:'ALL', isAdmin:true});
     return;
   }
 
@@ -781,7 +784,7 @@ function forceSessionTakeover(){
     gEl('dupAdminErr').textContent = '❌ Ingresa el PIN de 4 dígitos del Admin';
     return;
   }
-  if(adminPin !== '2026'){
+  if(adminPin !== ADMIN_PIN){
     gEl('dupAdminErr').textContent = '❌ PIN incorrecto';
     gEl('dupAdminPin').value = '';
     return;
@@ -789,7 +792,7 @@ function forceSessionTakeover(){
   // Force close old session via server
   var user = _pendingSessionUser;
   gEl('dupAdminErr').textContent = '🔄 Cerrando sesión anterior...';
-  sessionCall({cmd:'force', surquero:user.name, adminPin:'2026'}, function(err, data){
+  sessionCall({cmd:'force', surquero:user.name, adminPin:ADMIN_PIN}, function(err, data){
     if(!err && data && data.success){
       gEl('dupSessOv').classList.remove('on');
       toast('✅ Sesión anterior cerrada por Admin');
@@ -944,7 +947,7 @@ function fetchFromScript(action, callback){
 
 function loadSheetsData(){
   setLoading(true, 'Cargando datos...');
-  var loaded = {workers: false, tasks: false};
+  var loaded = {workers: false, tasks: false, config: false};
   var done = false;
 
   var timeout = setTimeout(function(){
@@ -958,7 +961,7 @@ function loadSheetsData(){
 
   function checkDone(){
     if(done) return;
-    if(loaded.workers && loaded.tasks){
+    if(loaded.workers && loaded.tasks && loaded.config){
       done = true;
       clearTimeout(timeout);
       buildLideres();
@@ -968,6 +971,15 @@ function loadSheetsData(){
       showLogin();
     }
   }
+
+  // Load config from Apps Script (admin PIN, session timeout, etc.)
+  fetchFromScript('config', function(err, data){
+    if(!err && data && data.success && data.config){
+      if(data.config.admin_pin) ADMIN_PIN = String(data.config.admin_pin).trim();
+    }
+    loaded.config = true;
+    checkDone();
+  });
 
   // Load workers from Apps Script
   fetchFromScript('workers', function(err, data){
@@ -1600,7 +1612,7 @@ function mkReport(){
   }
   lines.push('\n💵 *TOTAL: $'+grand.toFixed(2)+'*');
   var n=gEl('notas').value; if(n)lines.push('📝 '+n);
-  lines.push('\n_Pennrose 2026 App_');
+  lines.push('\n_eBerry Field App — '+new Date().getFullYear()+'_');
   return lines.join('\n');
 }
 function sendPDFWhatsApp(){ sendWA(); }
