@@ -1924,16 +1924,36 @@ window.addEventListener('DOMContentLoaded',function(){
 
 function showHistory(){
   var keys=[], i;
-  var userKey = getUserKey(); // e.g. pr9_u_josefrancisc
-  var histPrefix = userKey + '_hist_'; // pr9_u_josefrancisc_hist_
-  for(i=0;i<localStorage.length;i++){
-    var k=localStorage.key(i);
-    if(k && k.indexOf(histPrefix)===0) keys.push(k);
-  }
-  // Also include legacy keys for backwards compat
-  for(i=0;i<localStorage.length;i++){
-    var k=localStorage.key(i);
-    if(k && k.indexOf('pr9_hist_')===0 && keys.indexOf(k)<0) keys.push(k);
+
+  if(currentUser && currentUser.isAdmin){
+    // Admin ve TODOS los historiales de todos los surqueros
+    for(i=0;i<localStorage.length;i++){
+      var k=localStorage.key(i);
+      if(!k) continue;
+      if(k.indexOf('_hist_')>=0 || k.indexOf('pr9_hist_')===0){
+        if(keys.indexOf(k)<0) keys.push(k);
+      }
+    }
+  } else {
+    // Surquero ve solo SUS días
+    var userKey = getUserKey();
+    var histPrefix = userKey + '_hist_';
+    for(i=0;i<localStorage.length;i++){
+      var k=localStorage.key(i);
+      if(!k) continue;
+      if(k.indexOf(histPrefix)===0) keys.push(k);
+    }
+    // También legacy keys que coincidan con su nombre
+    for(i=0;i<localStorage.length;i++){
+      var k=localStorage.key(i);
+      if(!k) continue;
+      if(k.indexOf('pr9_hist_')===0 && keys.indexOf(k)<0){
+        try{
+          var d=JSON.parse(localStorage.getItem(k));
+          if(d&&d.v&&d.v.surquero&&currentUser&&d.v.surquero===currentUser.name) keys.push(k);
+        }catch(e){}
+      }
+    }
   }
   keys.sort().reverse();
   if(!keys.length){
@@ -1941,14 +1961,19 @@ function showHistory(){
   } else {
     var h='';
     for(i=0;i<keys.length;i++){
-      var date=keys[i].replace(histPrefix,'').replace('pr9_hist_','');
+      // Extraer fecha de la clave — siempre es lo último después de '_hist_'
+      var date = keys[i].split('_hist_').pop() || keys[i];
       var raw=localStorage.getItem(keys[i]);
-      var info={workers:[]};
+      var info={};
       try{ info=JSON.parse(raw); }catch(e){}
       var wCount=info.w?info.w.length:0;
       var rancho=info.v?info.v.rancho:'';
+      var surquero=info.v?info.v.surquero:'';
       h+='<div style="display:flex;align-items:center;justify-content:space-between;padding:11px 13px;background:#fff;border-radius:8px;margin-bottom:8px;border:1.5px solid var(--bd);cursor:pointer" data-hkey="'+keys[i]+'" onclick="loadDay(this.dataset.hkey)">'
-        +'<div><div style="font-weight:700;font-size:15px;color:var(--dk)">'+date+'</div><div style="font-size:12px;color:var(--gr)">'+rancho+' · '+wCount+' trabajadores</div></div>'
+        +'<div>'
+          +'<div style="font-weight:700;font-size:15px;color:var(--dk)">'+date+'</div>'
+          +'<div style="font-size:12px;color:var(--gr)">'+rancho+(surquero?' · '+surquero.split(' ')[0]:'')+' · '+wCount+' trabajadores</div>'
+        +'</div>'
         +'<div style="display:flex;gap:8px;align-items:center">'
           +'<button data-pkey="'+keys[i]+'" onclick="event.stopPropagation();genPDFFromKey(this.dataset.pkey)" style="background:var(--r);color:#fff;border:none;border-radius:6px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer">📄 PDF</button>'
           +'<button data-dkey="'+keys[i]+'" onclick="event.stopPropagation();deleteDay(this.dataset.dkey)" style="background:var(--rp);color:var(--r);border:none;border-radius:6px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer">🗑️</button>'
