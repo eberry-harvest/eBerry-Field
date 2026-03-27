@@ -1757,13 +1757,9 @@ function applyAutoFill(){
   var mo = now.getMonth()+1; var dy = now.getDate();
   var today = now.getFullYear()+'-'+(mo<10?'0'+mo:mo)+'-'+(dy<10?'0'+dy:dy);
   var fEl = gEl('fecha');
-  if(fEl) fEl.value = today;
+  if(fEl && !fEl.value) fEl.value = today;
 
-  // Auto-fill hora entrada with current time
-  var hh = now.getHours(); var mm = now.getMinutes();
-  var timeNow = (hh<10?'0'+hh:hh)+':'+(mm<10?'0'+mm:mm);
-  var hEntEl = gEl('hEnt');
-  if(hEntEl) hEntEl.value = timeNow;
+  // ✅ NO auto-llenar hora de entrada — el surquero la captura manualmente
 
   updDate();
 }
