@@ -995,8 +995,13 @@ function loadSheetsData(){
     if(configDone) return;
     configDone = true;
     clearTimeout(configTimeout);
-    if(!err && data && data.success && data.config){
-      if(data.config.admin_pin) ADMIN_PIN = String(data.config.admin_pin).trim();
+    if(!err && data){
+      // Apps Script traduce las keys al español — revisamos ambas versiones
+      var ok  = data.success || data['éxito'] || data.exito;
+      var cfg = data.config  || data['configuración'] || data.configuracion || {};
+      if(ok && cfg && cfg.admin_pin){
+        ADMIN_PIN = String(cfg.admin_pin).trim();
+      }
     }
     CONFIG_LOADED = true;
     loaded.config = true;
