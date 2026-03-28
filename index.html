@@ -1580,21 +1580,7 @@ function calcGrp(t){
   }
 }
 function calcG(t){ calcGrp(t); }
-function grpPay(id){
-  var ex=0;
-  var cajasT=parseFloat(gEl('cajasTotal').value)||0;
-  var cajasP2=parseFloat(gEl('cajasPrecio').value)||0.80;
-  if(inArr(cajasP,id)&&cajasT&&cajasP.length) ex+=(cajasT/cajasP.length)*cajasP2;
-  var estAcres=parseFloat(gEl('estAcres').value)||0;
-  var estAncho=parseFloat(gEl('estAncho').value)||0;
-  var estPuertas=estAcres*estAncho;
-  if(inArr(estP,id)&&estPuertas&&estP.length) ex+=estPuertas*1.50/estP.length;
-  var hilAcres=parseFloat(gEl('hilAcres').value)||0;
-  var hilAncho=parseFloat(gEl('hilAncho').value)||0;
-  var hilPuertas=hilAcres*hilAncho;
-  if(inArr(hilP,id)&&hilPuertas&&hilP.length) ex+=hilPuertas*0.60/hilP.length;
-  return ex;
-}
+// grpPay legacy eliminada — ver grpPay() en sistema dinámico (abajo)
 
 function buildSum(){
   var grand=0;
@@ -1730,9 +1716,12 @@ function load(){
       updParam();
       return;
     }
-    // Load params — siempre saltar hEnt/hSal (el surquero los captura manualmente)
+    // Load params — restaurar todo incluyendo hEnt/hSal del día guardado
+    // ✅ Fix: NO saltamos hEnt/hSal — el dato guardado ES del mismo día,
+    // así que si ya tenía horas capturadas, se restauran correctamente.
+    // Solo saltamos surquero/rancho para surqueros (siempre viene del login).
     if(d.v){
-      var skip = ['hEnt','hSal'];
+      var skip = [];
       if(currentUser && !currentUser.isAdmin) skip.push('surquero','rancho');
       var k=Object.keys(d.v);
       for(var i=0;i<k.length;i++){
@@ -1807,7 +1796,8 @@ function applyAutoFill(){
   var fEl = gEl('fecha');
   if(fEl && !fEl.value) fEl.value = today;
 
-  // ✅ NO auto-llenar hora de entrada — el surquero la captura manualmente
+  // ✅ Nunca borrar hEnt/hSal/lIni/lFin si ya tienen valor capturado
+  // (applyAutoFill no debe pisar horas del día en curso)
 
   updDate();
 }
@@ -2829,39 +2819,7 @@ function grpPay(wid_){
   return ex;
 }
 
-function renderGrpActs(){
-  var list=gEl('grpActList');
-  var empty=gEl('grpEmpty');
-  list.innerHTML='';
-  if(!grpActs.length){ if(empty) empty.style.display='block'; return; }
-  if(empty) empty.style.display='none';
-  for(var i=0;i<grpActs.length;i++){
-    var t=grpActs[i];
-    var card=document.createElement('div');
-    card.className='ga'; card.style.marginBottom='12px';
-    if(t==='cajas'){
-      card.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div class="gat" style="margin:0">📦 Empaque por Cajas</div><button data-rtype="cajas" onclick="removeGrpAct(this.dataset.rtype)" style="background:var(--rp);color:var(--r);border:none;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer">✕ Quitar</button></div>'
-        +'<div class="r2"><div><label>Total cajas del grupo</label><input type="number" id="cajasTotal" placeholder="Ej: 200" data-stype="cajas" oninput="syncGrp(this.dataset.stype)" min="0" value="'+gEl('cajasTotal').value+'"></div><div><label>Precio por caja ($)</label><input type="number" id="cajasPrecio" placeholder="0.80" data-stype="cajas" oninput="syncGrp(this.dataset.stype)" min="0" step="0.01" value="'+(gEl('cajasPrecio').value||'0.80')+'"></div></div>'
-        +'<div class="r2" style="margin-top:8px"><div><label>⏰ Inicio</label><input type="time" id="cajasIni" value="'+gEl('cajasIni').value+'" data-stype="cajas" onchange="syncGrp(this.dataset.stype)"></div><div><label>🏁 Fin</label><input type="time" id="cajasFin" value="'+gEl('cajasFin').value+'" data-stype="cajas" onchange="syncGrp(this.dataset.stype)"></div></div>'
-        +'<label>Participantes</label><div class="pl" id="cajasPl"></div><div class="gr2" id="cajasR" style="display:none"></div>';
-    } else if(t==='est'){
-      card.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div class="gat" style="margin:0">🪝 Quitar Estaca — <em>$1.50/puerta</em></div><button data-rtype="est" onclick="removeGrpAct(this.dataset.rtype)" style="background:var(--rp);color:var(--r);border:none;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer">✕ Quitar</button></div>'
-        +'<div class="r2"><div><label>Acres trabajados</label><input type="number" id="estAcres" placeholder="Ej: 2.4" data-stype="est" oninput="syncGrp(this.dataset.stype)" min="0" step="0.1" value="'+gEl('estAcres').value+'"></div><div><label>Ancho de puerta</label><input type="number" id="estAncho" placeholder="Ej: 87" data-stype="est" oninput="syncGrp(this.dataset.stype)" min="0" value="'+gEl('estAncho').value+'"></div></div>'
-        +'<div class="grp-calc" id="estCalc" style="display:none"></div>'
-        +'<div class="r2" style="margin-top:8px"><div><label>⏰ Inicio</label><input type="time" id="estIni" value="'+gEl('estIni').value+'" data-stype="est" onchange="syncGrp(this.dataset.stype)"></div><div><label>🏁 Fin</label><input type="time" id="estFin" value="'+gEl('estFin').value+'" data-stype="est" onchange="syncGrp(this.dataset.stype)"></div></div>'
-        +'<label>Participantes</label><div class="pl" id="estPl"></div><div class="gr2" id="estR" style="display:none"></div>';
-    } else if(t==='hil'){
-      card.innerHTML='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><div class="gat" style="margin:0">🧵 Quitar Hilo — <em>$0.60/puerta</em></div><button data-rtype="hil" onclick="removeGrpAct(this.dataset.rtype)" style="background:var(--rp);color:var(--r);border:none;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer">✕ Quitar</button></div>'
-        +'<div class="r2"><div><label>Acres trabajados</label><input type="number" id="hilAcres" placeholder="Ej: 2.4" data-stype="hil" oninput="syncGrp(this.dataset.stype)" min="0" step="0.1" value="'+gEl('hilAcres').value+'"></div><div><label>Ancho de puerta</label><input type="number" id="hilAncho" placeholder="Ej: 87" data-stype="hil" oninput="syncGrp(this.dataset.stype)" min="0" value="'+gEl('hilAncho').value+'"></div></div>'
-        +'<div class="grp-calc" id="hilCalc" style="display:none"></div>'
-        +'<div class="r2" style="margin-top:8px"><div><label>⏰ Inicio</label><input type="time" id="hilIni" value="'+gEl('hilIni').value+'" data-stype="hil" onchange="syncGrp(this.dataset.stype)"></div><div><label>🏁 Fin</label><input type="time" id="hilFin" value="'+gEl('hilFin').value+'" data-stype="hil" onchange="syncGrp(this.dataset.stype)"></div></div>'
-        +'<label>Participantes</label><div class="pl" id="hilPl"></div><div class="gr2" id="hilR" style="display:none"></div>';
-    }
-    list.appendChild(card);
-  }
-  updParts();
-}
-
+// renderGrpActs legacy eliminada — ver renderGrpActs() en sistema dinámico (arriba)
 function syncGrp(t){ calcGrp(t); autoSave(); }
 
 // ── MIGRATE localStorage data to name-based system ──
