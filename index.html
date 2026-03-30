@@ -585,6 +585,13 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     <input type="file" id="importFile" accept=".json" style="display:none" onchange="onImportFile(this)">
     <p style="font-size:11px;color:var(--gr);text-align:center">Exporta para mandar a otro cel por WhatsApp</p>
   </div>
+  <!-- 🧪 TEST: solo visible para admin — quitar en producción -->
+  <div id="testCard" class="card" style="display:none;border:2px dashed #e74c3c">
+    <div class="ct" style="color:#e74c3c">🧪 Modo Prueba (solo Admin)</div>
+    <button class="btn" style="background:#e74c3c;color:#fff" onclick="testFill()">🧪 Llenar datos ficticios</button>
+    <button class="btn" style="background:#95a5a6;color:#fff" onclick="testClear()">🗑️ Limpiar datos de prueba</button>
+    <p style="font-size:11px;color:#e74c3c;text-align:center">Agrega 4 trabajadores + 2 ausencias con datos ficticios para probar el flujo completo</p>
+  </div>
 </div>
 
 <!-- PAGE 4 — AUSENCIAS -->
@@ -902,6 +909,10 @@ function loginSuccess(user){
     if(!ACTS.length)        ACTS        = FALLBACK_ACTS;
     if(!GRUPAL_ACTS.length) GRUPAL_ACTS = FALLBACK_GRUPAL_ACTS;
   }
+
+  // 🧪 Mostrar/ocultar card de pruebas
+  var testCard = gEl('testCard');
+  if(testCard) testCard.style.display = user.isAdmin ? 'block' : 'none';
 
   updParam();
   toast('✅ Bienvenido, ' + (user.isAdmin ? 'Administrador' : user.name.split(' ')[0]) + '!');
@@ -3593,6 +3604,81 @@ function refreshDataBackground(){
 // Heartbeat autosave
 setInterval(function(){ if(currentUser) saveQuiet(); }, 30000);
 window.addEventListener('pagehide', function(){ if(currentUser) saveQuiet(); });
+
+// ════════════════════════════════════════════════════════════
+// 🧪 TEST FILL — datos ficticios para probar flujo completo
+// Quitar este bloque completo cuando ya no se necesite
+// ════════════════════════════════════════════════════════════
+function testFill(){
+  if(!currentUser || !currentUser.isAdmin){ toast('⚠️ Solo para admin'); return; }
+  if(!gVal('surquero')){ toast('⚠️ Primero selecciona un surquero'); return; }
+
+  // 4 trabajadores ficticios con actividades variadas
+  var testWorkers = [
+    {name:'Test Worker Uno',   acts:[{es:'Deshierbe',en:'Weeding',tipo:'Hora',p:16.23,hr:true}]},
+    {name:'Test Worker Dos',   acts:[{es:'Pizca de Fresa',en:'Strawberry Picking',tipo:'Caja',p:1.50,hr:false}]},
+    {name:'Test Worker Tres',  acts:[{es:'Plantación',en:'Planting',tipo:'Hora',p:16.23,hr:true}]},
+    {name:'Test Worker Cuatro',acts:[{es:'Deshierbe',en:'Weeding',tipo:'Hora',p:16.23,hr:true}]}
+  ];
+
+  for(var ti=0;ti<testWorkers.length;ti++){
+    var tw = testWorkers[ti];
+    // Buscar si la actividad existe en ACTS, si no usar la primera
+    var actIdx = 0;
+    for(var ai=0;ai<ACTS.length;ai++){
+      if(ACTS[ai].es === tw.acts[0].es){ actIdx = ai; break; }
+    }
+    var w = {id:wid++, name:tw.name, open:true, totalPay:0, acts:[]};
+    w.acts.push({
+      ai:actIdx,
+      esName:ACTS[actIdx]?ACTS[actIdx].es:tw.acts[0].es,
+      qty: ACTS[actIdx]&&ACTS[actIdx].hr ? '' : '25',
+      ini:'', fin:'', showTime:false,
+      pay:0, shifts:[], finca:gVal('finca')||''
+    });
+    // Si es tipo hora, agregar shifts con entrada y salida
+    if(ACTS[actIdx] && ACTS[actIdx].hr){
+      w.acts[0].showTime = true;
+      w.acts[0].shifts = [{ini:gVal('hEnt')||'05:30', fin:gVal('hSal')||'14:30'}];
+      var hrs = totalShiftHours(w.acts[0]);
+      w.acts[0].pay = hrs * (ACTS[actIdx].p || 16.23);
+    } else {
+      w.acts[0].pay = 25 * (ACTS[actIdx]?ACTS[actIdx].p:1.50);
+    }
+    w.totalPay = w.acts[0].pay;
+    workers.push(w);
+    var list = gEl('wlist');
+    if(list) list.appendChild(mkCard(w, workers.length-1));
+  }
+
+  // 2 ausencias ficticias
+  ausencias.push({name:'Test Ausente Uno',   empNum:'T001', motivo:'enfermedad'});
+  ausencias.push({name:'Test Ausente Dos',   empNum:'T002', motivo:'cambio'});
+  renderAusencias();
+
+  updParam();
+  buildSum();
+  saveQuiet();
+  toast('🧪 4 trabajadores + 2 ausencias de prueba agregados');
+}
+
+function testClear(){
+  if(!currentUser || !currentUser.isAdmin){ toast('⚠️ Solo para admin'); return; }
+  // Quitar solo los test workers (nombres que empiezan con "Test ")
+  for(var i=workers.length-1;i>=0;i--){
+    if(workers[i].name.indexOf('Test ')=== 0) workers.splice(i,1);
+  }
+  // Quitar ausencias de prueba
+  for(var j=ausencias.length-1;j>=0;j--){
+    if(ausencias[j].name.indexOf('Test ')=== 0) ausencias.splice(j,1);
+  }
+  // Re-render
+  var list=gEl('wlist'); list.innerHTML='';
+  for(var k=0;k<workers.length;k++) list.appendChild(mkCard(workers[k],k));
+  renderAusencias();
+  updParam(); buildSum(); saveQuiet();
+  toast('🗑️ Datos de prueba eliminados');
+}
 </script>
 </body>
 </html>
