@@ -2121,23 +2121,30 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
   var hilPerPerson=hilPuertas&&hp&&hp.length?hilPuertas/hp.length:0;
   function inA(arr,id){ for(var x=0;x<arr.length;x++) if(arr[x]===id) return true; return false; }
 
-  // Build column list — usar esName como fallback si ACTS[ai] no coincide
+  // Build column list
+  // ✅ Fix: para actividades de tipo Hora, columna individual por worker
+  // (cada quien puede tener horario diferente). Para Ficha/Caja/$, columna compartida.
   var actCols=[]; var i,j;
   for(i=0;i<wks.length;i++){
     for(j=0;j<wks[i].acts.length;j++){
       var a_=wks[i].acts[j];
       var ai=a_.ai;
       var actDef=ACTS[ai];
-      // ✅ Fix: si no existe por índice, buscar por esName
       if(!actDef && a_.esName){
         for(var ak_=0;ak_<ACTS.length;ak_++){
           if(ACTS[ak_].es===a_.esName){ actDef=ACTS[ak_]; ai=ak_; a_.ai=ak_; break; }
         }
       }
-      if(!actDef) continue; // actividad no identificable, skip
+      if(!actDef) continue;
+      // Para tipo Hora: clave única por worker para columna propia
+      // Para otros tipos: clave compartida por actividad
+      var colKey = actDef.hr ? (ai+'_w'+wks[i].id) : (''+ai);
       var found=false;
-      for(var k=0;k<actCols.length;k++){ if(actCols[k].ai===ai){found=true;break;} }
-      if(!found) actCols.push({ai:ai, label:actDef.en||actDef.es, tipo:actDef.tipo, hr:actDef.hr});
+      for(var k=0;k<actCols.length;k++){ if(actCols[k].colKey===colKey){found=true;break;} }
+      if(!found) actCols.push({
+        ai:ai, colKey:colKey, wid: actDef.hr ? wks[i].id : null,
+        label:actDef.en||actDef.es, tipo:actDef.tipo, hr:actDef.hr
+      });
     }
   }
   // Adjuntar hora de entrada a cada columna para ordenar cronológicamente
@@ -2146,7 +2153,9 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     for(var wi2=0;wi2<wks.length;wi2++){
       for(var ai2b=0;ai2b<wks[wi2].acts.length;ai2b++){
         var act_=wks[wi2].acts[ai2b];
-        if(act_.ai===actCols[ci].ai){
+        // Para columnas de tipo Hora individuales, solo buscar en el worker dueño
+        var matchW = actCols[ci].wid===null || actCols[ci].wid===wks[wi2].id;
+        if(act_.ai===actCols[ci].ai && matchW){
           var ini_=act_.ini||((act_.shifts&&act_.shifts.length)?act_.shifts[0].ini:'');
           if(ini_&&ini_<firstIni) firstIni=ini_;
         }
@@ -2194,14 +2203,17 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
   if(ep&&ep.length&&estA&&estAn) th+='<th style="text-align:center;min-width:80px">Q. Estaca<br><span style="font-weight:400;font-size:9px;opacity:.8">Puertas c/u</span></th>';
   if(hp&&hp.length&&hilA&&hilAn) th+='<th style="text-align:center;min-width:80px">Q. Hilo<br><span style="font-weight:400;font-size:9px;opacity:.8">Puertas c/u</span></th>';
 
-  // ── Totales por columna ─────────────────────────────────────
+  // ── Totales por columna — usar colKey para columnas individuales ──
   var colTotals={};
-  for(i=0;i<actCols.length;i++) colTotals[actCols[i].ai]=0;
+  for(i=0;i<actCols.length;i++) colTotals[actCols[i].colKey]=0;
   for(i=0;i<wks.length;i++){
     for(j=0;j<actCols.length;j++){
-      var col3=actCols[j]; var found3=null;
+      var col3=actCols[j];
+      // Para columnas hr individuales, solo sumar del worker dueño
+      if(col3.wid!==null && col3.wid!==wks[i].id) continue;
+      var found3=null;
       for(var k3=0;k3<wks[i].acts.length;k3++){ if(wks[i].acts[k3].ai===col3.ai){found3=wks[i].acts[k3];break;} }
-      if(found3){ colTotals[col3.ai]+=col3.hr?(totalShiftHours(found3)||0):(parseFloat(found3.qty)||0); }
+      if(found3){ colTotals[col3.colKey]+=col3.hr?(totalShiftHours(found3)||0):(parseFloat(found3.qty)||0); }
     }
   }
 
@@ -2224,10 +2236,12 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
 
   for(i=0;i<actCols.length;i++){
     var col4=actCols[i];
-    var tot=colTotals[col4.ai]||0;
+    var tot=colTotals[col4.colKey]||0;
     var totLbl=col4.hr?(tot%1===0?tot+' h':tot.toFixed(1)+' h'):tot.toFixed(1);
     var unitPr=''; var entLbl=''; var salLbl=''; var laborLbl='';
     for(var w2=0;w2<wks.length;w2++){
+      // Para columnas hr individuales, solo leer del worker dueño
+      if(col4.wid!==null && col4.wid!==wks[w2].id) continue;
       for(var a2=0;a2<wks[w2].acts.length;a2++){
         if(wks[w2].acts[a2].ai===col4.ai){
           var act2=wks[w2].acts[a2];
@@ -2283,7 +2297,10 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     var w=wks[i];
     var td='<td class="numcol">'+(i+1)+'</td><td class="namecol">'+w.name+'</td>';
     for(j=0;j<actCols.length;j++){
-      var col2=actCols[j]; var found2=null;
+      var col2=actCols[j];
+      // Para columnas hr individuales, celda vacía si no es el worker dueño
+      if(col2.wid!==null && col2.wid!==w.id){ td+='<td></td>'; continue; }
+      var found2=null;
       for(var k2=0;k2<w.acts.length;k2++){ if(w.acts[k2].ai===col2.ai){found2=w.acts[k2];break;} }
       if(found2){
         var cv='';
