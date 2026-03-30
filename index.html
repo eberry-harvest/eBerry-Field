@@ -680,19 +680,24 @@ var DEVICE_ID = (function(){
 var _sessionHeartbeat = null;
 var _pendingSessionUser = null; // user waiting to login after session check
 
-function sessionCall(params, callback){
+function sessionCall(params, callback, _retries){
+  _retries = _retries||0;
   var qs = Object.keys(params).map(function(k){
     return encodeURIComponent(k) + '=' + encodeURIComponent(params[k]);
   }).join('&');
   var xhr = new XMLHttpRequest();
   xhr.open('GET', APPS_SCRIPT_URL + '?action=session&' + qs, true);
+  xhr.timeout = 15000; // 15s timeout (Zeta: evita XHR colgado)
   xhr.onload = function(){
     if(xhr.status === 200){
       try{ callback(null, JSON.parse(xhr.responseText)); }
       catch(e){ callback('parse', null); }
     } else { callback('http', null); }
   };
-  xhr.onerror = function(){ callback('network', null); };
+  xhr.onerror = xhr.ontimeout = function(){
+    if(_retries < 1){ setTimeout(function(){ sessionCall(params, callback, _retries+1); }, 2000); }
+    else { callback('network', null); }
+  };
   xhr.send();
 }
 
@@ -969,14 +974,12 @@ var SHEET_TABS = {
 };
 
 // ── FETCH DATA FROM APPS SCRIPT (no CORS issues) ──
-function fetchFromScript(action, callback){
+function fetchFromScript(action, callback, _retries){
+  _retries = _retries||0;
   var url = APPS_SCRIPT_URL + '?action=' + action;
-  var s = document.createElement('script');
-  var cbName = '_cb_' + action + '_' + Date.now();
-  // Apps Script JSON → wrap with JSONP trick via iframe
-  // Use XHR since Apps Script supports CORS for GET
   var xhr = new XMLHttpRequest();
   xhr.open('GET', url, true);
+  xhr.timeout = 15000; // 15s timeout (Zeta: evita XHR colgado en campo)
   xhr.onload = function(){
     if(xhr.status === 200){
       try{
@@ -987,7 +990,10 @@ function fetchFromScript(action, callback){
       callback('http error ' + xhr.status, null);
     }
   };
-  xhr.onerror = function(){ callback('network error', null); };
+  xhr.onerror = xhr.ontimeout = function(){
+    if(_retries < 2){ setTimeout(function(){ fetchFromScript(action, callback, _retries+1); }, 2000); }
+    else { callback('network error', null); }
+  };
   xhr.send();
 }
 
@@ -1126,6 +1132,22 @@ function getW(id){ var i=wIdx(id); return i>=0?workers[i]:null; }
 function inArr(arr,v){ for(var i=0;i<arr.length;i++){ if(arr[i]===v)return true; } return false; }
 function rmArr(arr,v){ for(var i=0;i<arr.length;i++){ if(arr[i]===v){ arr.splice(i,1); return; } } }
 
+// ── Helper HTML escape (Zeta: previene XSS en nombres/texto) ──
+function esc(s){ if(!s)return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+// ── Helpers de búsqueda por nombre (Zeta: elimina duplicación) ──
+function nameMatch(a,b){ return a.toLowerCase()===b.toLowerCase(); }
+function findInArr(arr,name,key){
+  key=key||'name';
+  for(var i=0;i<arr.length;i++){ if(arr[i][key]&&nameMatch(arr[i][key],name))return arr[i]; }
+  return null;
+}
+function nameInArr(arr,name,key){ return findInArr(arr,name,key)!==null; }
+function findInStrArr(arr,name){
+  for(var i=0;i<arr.length;i++){ if(nameMatch(arr[i],name))return arr[i]; }
+  return null;
+}
+
 function t2m(t){ if(!t||t.indexOf(':')<0)return null; var p=t.split(':'); return parseInt(p[0],10)*60+parseInt(p[1],10); }
 function nh(a,b){
   var e=t2m(a),s=t2m(b); if(e===null||s===null||s<=e)return 0;
@@ -1177,28 +1199,20 @@ function closeAC(){ setTimeout(function(){ gEl('drop').classList.remove('on'); }
 function addFrom(){ var n=gEl('srch').value.trim(); if(!n){toast('⚠️ Escribe un nombre');return;} doAdd(n); }
 
 function doAdd(name){
-  for(var i=0;i<workers.length;i++){ if(workers[i].name.toLowerCase()===name.toLowerCase()){toast('⚠️ Ya está en la lista');return;} }
+  if(nameInArr(workers,name)){toast('⚠️ Ya está en la lista');return;}
 
   // Try to find official name from NAMES (current crew)
-  var officialName = name;
-  for(var k=0;k<NAMES.length;k++){
-    if(NAMES[k].toLowerCase()===name.toLowerCase()){ officialName=NAMES[k]; break; }
-  }
+  var officialName = findInStrArr(NAMES,name) || name;
 
   // Check if in current crew
-  var inCrew = officialName !== name || (function(){
-    for(var k=0;k<NAMES.length;k++){ if(NAMES[k].toLowerCase()===name.toLowerCase()) return true; } return false;
-  })();
+  var inCrew = officialName !== name || !!findInStrArr(NAMES,name);
   if(inCrew){ doAddConfirmed(officialName); return; }
 
   // Check if in another crew (from ALL_WORKERS) — use official name from DB
-  var otherCrew = '';
-  var foundInDB = false;
-  for(var k=0;k<ALL_WORKERS.length;k++){
-    if(ALL_WORKERS[k].name.toLowerCase()===name.toLowerCase()){
-      foundInDB=true; otherCrew=ALL_WORKERS[k].crew; officialName=ALL_WORKERS[k].name; break;
-    }
-  }
+  var dbMatch = findInArr(ALL_WORKERS,name);
+  var foundInDB = !!dbMatch;
+  var otherCrew = dbMatch ? dbMatch.crew : '';
+  if(dbMatch) officialName = dbMatch.name;
 
   pendingUnk = officialName; // always use official name
   if(foundInDB && otherCrew){
@@ -1234,7 +1248,7 @@ function mkCard(w,wi){
   var h=document.createElement('div'); h.className='wh';
   h.innerHTML='<span class="wn">'+numStr(wi+1)+'</span>'+
     '<div class="wsum">'+
-      '<span class="wname">'+w.name+'</span>'+
+      '<span class="wname">'+esc(w.name)+'</span>'+
       '<div class="wpreview" id="wp'+w.id+'"></div>'+
     '</div>'+
     '<span class="wtot" id="wt'+w.id+'"></span>'+
@@ -1650,7 +1664,7 @@ function buildSum(){
       dets.push(act.es.split(' ').slice(0,2).join(' ')+'('+u+')');
     }
     var exD=grpPayDetail(w.id); var ex=exD.pay;
-    h+='<div class="sr"><span class="sn">'+(i+1)+'. '+w.name+'</span><span class="sd">'+(dets.join(' + ')||'—')+(ex>0?' +Grp('+exD.label+')':'')+
+    h+='<div class="sr"><span class="sn">'+(i+1)+'. '+esc(w.name)+'</span><span class="sd">'+(dets.join(' + ')||'—')+(ex>0?' +Grp('+exD.label+')':'')+
       '</span><span class="sp">$'+(w.totalPay||0).toFixed(2)+'</span></div>';
   }
   gEl('sw').innerHTML=h||'<div style="color:var(--gr);font-size:13px;text-align:center;padding:10px">Sin datos</div>';
@@ -2295,7 +2309,7 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
   var rows='';
   for(i=0;i<wks.length;i++){
     var w=wks[i];
-    var td='<td class="numcol">'+(i+1)+'</td><td class="namecol">'+w.name+'</td>';
+    var td='<td class="numcol">'+(i+1)+'</td><td class="namecol">'+esc(w.name)+'</td>';
     for(j=0;j<actCols.length;j++){
       var col2=actCols[j];
       // Para columnas hr individuales, celda vacía si no es el worker dueño
@@ -2366,7 +2380,7 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
       var motLabel = {'cambio':'🔄 Cambio de rancho','enfermedad':'🤒 Enfermedad','injustificada':'❌ Falta injustificada','notrabajo':'🚫 No hubo trabajo','':'Sin motivo'};
       var rows2 = ausencias_.map(function(a,i){
         return '<tr style="'+(i%2?'background:#fafafa':'')+'">'
-          +'<td style="padding:4px 8px;border:1px solid #eee;font-size:10px;font-weight:600">'+a.name+'</td>'
+          +'<td style="padding:4px 8px;border:1px solid #eee;font-size:10px;font-weight:600">'+esc(a.name)+'</td>'
           +'<td style="padding:4px 8px;border:1px solid #eee;font-size:10px;color:var(--gr)">'+( a.empNum?'#'+a.empNum:'')+'</td>'
           +'<td style="padding:4px 8px;border:1px solid #eee;font-size:10px">'+( motLabel[a.motivo]||a.motivo||'<span style="color:#c00">Sin motivo</span>')+'</td>'
           +'</tr>';
@@ -3053,7 +3067,7 @@ function renderGrpPart(gi){
     var w   = workers[i];
     var on  = g.participantes.indexOf(w.id)>=0;
     h += '<div class="pc'+(on?' on':'')+'" onclick="togGrpPart('+gi+','+w.id+')">'
-       + w.name.split(' ')[0]+' '+w.name.split(' ')[1]+'</div>';
+       + esc(w.name.split(' ')[0])+' '+esc(w.name.split(' ')[1])+'</div>';
   }
   el.innerHTML = h||'<span style="color:var(--gr);font-size:12px">Agrega trabajadores primero</span>';
 }
@@ -3180,15 +3194,11 @@ function getAusenciaCandidates(){
   var pool = (NAMES && NAMES.length) ? NAMES : [];
   for(var i=0;i<pool.length;i++){
     var name = pool[i]; if(!name) continue;
-    var isWorker = false;
-    for(var j=0;j<workers.length;j++){ if(workers[j].name.toLowerCase()===name.toLowerCase()){isWorker=true;break;} }
-    if(isWorker) continue;
-    var isAus = false;
-    for(var j=0;j<ausencias.length;j++){ if(ausencias[j].name.toLowerCase()===name.toLowerCase()){isAus=true;break;} }
-    if(isAus) continue;
+    if(nameInArr(workers,name)) continue;
+    if(nameInArr(ausencias,name)) continue;
     // Buscar empNum en ALL_WORKERS
-    var empNum = "";
-    for(var k=0;k<ALL_WORKERS.length;k++){ if(ALL_WORKERS[k].name.toLowerCase()===name.toLowerCase()){empNum=ALL_WORKERS[k].empNum||"";break;} }
+    var dbW = findInArr(ALL_WORKERS,name);
+    var empNum = dbW ? (dbW.empNum||"") : "";
     result.push({name:name, empNum:empNum});
   }
   return result;
@@ -3198,31 +3208,27 @@ function syncAusencias(){
   // 1) Limpiar ausencias que no pertenecen a la cuadrilla actual
   // Solo limpiar si NAMES ya está cargado con datos reales (no vacío)
   if(NAMES && NAMES.length > 1){
-    var namesLow = NAMES.map(function(n){ return n.toLowerCase(); });
     ausencias = ausencias.filter(function(a){
-      return namesLow.indexOf(a.name.toLowerCase()) >= 0;
+      return !!findInStrArr(NAMES,a.name);
     });
   }
   // 2) Quitar los que ya estan trabajando
   ausencias = ausencias.filter(function(a){
-    for(var j=0;j<workers.length;j++){ if(workers[j].name.toLowerCase()===a.name.toLowerCase()) return false; }
-    return true;
+    return !nameInArr(workers,a.name);
   });
   // 3) Auto-agregar faltantes — preservando motivo si ya existía guardado
   // Admin sin surquero seleccionado → no hacer sync (usa showAllEmployeesAsAbsent)
   if(currentUser && currentUser.isAdmin && !gVal('surquero')) return;
   var candidates = getAusenciaCandidates();
   for(var i=0;i<candidates.length;i++){
-    var c2 = candidates[i]; var already = false;
-    for(var j=0;j<ausencias.length;j++){
-      if(ausencias[j].name.toLowerCase()===c2.name.toLowerCase()){
-        already=true;
-        // Preservar empNum si faltaba
-        if(!ausencias[j].empNum && c2.empNum) ausencias[j].empNum = c2.empNum;
-        break;
-      }
+    var c2 = candidates[i];
+    var existing = findInArr(ausencias,c2.name);
+    if(existing){
+      // Preservar empNum si faltaba
+      if(!existing.empNum && c2.empNum) existing.empNum = c2.empNum;
+    } else {
+      ausencias.push({name:c2.name, empNum:c2.empNum, motivo:""});
     }
-    if(!already) ausencias.push({name:c2.name, empNum:c2.empNum, motivo:""});
   }
 }
 
@@ -3244,10 +3250,10 @@ function showAllEmployeesAsAbsent(){
     card.className = 'aus-card';
     card.style.cssText='padding:10px 13px;display:flex;align-items:center;justify-content:space-between';
     card.innerHTML = '<div>'
-      +'<span class="aus-name" style="font-size:13px">\U0001f464 '+w.name+'</span>'
-      +(w.empNum ? '<span class="aus-empnum">#'+w.empNum+'</span>' : '')
+      +'<span class="aus-name" style="font-size:13px">\U0001f464 '+esc(w.name)+'</span>'
+      +(w.empNum ? '<span class="aus-empnum">#'+esc(w.empNum)+'</span>' : '')
       +'</div>'
-      +(w.crew ? '<span style="font-size:10px;color:var(--gr);background:var(--gp);border-radius:5px;padding:2px 7px">'+w.crew+'</span>' : '');
+      +(w.crew ? '<span style="font-size:10px;color:var(--gr);background:var(--gp);border-radius:5px;padding:2px 7px">'+esc(w.crew)+'</span>' : '');
     list.appendChild(card);
   }
 }
@@ -3286,11 +3292,9 @@ function addAusenciaFromBar(){
 }
 
 function addAusenciaConfirmed(name, empNum){
-  for(var i=0;i<ausencias.length;i++){
-    if(ausencias[i].name.toLowerCase()===name.toLowerCase()){ toast("⚠️ Ya está en ausencias"); return; }
-  }
+  if(nameInArr(ausencias,name)){ toast("⚠️ Ya está en ausencias"); return; }
   var num = empNum||"";
-  if(!num){ for(var k=0;k<ALL_WORKERS.length;k++){ if(ALL_WORKERS[k].name.toLowerCase()===name.toLowerCase()){num=ALL_WORKERS[k].empNum||"";break;} } }
+  if(!num){ var dbW=findInArr(ALL_WORKERS,name); if(dbW) num=dbW.empNum||""; }
   ausencias.push({name:name, empNum:num, motivo:""});
   renderAusencias(); autoSave();
 }
@@ -3342,8 +3346,8 @@ function renderAusencias(){
         +"</div>";
     }
     card.innerHTML = "<div class=\"aus-header\" onclick=\"toggleAusCard(this)\">"
-      +"<span class=\"aus-name\">👤 "+a.name+"</span>"
-      +(a.empNum ? "<span class=\"aus-empnum\">#"+a.empNum+"</span>" : "")
+      +"<span class=\"aus-name\">👤 "+esc(a.name)+"</span>"
+      +(a.empNum ? "<span class=\"aus-empnum\">#"+esc(a.empNum)+"</span>" : "")
       +chipHtml
       +"<span class=\"aus-arrow\">▼</span>"
       +"</div>"
