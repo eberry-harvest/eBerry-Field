@@ -635,7 +635,15 @@ var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwjC6Gjcb3_VRmjnV
 var currentUser = null; // {name, pin, crew, isAdmin}
 
 // ── CONFIG (loaded from Sheets CONFIG tab) ──
-var ADMIN_PIN = '2026'; // default — Sheets lo sobreescribe si es diferente
+var ADMIN_PIN_HASH = '158a323a7ba44870f23d96f1516dd70aa48e9a72db4ebb026b0a89e212a208ab'; // SHA-256 de PIN default — Sheets lo sobreescribe
+
+// ── Hash PIN usando Web Crypto (SHA-256) — retorna Promise ──
+function hashPin(pin){
+  return crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(pin)))
+    .then(function(buf){
+      return Array.from(new Uint8Array(buf)).map(function(b){return ('0'+b.toString(16)).slice(-2)}).join('');
+    });
+}
 
 // ── DATA (loaded from Sheets) ──
 var NAMES = []; // workers for current crew
@@ -767,26 +775,29 @@ function checkPin(){
   pinBuffer = '';
   updPinDots();
 
-  // Admin PIN — no session check needed
-  if(pin === ADMIN_PIN){
-    loginSuccess({name:'Administrador', pin:ADMIN_PIN, crew:'ALL', isAdmin:true});
-    return;
-  }
+  // Hash el PIN ingresado y comparar con admin hash
+  hashPin(pin).then(function(hashed){
 
-  // Check against lideres list
-  var matchedUser = null;
-  for(var i=0;i<LIDERES.length;i++){
-    if(LIDERES[i].pin === pin){
-      matchedUser = {name:LIDERES[i].name, pin:pin, crew:LIDERES[i].crew, isAdmin:false, empNum:LIDERES[i].empNum};
-      break;
+    // Admin PIN — no session check needed
+    if(hashed === ADMIN_PIN_HASH){
+      loginSuccess({name:'Administrador', pin:pin, crew:'ALL', isAdmin:true});
+      return;
     }
-  }
 
-  if(!matchedUser){
-    gEl('loginErr').textContent = '❌ PIN incorrecto, intenta de nuevo';
-    setTimeout(function(){ gEl('loginErr').textContent=''; }, 2000);
-    return;
-  }
+    // Check against lideres list (PINs siguen en texto plano desde Sheets)
+    var matchedUser = null;
+    for(var i=0;i<LIDERES.length;i++){
+      if(LIDERES[i].pin === pin){
+        matchedUser = {name:LIDERES[i].name, pin:pin, crew:LIDERES[i].crew, isAdmin:false, empNum:LIDERES[i].empNum};
+        break;
+      }
+    }
+
+    if(!matchedUser){
+      gEl('loginErr').textContent = '❌ PIN incorrecto, intenta de nuevo';
+      setTimeout(function(){ gEl('loginErr').textContent=''; }, 2000);
+      return;
+    }
 
   // ── Check for duplicate session ──
   gEl('loginErr').textContent = '🔍 Verificando sesión...';
@@ -818,23 +829,27 @@ function checkPin(){
       proceedLogin(_pendingSessionUser);
     }
   });
+
+  }); // cierre hashPin().then()
 }
 
 function forceSessionTakeover(){
-  var adminPin = gEl('dupAdminPin').value.trim();
-  if(adminPin.length < 4){
+  var enteredPin = gEl('dupAdminPin').value.trim();
+  if(enteredPin.length < 4){
     gEl('dupAdminErr').textContent = '❌ Ingresa el PIN de 4 dígitos del Admin';
     return;
   }
-  if(adminPin !== ADMIN_PIN){
-    gEl('dupAdminErr').textContent = '❌ PIN incorrecto';
-    gEl('dupAdminPin').value = '';
-    return;
-  }
-  // Force close old session via server
-  var user = _pendingSessionUser;
-  gEl('dupAdminErr').textContent = '🔄 Cerrando sesión anterior...';
-  sessionCall({cmd:'force', surquero:user.name, adminPin:ADMIN_PIN}, function(err, data){
+  // Hashear el PIN ingresado y comparar con el hash guardado
+  hashPin(enteredPin).then(function(hashed){
+    if(hashed !== ADMIN_PIN_HASH){
+      gEl('dupAdminErr').textContent = '❌ PIN incorrecto';
+      gEl('dupAdminPin').value = '';
+      return;
+    }
+    // Force close old session via server (envía PIN plano al server que lo valida contra CONFIG)
+    var user = _pendingSessionUser;
+    gEl('dupAdminErr').textContent = '🔄 Cerrando sesión anterior...';
+    sessionCall({cmd:'force', surquero:user.name, adminPin:enteredPin}, function(err, data){
     if(!err && data && data.success){
       gEl('dupSessOv').classList.remove('on');
       toast('✅ Sesión anterior cerrada por Admin');
@@ -843,6 +858,7 @@ function forceSessionTakeover(){
       gEl('dupAdminErr').textContent = '❌ Error al cerrar sesión: ' + (data&&data.error||'sin conexión');
     }
   });
+  }); // cierre hashPin().then()
 }
 
 function cancelDupSession(){
@@ -1044,7 +1060,7 @@ function loadSheetsData(){
       var ok  = data.success || data['éxito'] || data.exito;
       var cfg = data.config  || data['configuración'] || data.configuracion || {};
       if(ok && cfg && cfg.admin_pin){
-        ADMIN_PIN = String(cfg.admin_pin).trim();
+        hashPin(String(cfg.admin_pin).trim()).then(function(h){ ADMIN_PIN_HASH = h; });
       }
     }
     
@@ -1909,6 +1925,8 @@ function applyAutoFill(){
     var rEl = gEl('rancho'); if(rEl) rEl.value = crewBase;
   } else {
     // Admin — ocultar display, mostrar select con surqueros
+    // ✅ Lambda fix: preservar surquero seleccionado al reconstruir dropdown
+    var curSurq = inp ? inp.value : '';
     if(disp) disp.style.display='none';
     if(adminSel){
       adminSel.style.display='block';
@@ -1916,10 +1934,12 @@ function applyAutoFill(){
       for(var li=0;li<LIDERES.length;li++){
         var opt=document.createElement('option');
         opt.value=LIDERES[li].name; opt.textContent=LIDERES[li].name;
+        if(LIDERES[li].name === curSurq) opt.selected = true;
         adminSel.appendChild(opt);
       }
     }
-    if(inp) inp.value='';
+    // Solo limpiar si no hay surquero seleccionado previamente
+    if(inp && !curSurq) inp.value='';
   }
 
   // Auto-fill fecha con hoy si está vacía
@@ -2729,8 +2749,17 @@ function getWeekNumber(dateStr){
 }
 
 function sendToSheets() {
-  if (!workers.length) { toast('⚠️ No hay trabajadores'); return; }
+  if (!workers.length && !ausencias.length) { toast('⚠️ No hay trabajadores ni ausencias'); return; }
   if (!gVal('fecha'))  { toast('⚠️ Ingresa la fecha primero'); return; }
+
+  // Mapeo motivo → etiquetas ES/EN para ausencias
+  var _motLabels = {
+    'cambio':        {es:'AUSENCIA - Cambio de rancho',   en:'ABSENCE - Ranch change'},
+    'enfermedad':    {es:'AUSENCIA - Enfermedad',          en:'ABSENCE - Illness'},
+    'injustificada': {es:'AUSENCIA - Falta injustificada', en:'ABSENCE - Unexcused'},
+    'notrabajo':     {es:'AUSENCIA - No hubo trabajo',     en:'ABSENCE - No work available'},
+    '':              {es:'AUSENCIA - Sin motivo',           en:'ABSENCE - No reason given'}
+  };
 
   var payload = {
     fecha:    gVal('fecha'),
@@ -2742,6 +2771,7 @@ function sendToSheets() {
     workers:  []
   };
 
+  // ── Trabajadores con actividades (igual que antes) ──
   for (var i = 0; i < workers.length; i++) {
     var w = workers[i];
     var wOut = { name: w.name, acts: [] };
@@ -2757,10 +2787,30 @@ function sendToSheets() {
         unitPrice:  act.p,
         qty:        act.tipo === 'Hora' ? '' : (a.qty || ''),
         totalHours: act.tipo === 'Hora' ? totalH : '',
-        finca:      a.finca || gVal('finca') // labor por actividad o la del día
+        finca:      a.finca || gVal('finca')
       });
     }
     payload.workers.push(wOut);
+  }
+
+  // ── Ausencias como "workers" con actividad tipo Ausencia ──
+  var ausSent = 0;
+  for (var ai = 0; ai < ausencias.length; ai++) {
+    var aus = ausencias[ai];
+    var mot = aus.motivo || '';
+    var lbl = _motLabels[mot] || _motLabels[''];
+    payload.workers.push({
+      name: aus.name,
+      acts: [{
+        actEs:      lbl.es,
+        actEn:      lbl.en,
+        tipo:       'Ausencia',
+        unitPrice:  0,
+        qty:        '',
+        totalHours: ''
+      }]
+    });
+    ausSent++;
   }
 
   var btn = gEl('sheetsSendBtn');
@@ -2793,7 +2843,10 @@ function sendToSheets() {
     document.body.appendChild(fm);
 
     fr.onload = function() {
-      toast('✅ ' + workers.length + ' trabajadores enviados a Payroll Field Master');
+      var msg = '✅ ' + workers.length + ' trabajador(es)';
+      if (ausSent) msg += ' + ' + ausSent + ' ausencia(s)';
+      msg += ' enviados a Payroll';
+      toast(msg);
       if (btn) {
         btn.textContent = '✅ Enviado';
         btn.style.background = '#2d7a2d';
