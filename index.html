@@ -2175,7 +2175,7 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     var puertas_=metros_/100;
     var np_=g_.participantes.length; if(!np_||!puertas_) continue;
     var ppx_=puertas_/np_;
-    var col_={label:gact_.es, puertasXPersona:{}, totalPuertas:puertas_, np:np_, precio:gact_.p};
+    var col_={label:gact_.es, puertasXPersona:{}, totalPuertas:puertas_, np:np_, precio:gact_.p, finca:g_.vars.finca||'', ini:g_.vars.ini||'', fin:g_.vars.fin||''};
     for(var pi_=0;pi_<g_.participantes.length;pi_++) col_.puertasXPersona[g_.participantes[pi_]]=ppx_;
     grpPuertasCols.push(col_);
   }
@@ -2265,9 +2265,9 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     var gc_=grpPuertasCols[gi4_];
     trTotal+='<td style="text-align:center;background:#e8f4fd;font-weight:700">'+gc_.totalPuertas.toFixed(2)+'</td>';
     trPrice+='<td style="text-align:center;background:#e8f4fd;color:#c0392b;font-weight:700">$'+gc_.precio.toFixed(2)+'</td>';
-    trLabor+='<td style="background:#e8f4fd"></td>';
-    trEntry+='<td style="background:#e8f4fd"></td>';
-    trExit +='<td style="background:#e8f4fd"></td>';
+    trLabor+='<td style="background:#e8f4fd;text-align:center;border:1px solid #ddd;color:#3a7fd4;font-size:9px">'+gc_.finca+'</td>';
+    trEntry+='<td style="text-align:center;background:#e8f4fd;border:1px solid #ddd">'+gc_.ini+'</td>';
+    trExit +='<td style="text-align:center;background:#e8f4fd;border:1px solid #ddd">'+gc_.fin+'</td>';
   }
   trTotal+='</tr>'; trPrice+='</tr>'; trLabor+='</tr>'; trEntry+='</tr>'; trExit+='</tr>';
   var metaRows=trTotal+trPrice+trLabor+trEntry+trExit;
@@ -2297,13 +2297,16 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     if(hp&&hp.length&&hilA&&hilAn) td+='<td style="text-align:center">'+(inA(hp,w.id)?hilPerPerson.toFixed(1):'')+'</td>';
     rows+='<tr'+(i%2===1?' style="background:#f9f9f9"':'')+'>'+td+'</tr>';
   }
-  for(i=0;i<3;i++){
-    var etd='<td class="numcol" style="color:#ddd">'+(wks.length+i+1)+'</td><td></td>';
-    for(j=0;j<actCols.length;j++) etd+='<td></td>';
-    if(cp&&cp.length&&cajasT) etd+='<td></td>';
-    if(ep&&ep.length&&estA&&estAn) etd+='<td></td>';
-    if(hp&&hp.length&&hilA&&hilAn) etd+='<td></td>';
-    rows+='<tr style="height:20px">'+etd+'</tr>';
+  // Filas vacías para completar la tabla — suficientes para llenar la página
+  var totalCols = 2 + actCols.length + grpPuertasCols.length
+    + (cp&&cp.length&&cajasT?1:0)
+    + (ep&&ep.length&&estA&&estAn?1:0)
+    + (hp&&hp.length&&hilA&&hilAn?1:0);
+  var emptyCount = Math.max(5, 30 - wks.length); // mínimo 5, hasta completar ~30 filas
+  for(i=0;i<emptyCount;i++){
+    var etd='<td class="numcol" style="color:#ddd;border:1px solid #ddd">'+(wks.length+i+1)+'</td>';
+    for(j=0;j<totalCols-1;j++) etd+='<td style="border:1px solid #ddd"></td>';
+    rows+='<tr style="height:22px">'+etd+'</tr>';
   }
 
   var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Payroll '+vals.rancho+' '+vals.fecha+'</title>'
@@ -2858,10 +2861,26 @@ function renderGrpActs(){
         +'<div id="gaPuertas'+gi+'" style="background:var(--dk);border-radius:7px;padding:9px 12px;margin-bottom:8px;display:'+(metrosTotal>0?'flex':'none')+';justify-content:space-between;align-items:center">'
         +'<span style="font-size:12px;font-weight:600;color:rgba(255,255,255,.7)">🚪 Puertas totales (÷100)</span>'
         +'<b style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:var(--a)" id="gaPuertasVal'+gi+'">'+puertasTot.toFixed(2)+'</b></div>'
+        // Horario de la actividad grupal
+        +'<div class="r2" style="margin-bottom:8px">'
+        +'<div><label style="font-size:10px">🟢 Entrada</label>'
+        +'<input type="time" step="1800" value="'+(g.vars.ini||'')+'"'
+        +' data-gi="'+gi+'" data-v="ini" onchange="setGrpVar(this)"'
+        +' style="font-size:14px;padding:9px 10px;width:100%"></div>'
+        +'<div><label style="font-size:10px">🏁 Salida</label>'
+        +'<input type="time" step="1800" value="'+(g.vars.fin||'')+'"'
+        +' data-gi="'+gi+'" data-v="fin" onchange="setGrpVar(this)"'
+        +' style="font-size:14px;padding:9px 10px;width:100%"></div>'
+        +'</div>'
         // Ancho de cama
         +'<div style="margin-bottom:6px"><label style="font-size:10px">🌱 Ancho de cama (para calcular acres)</label>'
         +'<input type="text" inputmode="decimal" value="'+anchoCama+'" placeholder="ej: 5.5"'
         +' data-gi="'+gi+'" data-v="anchoCama" oninput="setGrpVar(this)"'
+        +' style="font-size:14px;padding:9px 10px;width:100%"></div>'
+        // Labor / Finca de esta actividad grupal
+        +'<div style="margin-bottom:6px"><label style="font-size:10px">📍 Labor / Finca (aparece en el PDF)</label>'
+        +'<input type="text" value="'+(g.vars.finca||'')+'" placeholder="ej: El Columpio, Block 3..."'
+        +' data-gi="'+gi+'" data-v="finca" oninput="setGrpVar(this)"'
         +' style="font-size:14px;padding:9px 10px;width:100%"></div>'
         // Acres — siempre presente con ID
         +'<div id="gaAcres'+gi+'" style="background:var(--bp);border-radius:7px;padding:9px 12px;margin-bottom:8px;display:'+(metrosTotal>0&&anchoCama&&parseFloat(anchoCama)>0?'flex':'none')+';justify-content:space-between;align-items:center">'
