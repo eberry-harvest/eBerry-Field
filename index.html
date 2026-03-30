@@ -1369,7 +1369,7 @@ function onFin(wi,ai,v){ var w=getW(wi); if(!w||!w.acts[ai])return; w.acts[ai].f
 function recalc(wi,ai){
   var w=getW(wi); if(!w||!w.acts[ai])return;
   var a=w.acts[ai]; var act=ACTS[a.ai]; var pay=0;
-  if(act.hr){ pay=totalShiftHours(a)*getPH(); }
+  if(act.hr){ pay=totalShiftHours(a)*act.p; }
   else if(act.tipo==='$'){ pay=parseFloat(a.qty)||0; }
   else { pay=(parseFloat(a.qty)||0)*act.p; }
   a.pay=pay;
@@ -1398,7 +1398,7 @@ function updBadge(wi,ai){
       } else {
         shiftStr=(a.ini&&a.fin?a.ini+' → '+a.fin:'');
       }
-      bd.innerHTML='<span>⏱️ '+shiftStr+'</span><b>'+totalH+' H × $'+getPH().toFixed(2)+'</b>';
+      bd.innerHTML='<span>⏱️ '+shiftStr+'</span><b>'+totalH+' H × $'+act.p.toFixed(2)+'</b>';
       bd.style.display='flex';
     } else bd.style.display='none';
   } else {
@@ -1795,7 +1795,7 @@ function load(){
         if(!act && a.ai>=0 && a.ai<ACTS.length){ act=ACTS[a.ai]; a.esName=act.es; }
         if(!act){ a.pay=0; continue; }
         a.esName=act.es;
-        if(act.hr){ a.pay=totalShiftHours(a)*getPH(); }
+        if(act.hr){ a.pay=totalShiftHours(a)*act.p; }
         else if(act.tipo==='$'){ a.pay=parseFloat(a.qty)||0; }
         else{ a.pay=(parseFloat(a.qty)||0)*act.p; }
       }
@@ -2075,7 +2075,7 @@ function loadDay(key){
       for(var j=0;j<workers[i].acts.length;j++){
         var a=workers[i].acts[j]; var act=ACTS[a.ai];
         if(!act)continue;
-        if(act.hr){ a.pay=totalShiftHours(a)*getPH(); }
+        if(act.hr){ a.pay=totalShiftHours(a)*act.p; }
         else if(act.tipo==='$'){ a.pay=parseFloat(a.qty)||0; }
         else{ a.pay=(parseFloat(a.qty)||0)*act.p; }
       }
