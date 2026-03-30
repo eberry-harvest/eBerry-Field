@@ -482,46 +482,46 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
   <div class="card">
     <div class="ct">📋 Operación</div>
     <label>Rancho</label>
-    <input type="text" id="rancho" placeholder="Ej: Pennrose">
+    <input type="text" id="rancho" data-save placeholder="Ej: Pennrose">
     <div class="r2">
-      <div><label>Fecha</label><input type="date" id="fecha" onchange="updDate()"></div>
-      <div><label># Bus</label><input type="text" id="numBus" placeholder="951"></div>
+      <div><label>Fecha</label><input type="date" id="fecha" data-save onchange="updDate()"></div>
+      <div><label># Bus</label><input type="text" id="numBus" data-save placeholder="951"></div>
     </div>
     <div class="r2">
-      <div><label># Camioneta</label><input type="text" id="numCam" placeholder="Opt."></div>
+      <div><label># Camioneta</label><input type="text" id="numCam" data-save placeholder="Opt."></div>
       <div><label>Surquero</label>
         <div id="surqueroDisplay" style="padding:11px 12px;border:1.5px solid var(--bd);border-radius:8px;font-size:15px;background:#f0f0f0;color:var(--dk);font-weight:600">—</div>
         <select id="surqueroAdminSel" style="display:none" onchange="onAdminSurqueroChange(this.value)">
           <option value="">— Selecciona un surquero —</option>
         </select>
-        <input type="hidden" id="surquero" value="">
+        <input type="hidden" id="surquero" data-save value="">
       </div>
     </div>
-    <label>Finca / Labor</label><input type="text" id="finca" placeholder="Ej: Block 5 Norte">
+    <label>Finca / Labor</label><input type="text" id="finca" data-save placeholder="Ej: Block 5 Norte">
   </div>
   <div class="card">
     <div class="ct">⏰ Horario Base del Grupo</div>
     <p style="font-size:12px;color:var(--gr);margin-bottom:9px">Cada actividad puede tener su propio horario.</p>
     <div class="r2">
-      <div><label>Entrada</label><input type="time" id="hEnt" step="1800" onchange="updParam()"></div>
-      <div><label>Salida</label><input type="time" id="hSal" step="1800" onchange="updParam()"></div>
+      <div><label>Entrada</label><input type="time" id="hEnt" data-save step="1800" onchange="updParam()"></div>
+      <div><label>Salida</label><input type="time" id="hSal" data-save step="1800" onchange="updParam()"></div>
     </div>
     <div class="r2">
-      <div><label>Inicio Lonche</label><input type="time" id="lIni" step="1800" onchange="updParam()"></div>
-      <div><label>Fin Lonche</label><input type="time" id="lFin" step="1800" onchange="updParam()"></div>
+      <div><label>Inicio Lonche</label><input type="time" id="lIni" data-save step="1800" onchange="updParam()"></div>
+      <div><label>Fin Lonche</label><input type="time" id="lFin" data-save step="1800" onchange="updParam()"></div>
     </div>
     <div id="hpill"></div>
   </div>
   <div class="card">
     <div class="ct">📝 Notas</div>
     <label>Notas del día</label>
-    <textarea id="notas" rows="2" placeholder="Observaciones..."></textarea>
+    <textarea id="notas" data-save rows="2" placeholder="Observaciones..."></textarea>
     <div style="margin-top:12px">
       <button onclick="openNewDay()" style="width:100%;padding:12px;border:2px solid #3a7fd4;border-radius:8px;background:#eef4fd;color:#3a7fd4;font-family:DM Sans,sans-serif;font-size:14px;font-weight:700;cursor:pointer">🌅 Iniciar Nuevo Día</button>
     </div>
   </div>
-  <input type="hidden" id="payH" value="16.23">
-  <input type="hidden" id="payMin" value="16.23">
+  <input type="hidden" id="payH" data-save value="16.23">
+  <input type="hidden" id="payMin" data-save value="16.23">
 </div>
 
 <!-- PAGE 1 -->
@@ -549,12 +549,12 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     ＋ Agregar actividad grupal
   </button>
   <!-- Hidden compatibility inputs -->
-  <input type="hidden" id="cajasTotal" value=""><input type="hidden" id="cajasPrecio" value="0.80">
-  <input type="hidden" id="cajasIni" value=""><input type="hidden" id="cajasFin" value="">
-  <input type="hidden" id="estAcres" value=""><input type="hidden" id="estAncho" value="">
-  <input type="hidden" id="estIni" value=""><input type="hidden" id="estFin" value="">
-  <input type="hidden" id="hilAcres" value=""><input type="hidden" id="hilAncho" value="">
-  <input type="hidden" id="hilIni" value=""><input type="hidden" id="hilFin" value="">
+  <input type="hidden" id="cajasTotal" data-save value=""><input type="hidden" id="cajasPrecio" data-save value="0.80">
+  <input type="hidden" id="cajasIni" data-save value=""><input type="hidden" id="cajasFin" data-save value="">
+  <input type="hidden" id="estAcres" data-save value=""><input type="hidden" id="estAncho" data-save value="">
+  <input type="hidden" id="estIni" data-save value=""><input type="hidden" id="estFin" data-save value="">
+  <input type="hidden" id="hilAcres" data-save value=""><input type="hidden" id="hilAncho" data-save value="">
+  <input type="hidden" id="hilIni" data-save value=""><input type="hidden" id="hilFin" data-save value="">
   <div style="display:none">
     <div id="cajasPl"></div><div id="estPl"></div><div id="hilPl"></div>
     <div id="cajasR"></div><div id="estR"></div><div id="hilR"></div>
@@ -635,7 +635,15 @@ var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwjC6Gjcb3_VRmjnV
 var currentUser = null; // {name, pin, crew, isAdmin}
 
 // ── CONFIG (loaded from Sheets CONFIG tab) ──
-var ADMIN_PIN = '2026'; // default — Sheets lo sobreescribe si es diferente
+var ADMIN_PIN_HASH = '158a323a7ba44870f23d96f1516dd70aa48e9a72db4ebb026b0a89e212a208ab'; // SHA-256 de PIN default — Sheets lo sobreescribe
+
+// ── Hash PIN usando Web Crypto (SHA-256) — retorna Promise ──
+function hashPin(pin){
+  return crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(pin)))
+    .then(function(buf){
+      return Array.from(new Uint8Array(buf)).map(function(b){return ('0'+b.toString(16)).slice(-2)}).join('');
+    });
+}
 
 // ── DATA (loaded from Sheets) ──
 var NAMES = []; // workers for current crew
@@ -767,26 +775,29 @@ function checkPin(){
   pinBuffer = '';
   updPinDots();
 
-  // Admin PIN — no session check needed
-  if(pin === ADMIN_PIN){
-    loginSuccess({name:'Administrador', pin:ADMIN_PIN, crew:'ALL', isAdmin:true});
-    return;
-  }
+  // Hash el PIN ingresado y comparar con admin hash
+  hashPin(pin).then(function(hashed){
 
-  // Check against lideres list
-  var matchedUser = null;
-  for(var i=0;i<LIDERES.length;i++){
-    if(LIDERES[i].pin === pin){
-      matchedUser = {name:LIDERES[i].name, pin:pin, crew:LIDERES[i].crew, isAdmin:false, empNum:LIDERES[i].empNum};
-      break;
+    // Admin PIN — no session check needed
+    if(hashed === ADMIN_PIN_HASH){
+      loginSuccess({name:'Administrador', pin:pin, crew:'ALL', isAdmin:true});
+      return;
     }
-  }
 
-  if(!matchedUser){
-    gEl('loginErr').textContent = '❌ PIN incorrecto, intenta de nuevo';
-    setTimeout(function(){ gEl('loginErr').textContent=''; }, 2000);
-    return;
-  }
+    // Check against lideres list (PINs siguen en texto plano desde Sheets)
+    var matchedUser = null;
+    for(var i=0;i<LIDERES.length;i++){
+      if(LIDERES[i].pin === pin){
+        matchedUser = {name:LIDERES[i].name, pin:pin, crew:LIDERES[i].crew, isAdmin:false, empNum:LIDERES[i].empNum};
+        break;
+      }
+    }
+
+    if(!matchedUser){
+      gEl('loginErr').textContent = '❌ PIN incorrecto, intenta de nuevo';
+      setTimeout(function(){ gEl('loginErr').textContent=''; }, 2000);
+      return;
+    }
 
   // ── Check for duplicate session ──
   gEl('loginErr').textContent = '🔍 Verificando sesión...';
@@ -818,23 +829,27 @@ function checkPin(){
       proceedLogin(_pendingSessionUser);
     }
   });
+
+  }); // cierre hashPin().then()
 }
 
 function forceSessionTakeover(){
-  var adminPin = gEl('dupAdminPin').value.trim();
-  if(adminPin.length < 4){
+  var enteredPin = gEl('dupAdminPin').value.trim();
+  if(enteredPin.length < 4){
     gEl('dupAdminErr').textContent = '❌ Ingresa el PIN de 4 dígitos del Admin';
     return;
   }
-  if(adminPin !== ADMIN_PIN){
-    gEl('dupAdminErr').textContent = '❌ PIN incorrecto';
-    gEl('dupAdminPin').value = '';
-    return;
-  }
-  // Force close old session via server
-  var user = _pendingSessionUser;
-  gEl('dupAdminErr').textContent = '🔄 Cerrando sesión anterior...';
-  sessionCall({cmd:'force', surquero:user.name, adminPin:ADMIN_PIN}, function(err, data){
+  // Hashear el PIN ingresado y comparar con el hash guardado
+  hashPin(enteredPin).then(function(hashed){
+    if(hashed !== ADMIN_PIN_HASH){
+      gEl('dupAdminErr').textContent = '❌ PIN incorrecto';
+      gEl('dupAdminPin').value = '';
+      return;
+    }
+    // Force close old session via server (envía PIN plano al server que lo valida contra CONFIG)
+    var user = _pendingSessionUser;
+    gEl('dupAdminErr').textContent = '🔄 Cerrando sesión anterior...';
+    sessionCall({cmd:'force', surquero:user.name, adminPin:enteredPin}, function(err, data){
     if(!err && data && data.success){
       gEl('dupSessOv').classList.remove('on');
       toast('✅ Sesión anterior cerrada por Admin');
@@ -843,6 +858,7 @@ function forceSessionTakeover(){
       gEl('dupAdminErr').textContent = '❌ Error al cerrar sesión: ' + (data&&data.error||'sin conexión');
     }
   });
+  }); // cierre hashPin().then()
 }
 
 function cancelDupSession(){
@@ -1044,7 +1060,7 @@ function loadSheetsData(){
       var ok  = data.success || data['éxito'] || data.exito;
       var cfg = data.config  || data['configuración'] || data.configuracion || {};
       if(ok && cfg && cfg.admin_pin){
-        ADMIN_PIN = String(cfg.admin_pin).trim();
+        hashPin(String(cfg.admin_pin).trim()).then(function(h){ ADMIN_PIN_HASH = h; });
       }
     }
     
@@ -1122,7 +1138,42 @@ function showLogin(){
   gEl('loginScreen').classList.remove('hide');
 }
 
-var pg=0, workers=[], wid=0, estP=[], hilP=[], cajasP=[], grpActs=[], ptm=null, pcp=null, pendingUnk=null, _delPending=null;
+// ── APP STATE (Iota: variables globales organizadas) ──
+// Navegación
+var pg = 0;                  // página activa (0=Config, 1=Workers, 2=Grupal, 3=Ausencias, 4=Resumen)
+// Workers y actividades
+var workers = [];            // [{id, name, open, acts[], totalPay}]
+var wid = 0;                 // siguiente ID de worker
+var grpActs = [];            // actividades grupales [{gai, participantes[], vars{}}]
+// Participantes legacy (est/hil/cajas estáticas)
+var estP = [], hilP = [], cajasP = [];
+// Ausencias
+var ausencias = [];          // [{name, empNum, motivo}]
+// UI temporales (modales/confirmaciones)
+var ptm = null;              // pending time modal
+var pcp = null;              // pending copy pattern
+var pendingUnk = null;       // pending unknown worker confirm
+var _delPending = null;      // pending delete confirm
+
+// Iota: reset limpio de todo el estado (útil para Nuevo Día)
+function resetState(){
+  pg=0; workers=[]; wid=0; grpActs=[];
+  estP=[]; hilP=[]; cajasP=[];
+  ausencias=[];
+  ptm=null; pcp=null; pendingUnk=null; _delPending=null;
+}
+
+// Iota: ver estado completo en consola (debug en tablet)
+function debugState(){
+  return {
+    pg:pg, workers:workers, wid:wid, grpActs:grpActs,
+    estP:estP, hilP:hilP, cajasP:cajasP,
+    ausencias:ausencias,
+    ptm:ptm, pcp:pcp, pendingUnk:pendingUnk, _delPending:_delPending,
+    user: currentUser,
+    fecha: gVal('fecha'), surquero: gVal('surquero'), finca: gVal('finca')
+  };
+}
 
 function numStr(n){ var s=''+n; return s.length<2?'0'+s:s; }
 function gEl(id){ return document.getElementById(id); }
@@ -1377,8 +1428,8 @@ function mkActRow(wid_,ai){
 }
 
 function onQty(wi,ai,v){ var w=getW(wi); if(!w||!w.acts[ai])return; w.acts[ai].qty=v; recalc(wi,ai); autoSave(); }
-function onIni(wi,ai,v){ var w=getW(wi); if(!w||!w.acts[ai])return; w.acts[ai].ini=v; w.acts[ai].showTime=true; recalc(wi,ai); updBadge(wi,ai); autoSave(); }
-function onFin(wi,ai,v){ var w=getW(wi); if(!w||!w.acts[ai])return; w.acts[ai].fin=v; w.acts[ai].showTime=true; recalc(wi,ai); updBadge(wi,ai); autoSave(); }
+function onIni(wi,ai,v){ var w=getW(wi); if(!w||!w.acts[ai])return; w.acts[ai].ini=v; w.acts[ai].showTime=true; recalc(wi,ai); autoSave(); }
+function onFin(wi,ai,v){ var w=getW(wi); if(!w||!w.acts[ai])return; w.acts[ai].fin=v; w.acts[ai].showTime=true; recalc(wi,ai); autoSave(); }
 
 function recalc(wi,ai){
   var w=getW(wi); if(!w||!w.acts[ai])return;
@@ -1392,6 +1443,8 @@ function recalc(wi,ai){
   var row=gEl('ar'+wi+'_'+ai);
   if(row) row.className='ar'+(pay>0?(act.hr?' cb':' ca'):'');
   updTot(wi);
+  // Zeta: actualizar badge automáticamente si hay horario involucrado
+  if(act.hr || a.ini || a.fin) updBadge(wi,ai);
 }
 
 function updBadge(wi,ai){
@@ -1547,7 +1600,7 @@ function okTime(){
     var tf=gEl('tf'+wi+'_'+ai); if(tf)tf.classList.add('on');
     var act2=ACTS[w.acts[ai].ai];
     if(act2&&act2.hr) renderShifts(wi,ai);
-    recalc(wi,ai); updBadge(wi,ai);
+    recalc(wi,ai);
   }
   ptm=null; gEl('tmOv').classList.remove('on'); toast('✓ Horario aplicado'); autoSave();
 }
@@ -1719,9 +1772,28 @@ function getUserHistKey(fecha){
   return getUserKey() + '_hist_' + fecha;
 }
 
+// Theta: recolectar/restaurar campos con data-save automáticamente
+function collectSaveFields(){
+  var vals={};
+  var els=document.querySelectorAll('[data-save]');
+  for(var i=0;i<els.length;i++){
+    if(els[i].id) vals[els[i].id]=els[i].value;
+  }
+  return vals;
+}
+function restoreSaveFields(vals, skip){
+  if(!vals) return;
+  skip=skip||[];
+  var k=Object.keys(vals);
+  for(var i=0;i<k.length;i++){
+    if(skip.indexOf(k[i])>=0) continue;
+    var e=gEl(k[i]); if(e) e.value=vals[k[i]];
+  }
+}
+
 function save(){
   try {
-    var vals={rancho:gVal('rancho'),fecha:gVal('fecha'),numBus:gVal('numBus'),numCam:gVal('numCam'),surquero:gVal('surquero'),finca:gVal('finca'),notas:gVal('notas'),hEnt:gVal('hEnt'),hSal:gVal('hSal'),lIni:gVal('lIni'),lFin:gVal('lFin'),payH:gVal('payH'),payMin:gVal('payMin'),cajasTotal:gEl('cajasTotal').value,cajasPrecio:gEl('cajasPrecio').value,cajasIni:gEl('cajasIni').value,cajasFin:gEl('cajasFin').value,estAcres:gEl('estAcres').value,estAncho:gEl('estAncho').value,estIni:gEl('estIni').value,estFin:gEl('estFin').value,hilAcres:gEl('hilAcres').value,hilAncho:gEl('hilAncho').value,hilIni:gEl('hilIni').value,hilFin:gEl('hilFin').value};
+    var vals=collectSaveFields();
     var wSave=[];
     for(var si=0;si<workers.length;si++){
       var ws={id:workers[si].id,name:workers[si].name,open:workers[si].open,totalPay:workers[si].totalPay,acts:[]};
@@ -1740,23 +1812,37 @@ function save(){
 }
 
 function load(){
-  // User-specific key first, then legacy fallback
+  // User-specific key first, then legacy fallback (Zeta: migra y limpia keys viejas)
   var userKey = getUserKey();
-  var KEYS = [userKey,'pr9','pr26v9','pr26v8','pr26v7','pr26v6','pr26v5','pr26v4','pr26v3','pr26v2','pr26'];
-  var raw = null;
-  for(var ki=0;ki<KEYS.length;ki++){
-    raw = localStorage.getItem(KEYS[ki]);
-    // Only use legacy keys if they match today's surquero
-    if(raw && ki > 0){
+  var LEGACY_KEYS = ['pr9','pr26v9','pr26v8','pr26v7','pr26v6','pr26v5','pr26v4','pr26v3','pr26v2','pr26'];
+  var raw = localStorage.getItem(userKey);
+  var usedLegacyKey = null;
+
+  // Si no hay datos en la key del usuario, buscar en legacy
+  if(!raw){
+    for(var ki=0;ki<LEGACY_KEYS.length;ki++){
+      var legRaw = localStorage.getItem(LEGACY_KEYS[ki]);
+      if(!legRaw) continue;
       try{
-        var chk = JSON.parse(raw);
+        var chk = JSON.parse(legRaw);
         if(chk.v && chk.v.surquero && currentUser && !currentUser.isAdmin){
-          if(chk.v.surquero !== currentUser.name){ raw = null; continue; }
+          if(chk.v.surquero !== currentUser.name) continue;
         }
-      }catch(e){ raw = null; continue; }
+        raw = legRaw;
+        usedLegacyKey = LEGACY_KEYS[ki];
+        break;
+      }catch(e){ continue; }
     }
-    if(raw) break;
   }
+
+  // Si encontramos datos en key legacy, migrar a la nueva y limpiar
+  if(raw && usedLegacyKey){
+    try{
+      localStorage.setItem(userKey, raw);
+      localStorage.removeItem(usedLegacyKey);
+    }catch(e){}
+  }
+
   if(!raw){ showEmptyState(); applyAutoFill(); return; }
   try {
     var d=JSON.parse(raw);
@@ -1764,8 +1850,8 @@ function load(){
     // ── Check if saved data is from a previous day ──
     var isNewDay = checkDateChange(d);
     if(isNewDay){
-      // Reset workers but keep some params (bus, horario)
-      workers=[]; wid=0; estP=[]; hilP=[]; cajasP=[]; grpActs=[]; ausencias=[];
+      // Iota: reset limpio usando resetState()
+      resetState();
       // Restore only bus and schedule from old data
       if(d.v){
         // ✅ Solo conservar bus y lonche — horario de entrada/salida lo captura el surquero
@@ -1784,15 +1870,10 @@ function load(){
     // ✅ Fix: NO saltamos hEnt/hSal — el dato guardado ES del mismo día,
     // así que si ya tenía horas capturadas, se restauran correctamente.
     // Solo saltamos surquero/rancho para surqueros (siempre viene del login).
-    if(d.v){
-      var skip = [];
-      if(currentUser && !currentUser.isAdmin) skip.push('surquero','rancho');
-      var k=Object.keys(d.v);
-      for(var i=0;i<k.length;i++){
-        if(skip.indexOf(k[i])>=0) continue;
-        var e=gEl(k[i]); if(e)e.value=d.v[k[i]];
-      }
-    }
+    // Theta: restaurar campos con restoreSaveFields
+    var skip = [];
+    if(currentUser && !currentUser.isAdmin) skip.push('surquero','rancho');
+    restoreSaveFields(d.v, skip);
     if(d.w)workers=d.w; if(d.id)wid=d.id;
     if(d.ep)estP=d.ep; if(d.hp)hilP=d.hp; if(d.cp)cajasP=d.cp; if(d.ga)grpActs=d.ga;
     if(d.aus)ausencias=d.aus;
@@ -1948,7 +2029,7 @@ function autoSave(){
 function saveQuiet(){
   if(!currentUser) return; // No guardar si no hay sesión activa
   try{
-    var vals={rancho:gVal('rancho'),fecha:gVal('fecha'),numBus:gVal('numBus'),numCam:gVal('numCam'),surquero:gVal('surquero'),finca:gVal('finca'),notas:gVal('notas'),hEnt:gVal('hEnt'),hSal:gVal('hSal'),lIni:gVal('lIni'),lFin:gVal('lFin'),payH:gVal('payH'),payMin:gVal('payMin'),cajasTotal:gEl('cajasTotal').value,cajasPrecio:gEl('cajasPrecio').value,cajasIni:gEl('cajasIni').value,cajasFin:gEl('cajasFin').value,estAcres:gEl('estAcres').value,estAncho:gEl('estAncho').value,estIni:gEl('estIni').value,estFin:gEl('estFin').value,hilAcres:gEl('hilAcres').value,hilAncho:gEl('hilAncho').value,hilIni:gEl('hilIni').value,hilFin:gEl('hilFin').value};
+    var vals=collectSaveFields();
     var wSave=[];
     for(var si=0;si<workers.length;si++){
       var ws={id:workers[si].id,name:workers[si].name,open:workers[si].open,totalPay:workers[si].totalPay,acts:[]};
@@ -2082,7 +2163,7 @@ function loadDay(key){
   var raw=localStorage.getItem(key); if(!raw)return;
   try{
     var d=JSON.parse(raw);
-    if(d.v){ var k=Object.keys(d.v); for(var i=0;i<k.length;i++){ var e=gEl(k[i]); if(e)e.value=d.v[k[i]]; } }
+    restoreSaveFields(d.v);
     if(d.w)workers=d.w; if(d.id)wid=d.id;
     if(d.ep)estP=d.ep; if(d.hp)hilP=d.hp; if(d.cp)cajasP=d.cp;
     for(var i=0;i<workers.length;i++){
@@ -2116,7 +2197,8 @@ function genPDFFromKey(key){
 }
 
 function genPDF(){
-  var vals={rancho:gVal('rancho'),fecha:gVal('fecha'),surquero:gVal('surquero'),finca:gVal('finca'),numBus:gVal('numBus'),hEnt:gVal('hEnt'),hSal:gVal('hSal'),lIni:gVal('lIni'),lFin:gVal('lFin')};
+  // Theta: usa collectSaveFields para recoger todos los campos automáticamente
+  var vals=collectSaveFields();
   buildPDFWindow(vals, workers, estP, hilP, cajasP, ausencias, grpActs);
 }
 
@@ -2507,7 +2589,7 @@ function delShift(wi,ai,si){
   if(!a.shifts||a.shifts.length<=1) return;
   a.shifts.splice(si,1);
   a.ini=a.shifts[0].ini||''; a.fin=a.shifts[0].fin||'';
-  renderShifts(wi,ai); recalc(wi,ai); updBadge(wi,ai); autoSave();
+  renderShifts(wi,ai); recalc(wi,ai); autoSave();
 }
 
 function onShift(wi,ai,si,field,val){
@@ -2517,7 +2599,7 @@ function onShift(wi,ai,si,field,val){
   a.shifts[si][field]=val;
   if(si===0){ a.ini=a.shifts[0].ini||''; a.fin=a.shifts[0].fin||''; }
   a.showTime=true;
-  recalc(wi,ai); updBadge(wi,ai); autoSave();
+  recalc(wi,ai); autoSave();
 }
 
 function totalShiftHours(a){
@@ -2637,6 +2719,7 @@ function askDelAll(){
   gEl('delAllOv').classList.add('on');
 }
 function confirmDelAll(){
+  // Iota: solo reset de workers/participantes (no ausencias ni grpActs)
   workers=[]; wid=0; estP=[]; hilP=[]; cajasP=[];
   var list=gEl('wlist'); list.innerHTML='';
   var ph=document.createElement('div'); ph.id='wph';
@@ -2662,8 +2745,17 @@ function getWeekNumber(dateStr){
 }
 
 function sendToSheets() {
-  if (!workers.length) { toast('⚠️ No hay trabajadores'); return; }
+  if (!workers.length && !ausencias.length) { toast('⚠️ No hay trabajadores ni ausencias'); return; }
   if (!gVal('fecha'))  { toast('⚠️ Ingresa la fecha primero'); return; }
+
+  // Mapeo motivo → etiquetas ES/EN para ausencias
+  var _motLabels = {
+    'cambio':        {es:'AUSENCIA - Cambio de rancho',   en:'ABSENCE - Ranch change'},
+    'enfermedad':    {es:'AUSENCIA - Enfermedad',          en:'ABSENCE - Illness'},
+    'injustificada': {es:'AUSENCIA - Falta injustificada', en:'ABSENCE - Unexcused'},
+    'notrabajo':     {es:'AUSENCIA - No hubo trabajo',     en:'ABSENCE - No work available'},
+    '':              {es:'AUSENCIA - Sin motivo',           en:'ABSENCE - No reason given'}
+  };
 
   var payload = {
     fecha:    gVal('fecha'),
@@ -2675,6 +2767,7 @@ function sendToSheets() {
     workers:  []
   };
 
+  // ── Trabajadores con actividades (igual que antes) ──
   for (var i = 0; i < workers.length; i++) {
     var w = workers[i];
     var wOut = { name: w.name, acts: [] };
@@ -2690,10 +2783,30 @@ function sendToSheets() {
         unitPrice:  act.p,
         qty:        act.tipo === 'Hora' ? '' : (a.qty || ''),
         totalHours: act.tipo === 'Hora' ? totalH : '',
-        finca:      a.finca || gVal('finca') // labor por actividad o la del día
+        finca:      a.finca || gVal('finca')
       });
     }
     payload.workers.push(wOut);
+  }
+
+  // ── Ausencias como "workers" con actividad tipo Ausencia ──
+  var ausSent = 0;
+  for (var ai = 0; ai < ausencias.length; ai++) {
+    var aus = ausencias[ai];
+    var mot = aus.motivo || '';
+    var lbl = _motLabels[mot] || _motLabels[''];
+    payload.workers.push({
+      name: aus.name,
+      acts: [{
+        actEs:      lbl.es,
+        actEn:      lbl.en,
+        tipo:       'Ausencia',
+        unitPrice:  0,
+        qty:        '',
+        totalHours: ''
+      }]
+    });
+    ausSent++;
   }
 
   var btn = gEl('sheetsSendBtn');
@@ -2726,7 +2839,10 @@ function sendToSheets() {
     document.body.appendChild(fm);
 
     fr.onload = function() {
-      toast('✅ ' + workers.length + ' trabajadores enviados a Payroll Field Master');
+      var msg = '✅ ' + workers.length + ' trabajador(es)';
+      if (ausSent) msg += ' + ' + ausSent + ' ausencia(s)';
+      msg += ' enviados a Payroll';
+      toast(msg);
       if (btn) {
         btn.textContent = '✅ Enviado';
         btn.style.background = '#2d7a2d';
@@ -2972,6 +3088,7 @@ function setGrpVar(inp){
 }
 
 // ── Funciones de filas de surcos (tipo 'puertas') ──
+// Eta: setSurcoVar ya no hace re-render completo — solo guarda el label y autosave
 function setSurcoVar(inp){
   var gi = parseInt(inp.dataset.gi);
   var fi = parseInt(inp.dataset.fi);
@@ -2980,8 +3097,8 @@ function setSurcoVar(inp){
   if(!grpActs[gi].vars.surcos) grpActs[gi].vars.surcos=[{largo:'',num:''}];
   if(!grpActs[gi].vars.surcos[fi]) grpActs[gi].vars.surcos[fi]={largo:'',num:''};
   grpActs[gi].vars.surcos[fi][sv] = inp.value;
-  renderGrpActs();
-  calcGrpAct(gi);
+  // Solo recalcular si el campo afecta los totales (largo/num), no para label
+  if(sv==='largo'||sv==='num') calcGrpAct(gi);
   autoSave();
 }
 
@@ -3166,9 +3283,10 @@ function grpPayDetail(wid_){
 // renderGrpActs legacy eliminada — ver renderGrpActs() en sistema dinámico (arriba)
 function syncGrp(t){ calcGrp(t); autoSave(); }
 
-// ── MIGRATE localStorage data to name-based system ──
+// ── MIGRATE localStorage data to name-based system (Zeta: limpia keys antiguas) ──
 function migrateActsToNames(){
   try{
+    // Solo migrar las keys que aún puedan existir
     var KEYS=['pr9','pr26v9','pr26v8','pr26v7'];
     for(var ki=0;ki<KEYS.length;ki++){
       var raw=localStorage.getItem(KEYS[ki]); if(!raw)continue;
@@ -3182,11 +3300,14 @@ function migrateActsToNames(){
       }
       if(changed) localStorage.setItem(KEYS[ki],JSON.stringify(d));
     }
+    // Limpiar keys muy antiguas que ya no se usan (pr26v2..pr26v6)
+    var OLD=['pr26v2','pr26v3','pr26v4','pr26v5','pr26v6','pr26'];
+    for(var oi=0;oi<OLD.length;oi++){ localStorage.removeItem(OLD[oi]); }
   }catch(e){}
 }
 
 // ── AUSENCIAS SYSTEM ──
-var ausencias = []; // [{name, empNum, motivo}]
+// (var ausencias movida a APP STATE — Iota)
 
 function getAusenciaCandidates(){
   var result = [];
