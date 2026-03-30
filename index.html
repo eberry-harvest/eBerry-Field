@@ -2263,7 +2263,19 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
   // ✅ Totales de puertas grupales
   for(var gi4_=0;gi4_<grpPuertasCols.length;gi4_++){
     var gc_=grpPuertasCols[gi4_];
-    trTotal+='<td style="text-align:center;background:#e8f4fd;font-weight:700">'+gc_.totalPuertas.toFixed(2)+'</td>';
+    // Calcular acres para el total
+    var gcAncho_ = parseFloat(grpActs_[gi4_] ? (grpActs_[gi4_].vars.anchoCama||0) : 0)||0;
+    var gcAcres_ = gcAncho_>0 ? gc_.totalPuertas*100/gcAncho_ : 0; // metros=puertas*100, acres=metros/ancho
+    // Recalcular metros reales desde surcos
+    var gcMetros_=0;
+    if(grpActs_[gi4_]){
+      var gcSurcos_=grpActs_[gi4_].vars.surcos||[];
+      for(var gsi_=0;gsi_<gcSurcos_.length;gsi_++) gcMetros_+=(parseFloat(gcSurcos_[gsi_].largo)||0)*(parseFloat(gcSurcos_[gsi_].num)||0);
+      gcAcres_ = gcAncho_>0 ? gcMetros_/gcAncho_ : 0;
+    }
+    var totalCell_ = (gcAcres_>0?'<span style="font-size:9px;color:#0f6e56;display:block">'+gcAcres_.toFixed(2)+' acres</span>':'')
+      +'<span style="font-size:11px">'+gc_.totalPuertas.toFixed(2)+' puertas</span>';
+    trTotal+='<td style="text-align:center;background:#e8f4fd;font-weight:700;line-height:1.5">'+totalCell_+'</td>';
     trPrice+='<td style="text-align:center;background:#e8f4fd;color:#c0392b;font-weight:700">$'+gc_.precio.toFixed(2)+'</td>';
     trLabor+='<td style="background:#e8f4fd;text-align:center;border:1px solid #ddd;color:#3a7fd4;font-size:9px">'+gc_.finca+'</td>';
     trEntry+='<td style="text-align:center;background:#e8f4fd;border:1px solid #ddd">'+gc_.ini+'</td>';
