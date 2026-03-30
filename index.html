@@ -2233,6 +2233,7 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
   function inA(arr,id){ for(var x=0;x<arr.length;x++) if(arr[x]===id) return true; return false; }
 
   // Build column list
+  var actCols=[]; var i,j;
   // ✅ Fix Lambda: normalizar ai de cada worker por esName ANTES de construir columnas.
   // Esto evita que workers con ai desincronizado generen columnas duplicadas.
   for(i=0;i<wks.length;i++){
@@ -2246,7 +2247,6 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     }
   }
   // Construir columnas: Hora agrupa por actividad+horario, otros por actividad
-  var actCols=[]; var i,j;
   for(i=0;i<wks.length;i++){
     for(j=0;j<wks[i].acts.length;j++){
       var a_=wks[i].acts[j];
@@ -2318,7 +2318,7 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     grpPuertasCols.push(col_);
   }
 
-  var th='<th style="width:28px;text-align:center">#</th><th style="min-width:130px;text-align:left">Nombre / Name</th>';
+  var th='<th style="width:28px;text-align:center">#</th><th style="min-width:130px;text-align:left;border-right:3px solid #1a2b8c">Nombre / Name</th>';
   for(i=0;i<actCols.length;i++){
     var col=actCols[i];
     var unitLbl=col.tipo==='Hora'?'Horas':col.tipo==='Ficha'?'Fichas':col.tipo==='Caja'?'Cajas':'$';
@@ -2353,19 +2353,19 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
   // ── Filas de cabecera: TOTAL / Pago Unit. / Labor / Entrada / Salida ──
   var trTotal='<tr style="background:#d0d8ff;font-weight:700;font-size:10px;border-top:2px solid #1a2b8c">'
     +'<td style="border:1px solid #aab"></td>'
-    +'<td style="text-align:right;padding:5px 7px;border:1px solid #aab;color:#1a2b8c;font-size:10px;font-weight:900">TOTAL</td>';
+    +'<td style="text-align:right;padding:5px 7px;border:1px solid #aab;border-right:3px solid #1a2b8c;color:#1a2b8c;font-size:10px;font-weight:900">TOTAL</td>';
   var trPrice='<tr style="font-size:10px;background:#fff">'
     +'<td style="border:1px solid #ddd"></td>'
-    +'<td style="text-align:right;padding:4px 7px;border:1px solid #ddd;color:#555;font-weight:600">Pago Unit.</td>';
+    +'<td style="text-align:right;padding:4px 7px;border:1px solid #ddd;border-right:3px solid #1a2b8c;color:#555;font-weight:600">Pago Unit.</td>';
   var trLabor='<tr style="font-size:10px;background:#f5f8ff">'
     +'<td style="border:1px solid #ddd"></td>'
-    +'<td style="text-align:right;padding:4px 7px;border:1px solid #ddd;color:#555;font-weight:600">Labor</td>';
+    +'<td style="text-align:right;padding:4px 7px;border:1px solid #ddd;border-right:3px solid #1a2b8c;color:#555;font-weight:600">Labor</td>';
   var trEntry='<tr style="font-size:10px;background:#f9f9f9">'
     +'<td style="border:1px solid #ddd"></td>'
-    +'<td style="text-align:right;padding:4px 7px;border:1px solid #ddd;color:#666">Entrada</td>';
+    +'<td style="text-align:right;padding:4px 7px;border:1px solid #ddd;border-right:3px solid #1a2b8c;color:#666">Entrada</td>';
   var trExit='<tr style="font-size:10px;background:#f9f9f9">'
     +'<td style="border:1px solid #ddd"></td>'
-    +'<td style="text-align:right;padding:4px 7px;border:1px solid #ddd;color:#666">Salida</td>';
+    +'<td style="text-align:right;padding:4px 7px;border:1px solid #ddd;border-right:3px solid #1a2b8c;color:#666">Salida</td>';
 
   for(i=0;i<actCols.length;i++){
     var col4=actCols[i];
@@ -2430,7 +2430,7 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
   var rows='';
   for(i=0;i<wks.length;i++){
     var w=wks[i];
-    var td='<td class="numcol">'+(i+1)+'</td><td class="namecol">'+esc(w.name)+'</td>';
+    var td='<td class="numcol">'+(i+1)+'</td><td class="namecol" style="border-right:3px solid #1a2b8c">'+esc(w.name)+'</td>';
     for(j=0;j<actCols.length;j++){
       var col2=actCols[j];
       // Para columnas hr individuales, celda vacía si no es el worker dueño
@@ -2466,7 +2466,8 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
   var emptyCount = Math.max(5, 30 - wks.length); // mínimo 5, hasta completar ~30 filas
   for(i=0;i<emptyCount;i++){
     var etd='<td class="numcol" style="color:#ddd;border:1px solid #ddd">'+(wks.length+i+1)+'</td>';
-    for(j=0;j<totalCols-1;j++) etd+='<td style="border:1px solid #ddd"></td>';
+    etd+='<td style="border:1px solid #ddd;border-right:3px solid #1a2b8c"></td>';
+    for(j=0;j<totalCols-2;j++) etd+='<td style="border:1px solid #ddd"></td>';
     rows+='<tr style="height:22px">'+etd+'</tr>';
   }
 
