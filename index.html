@@ -2767,7 +2767,8 @@ function renderGrpActs(){
           +' data-gi="'+gi+'" data-fi="'+fi+'" data-sv="lbl" oninput="setSurcoVar(this)"'
           +' style="width:52px;font-size:13px;font-weight:700;padding:4px 7px;text-transform:uppercase;text-align:center;border:1.5px solid var(--bd);border-radius:6px;background:#fff;font-family:\'DM Sans\',sans-serif">'
           +'</div>'
-          +(sub?'<span style="font-size:12px;font-weight:700;color:var(--g)">'+sub.toFixed(0)+' ft</span>':'<span></span>')
+          +(sub?'<span id="surcoSub_'+gi+'_'+fi+'" style="font-size:12px;font-weight:700;color:var(--g)">'+sub.toFixed(1)+' ft</span>'
+               :'<span id="surcoSub_'+gi+'_'+fi+'" style="font-size:12px;font-weight:700;color:var(--g)"></span>')
           +(g.vars.surcos.length>1
             ?'<button data-gi="'+gi+'" data-fi="'+fi+'" onclick="askDelSurcoFila(parseInt(this.dataset.gi),parseInt(this.dataset.fi))"'
             +' style="background:var(--rp);color:var(--r);border:none;border-radius:5px;padding:5px 9px;font-size:11px;font-weight:700;cursor:pointer">✕ Borrar</button>'
@@ -2776,12 +2777,12 @@ function renderGrpActs(){
           // Fila 2: largo × surcos
           +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">'
           +'<div><label style="font-size:10px">Largo surco (pies)</label>'
-          +'<input type="number" min="0" step="1" value="'+(sf.largo||'')+'" placeholder="0"'
-          +' data-gi="'+gi+'" data-fi="'+fi+'" data-sv="largo" oninput="setSurcoVar(this)"'
+          +'<input type="text" inputmode="decimal" value="'+(sf.largo||'')+'" placeholder="ej: 709.5"'
+          +' data-gi="'+gi+'" data-fi="'+fi+'" data-sv="largo" oninput="setSurcoVarText(this)"'
           +' style="font-size:14px;padding:9px 10px;width:100%"></div>'
           +'<div><label style="font-size:10px">Núm. surcos</label>'
-          +'<input type="number" min="0" step="1" value="'+(sf.num||'')+'" placeholder="0"'
-          +' data-gi="'+gi+'" data-fi="'+fi+'" data-sv="num" oninput="setSurcoVar(this)"'
+          +'<input type="text" inputmode="decimal" value="'+(sf.num||'')+'" placeholder="ej: 12"'
+          +' data-gi="'+gi+'" data-fi="'+fi+'" data-sv="num" oninput="setSurcoVarText(this)"'
           +' style="font-size:14px;padding:9px 10px;width:100%"></div>'
           +'</div>'
           +'</div>';
@@ -2799,29 +2800,25 @@ function renderGrpActs(){
 
       varsHtml = '<div style="font-size:11px;font-weight:700;color:var(--gr);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">📏 Surcos trabajados</div>'
         + filasHtml
-        // Botón agregar fila
         +'<button data-gi="'+gi+'" onclick="addSurcoFila(parseInt(this.dataset.gi))"'
         +' style="width:100%;padding:8px;border:2px dashed var(--g2);border-radius:7px;background:none;color:var(--g);font-family:\'DM Sans\',sans-serif;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:10px">＋ Agregar otro surco</button>'
-        // Metros lineales totales (no editable)
-        +(metrosTotal>0
-          ?'<div style="background:var(--gp);border-radius:7px;padding:9px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'
-          +'<span style="font-size:12px;font-weight:600;color:var(--g)">📐 Metros lineales totales</span>'
-          +'<b style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:var(--g)">'+metrosTotal.toFixed(0)+' ft</b></div>'
-          // ÷ 100 = puertas
-          +'<div style="background:var(--dk);border-radius:7px;padding:9px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'
-          +'<span style="font-size:12px;font-weight:600;color:rgba(255,255,255,.7)">🚪 Puertas totales (÷100)</span>'
-          +'<b style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:var(--a)">'+puertasTot.toFixed(2)+'</b></div>'
-          :'' )
-        // Ancho de cama → acres
+        // Metros lineales totales — siempre presente con ID para actualizar
+        +'<div id="gaMetros'+gi+'" style="background:var(--gp);border-radius:7px;padding:9px 12px;margin-bottom:8px;display:'+(metrosTotal>0?'flex':'none')+';justify-content:space-between;align-items:center">'
+        +'<span style="font-size:12px;font-weight:600;color:var(--g)">📐 Metros lineales totales</span>'
+        +'<b style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:var(--g)" id="gaMetrosVal'+gi+'">'+metrosTotal.toFixed(1)+' ft</b></div>'
+        // Puertas totales — siempre presente con ID
+        +'<div id="gaPuertas'+gi+'" style="background:var(--dk);border-radius:7px;padding:9px 12px;margin-bottom:8px;display:'+(metrosTotal>0?'flex':'none')+';justify-content:space-between;align-items:center">'
+        +'<span style="font-size:12px;font-weight:600;color:rgba(255,255,255,.7)">🚪 Puertas totales (÷100)</span>'
+        +'<b style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:var(--a)" id="gaPuertasVal'+gi+'">'+puertasTot.toFixed(2)+'</b></div>'
+        // Ancho de cama
         +'<div style="margin-bottom:6px"><label style="font-size:10px">🌱 Ancho de cama (para calcular acres)</label>'
-        +'<input type="number" min="0" step="0.1" value="'+anchoCama+'" placeholder="ej: 5.5"'
-        +' data-gi="'+gi+'" data-v="anchoCama" onchange="setGrpVar(this)"'
+        +'<input type="text" inputmode="decimal" value="'+anchoCama+'" placeholder="ej: 5.5"'
+        +' data-gi="'+gi+'" data-v="anchoCama" oninput="setGrpVar(this)"'
         +' style="font-size:14px;padding:9px 10px;width:100%"></div>'
-        +(metrosTotal>0 && anchoCama && parseFloat(anchoCama)>0
-          ?'<div style="background:var(--bp);border-radius:7px;padding:9px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'
-          +'<span style="font-size:12px;font-weight:600;color:var(--b)">🌿 Acres trabajados</span>'
-          +'<b style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:var(--b)">'+acresCalc.toFixed(3)+'</b></div>'
-          :'');
+        // Acres — siempre presente con ID
+        +'<div id="gaAcres'+gi+'" style="background:var(--bp);border-radius:7px;padding:9px 12px;margin-bottom:8px;display:'+(metrosTotal>0&&anchoCama&&parseFloat(anchoCama)>0?'flex':'none')+';justify-content:space-between;align-items:center">'
+        +'<span style="font-size:12px;font-weight:600;color:var(--b)">🌿 Acres trabajados</span>'
+        +'<b style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:var(--b)" id="gaAcresVal'+gi+'">'+acresCalc.toFixed(3)+'</b></div>';
     } else if(ct === 'cajas'){
       var totalC = g.vars.totalC||''; var precioC = g.vars.precioC||act.p||0.80;
       varsHtml = '<div class="r2" style="margin-bottom:8px">'
@@ -2875,13 +2872,50 @@ function setGrpVar(inp){
 function setSurcoVar(inp){
   var gi = parseInt(inp.dataset.gi);
   var fi = parseInt(inp.dataset.fi);
-  var sv = inp.dataset.sv; // 'largo' o 'num'
+  var sv = inp.dataset.sv;
   if(!grpActs[gi]) return;
   if(!grpActs[gi].vars.surcos) grpActs[gi].vars.surcos=[{largo:'',num:''}];
   if(!grpActs[gi].vars.surcos[fi]) grpActs[gi].vars.surcos[fi]={largo:'',num:''};
   grpActs[gi].vars.surcos[fi][sv] = inp.value;
-  // Redraw solo esta card para actualizar subtotales y metros
   renderGrpActs();
+  calcGrpAct(gi);
+  autoSave();
+}
+
+function setSurcoVarText(inp){
+  var gi = parseInt(inp.dataset.gi);
+  var fi = parseInt(inp.dataset.fi);
+  var sv = inp.dataset.sv;
+  if(!grpActs[gi]) return;
+  if(!grpActs[gi].vars.surcos) grpActs[gi].vars.surcos=[{largo:'',num:''}];
+  if(!grpActs[gi].vars.surcos[fi]) grpActs[gi].vars.surcos[fi]={largo:'',num:''};
+  grpActs[gi].vars.surcos[fi][sv] = inp.value;
+  // Actualizar span del subtotal de esta fila directamente (sin rerenderizar)
+  var sub = (parseFloat(grpActs[gi].vars.surcos[fi].largo)||0)
+           *(parseFloat(grpActs[gi].vars.surcos[fi].num)||0);
+  var subEl = gEl('surcoSub_'+gi+'_'+fi);
+  if(subEl) subEl.textContent = sub>0 ? sub.toFixed(1)+' ft' : '';
+  // Recalcular metros totales y actualizar bloques de totales por ID
+  var g = grpActs[gi];
+  var surcos = g.vars.surcos||[];
+  var metros = 0;
+  for(var si=0;si<surcos.length;si++) metros+=(parseFloat(surcos[si].largo)||0)*(parseFloat(surcos[si].num)||0);
+  var puertas = metros/100;
+  var anchoCama = parseFloat(g.vars.anchoCama)||0;
+  var acres = anchoCama>0 ? metros/anchoCama : 0;
+  // Metros
+  var mEl=gEl('gaMetros'+gi), mVal=gEl('gaMetrosVal'+gi);
+  if(mEl) mEl.style.display = metros>0?'flex':'none';
+  if(mVal) mVal.textContent = metros.toFixed(1)+' ft';
+  // Puertas
+  var pEl=gEl('gaPuertas'+gi), pVal=gEl('gaPuertasVal'+gi);
+  if(pEl) pEl.style.display = metros>0?'flex':'none';
+  if(pVal) pVal.textContent = puertas.toFixed(2);
+  // Acres
+  var aEl=gEl('gaAcres'+gi), aVal=gEl('gaAcresVal'+gi);
+  if(aEl) aEl.style.display = (metros>0&&anchoCama>0)?'flex':'none';
+  if(aVal) aVal.textContent = acres.toFixed(3);
+  // Recalcular pago por persona
   calcGrpAct(gi);
   autoSave();
 }
