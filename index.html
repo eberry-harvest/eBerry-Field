@@ -2233,28 +2233,44 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
   function inA(arr,id){ for(var x=0;x<arr.length;x++) if(arr[x]===id) return true; return false; }
 
   // Build column list
-  // ✅ Fix: para actividades de tipo Hora, columna individual por worker
-  // (cada quien puede tener horario diferente). Para Ficha/Caja/$, columna compartida.
+  // ✅ Fix Lambda: normalizar ai de cada worker por esName ANTES de construir columnas.
+  // Esto evita que workers con ai desincronizado generen columnas duplicadas.
+  for(i=0;i<wks.length;i++){
+    for(var j_n=0;j_n<wks[i].acts.length;j_n++){
+      var an_=wks[i].acts[j_n];
+      if(an_.esName){
+        for(var akn_=0;akn_<ACTS.length;akn_++){
+          if(ACTS[akn_].es===an_.esName){ an_.ai=akn_; break; }
+        }
+      }
+    }
+  }
+  // Construir columnas: Hora agrupa por actividad+horario, otros por actividad
   var actCols=[]; var i,j;
   for(i=0;i<wks.length;i++){
     for(j=0;j<wks[i].acts.length;j++){
       var a_=wks[i].acts[j];
       var ai=a_.ai;
       var actDef=ACTS[ai];
-      if(!actDef && a_.esName){
-        for(var ak_=0;ak_<ACTS.length;ak_++){
-          if(ACTS[ak_].es===a_.esName){ actDef=ACTS[ak_]; ai=ak_; a_.ai=ak_; break; }
-        }
-      }
       if(!actDef) continue;
-      // Para tipo Hora: clave única por worker para columna propia
-      // Para otros tipos: clave compartida por actividad
-      var colKey = actDef.hr ? (ai+'_w'+wks[i].id) : (''+ai);
+      // colKey basado en esName (estable) en vez de ai numérico (puede cambiar)
+      var actName=actDef.es||actDef.en||(''+ai);
+      var colKey;
+      if(actDef.hr){
+        var shifts_=a_.shifts||[];
+        var sig_='';
+        for(var si_k=0;si_k<shifts_.length;si_k++) sig_+=(shifts_[si_k].ini||'').trim()+'-'+(shifts_[si_k].fin||'').trim()+'|';
+        if(!sig_) sig_=(a_.ini||'').trim()+'-'+(a_.fin||'').trim();
+        colKey = actName+'_s'+sig_;
+      } else {
+        colKey = actName;
+      }
       var found=false;
       for(var k=0;k<actCols.length;k++){ if(actCols[k].colKey===colKey){found=true;break;} }
       if(!found) actCols.push({
-        ai:ai, colKey:colKey, wid: actDef.hr ? wks[i].id : null,
-        label:actDef.en||actDef.es, tipo:actDef.tipo, hr:actDef.hr
+        ai:ai, colKey:colKey, wid:null,
+        label:actDef.en||actDef.es, tipo:actDef.tipo, hr:actDef.hr,
+        esName:actName
       });
     }
   }
@@ -2266,7 +2282,9 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
         var act_=wks[wi2].acts[ai2b];
         // Para columnas de tipo Hora individuales, solo buscar en el worker dueño
         var matchW = actCols[ci].wid===null || actCols[ci].wid===wks[wi2].id;
-        if(act_.ai===actCols[ci].ai && matchW){
+        var actName_ci=actCols[ci].esName||(ACTS[actCols[ci].ai]?ACTS[actCols[ci].ai].es:'');
+        var actName_w=(act_.esName||(ACTS[act_.ai]?ACTS[act_.ai].es:''));
+        if(actName_w===actName_ci && matchW){
           var ini_=act_.ini||((act_.shifts&&act_.shifts.length)?act_.shifts[0].ini:'');
           if(ini_&&ini_<firstIni) firstIni=ini_;
         }
@@ -2323,7 +2341,11 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
       // Para columnas hr individuales, solo sumar del worker dueño
       if(col3.wid!==null && col3.wid!==wks[i].id) continue;
       var found3=null;
-      for(var k3=0;k3<wks[i].acts.length;k3++){ if(wks[i].acts[k3].ai===col3.ai){found3=wks[i].acts[k3];break;} }
+      var col3Name=col3.esName||(ACTS[col3.ai]?ACTS[col3.ai].es:'');
+      for(var k3=0;k3<wks[i].acts.length;k3++){
+        var wActName3=wks[i].acts[k3].esName||(ACTS[wks[i].acts[k3].ai]?ACTS[wks[i].acts[k3].ai].es:'');
+        if(wActName3===col3Name){found3=wks[i].acts[k3];break;}
+      }
       if(found3){ colTotals[col3.colKey]+=col3.hr?(totalShiftHours(found3)||0):(parseFloat(found3.qty)||0); }
     }
   }
@@ -2353,8 +2375,10 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     for(var w2=0;w2<wks.length;w2++){
       // Para columnas hr individuales, solo leer del worker dueño
       if(col4.wid!==null && col4.wid!==wks[w2].id) continue;
+      var col4Name=col4.esName||(ACTS[col4.ai]?ACTS[col4.ai].es:'');
       for(var a2=0;a2<wks[w2].acts.length;a2++){
-        if(wks[w2].acts[a2].ai===col4.ai){
+        var wActName4=wks[w2].acts[a2].esName||(ACTS[wks[w2].acts[a2].ai]?ACTS[wks[w2].acts[a2].ai].es:'');
+        if(wActName4===col4Name){
           var act2=wks[w2].acts[a2];
           if(act2.unitPrice) unitPr='$'+parseFloat(act2.unitPrice).toFixed(2);
           else if(ACTS[col4.ai]&&ACTS[col4.ai].p) unitPr='$'+parseFloat(ACTS[col4.ai].p).toFixed(2);
@@ -2412,7 +2436,11 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
       // Para columnas hr individuales, celda vacía si no es el worker dueño
       if(col2.wid!==null && col2.wid!==w.id){ td+='<td></td>'; continue; }
       var found2=null;
-      for(var k2=0;k2<w.acts.length;k2++){ if(w.acts[k2].ai===col2.ai){found2=w.acts[k2];break;} }
+      var col2Name=col2.esName||(ACTS[col2.ai]?ACTS[col2.ai].es:'');
+      for(var k2=0;k2<w.acts.length;k2++){
+        var wActName2=w.acts[k2].esName||(ACTS[w.acts[k2].ai]?ACTS[w.acts[k2].ai].es:'');
+        if(wActName2===col2Name){found2=w.acts[k2];break;}
+      }
       if(found2){
         var cv='';
         if(col2.hr){ var h2=totalShiftHours(found2); cv=h2+' h'; }
@@ -3613,70 +3641,124 @@ function testFill(){
   if(!currentUser || !currentUser.isAdmin){ toast('⚠️ Solo para admin'); return; }
   if(!gVal('surquero')){ toast('⚠️ Primero selecciona un surquero'); return; }
 
-  // 4 trabajadores ficticios con actividades variadas
+  // ── 1. Trabajadores individuales con actividades ──
   var testWorkers = [
-    {name:'Test Worker Uno',   acts:[{es:'Deshierbe',en:'Weeding',tipo:'Hora',p:16.23,hr:true}]},
-    {name:'Test Worker Dos',   acts:[{es:'Pizca de Fresa',en:'Strawberry Picking',tipo:'Caja',p:1.50,hr:false}]},
-    {name:'Test Worker Tres',  acts:[{es:'Plantación',en:'Planting',tipo:'Hora',p:16.23,hr:true}]},
-    {name:'Test Worker Cuatro',acts:[{es:'Deshierbe',en:'Weeding',tipo:'Hora',p:16.23,hr:true}]}
+    {name:'Test Worker Uno',   actEs:'Deshierbe',   hr:true},
+    {name:'Test Worker Dos',   actEs:'Pizca de Fresa', hr:false, qty:'25'},
+    {name:'Test Worker Tres',  actEs:'Plantación',  hr:true},
+    {name:'Test Worker Cuatro',actEs:'Deshierbe',   hr:true}
   ];
 
+  var addedWids = []; // para participantes grupales
   for(var ti=0;ti<testWorkers.length;ti++){
     var tw = testWorkers[ti];
-    // Buscar si la actividad existe en ACTS, si no usar la primera
     var actIdx = 0;
     for(var ai=0;ai<ACTS.length;ai++){
-      if(ACTS[ai].es === tw.acts[0].es){ actIdx = ai; break; }
+      if(ACTS[ai].es === tw.actEs){ actIdx = ai; break; }
     }
+    var act = ACTS[actIdx];
     var w = {id:wid++, name:tw.name, open:true, totalPay:0, acts:[]};
-    w.acts.push({
-      ai:actIdx,
-      esName:ACTS[actIdx]?ACTS[actIdx].es:tw.acts[0].es,
-      qty: ACTS[actIdx]&&ACTS[actIdx].hr ? '' : '25',
+    var a = {
+      ai:actIdx, esName:act?act.es:tw.actEs,
+      qty: tw.hr ? '' : (tw.qty||'10'),
       ini:'', fin:'', showTime:false,
       pay:0, shifts:[], finca:gVal('finca')||''
-    });
-    // Si es tipo hora, agregar shifts con entrada y salida
-    if(ACTS[actIdx] && ACTS[actIdx].hr){
-      w.acts[0].showTime = true;
-      w.acts[0].shifts = [{ini:gVal('hEnt')||'05:30', fin:gVal('hSal')||'14:30'}];
-      var hrs = totalShiftHours(w.acts[0]);
-      w.acts[0].pay = hrs * (ACTS[actIdx].p || 16.23);
+    };
+    if(act && act.hr){
+      a.showTime = true;
+      a.shifts = [{ini:gVal('hEnt')||'05:30', fin:gVal('hSal')||'14:30'}];
+      a.pay = totalShiftHours(a) * (act.p || 16.23);
     } else {
-      w.acts[0].pay = 25 * (ACTS[actIdx]?ACTS[actIdx].p:1.50);
+      a.pay = (parseFloat(a.qty)||0) * (act?act.p:1.50);
     }
-    w.totalPay = w.acts[0].pay;
+    w.acts.push(a);
+    w.totalPay = a.pay;
     workers.push(w);
+    addedWids.push(w.id);
     var list = gEl('wlist');
     if(list) list.appendChild(mkCard(w, workers.length-1));
   }
 
-  // 2 ausencias ficticias
+  // ── 2. Actividad grupal (primera disponible) ──
+  if(GRUPAL_ACTS.length){
+    var gai = 0; // primera actividad grupal
+    var already = false;
+    for(var gi=0;gi<grpActs.length;gi++){ if(grpActs[gi].gai===gai){ already=true; break; } }
+    if(!already){
+      var gact = GRUPAL_ACTS[gai];
+      var ct = grpCalcType(gact);
+      var vars = {};
+      if(ct==='puertas'){
+        vars.surcos = [{lbl:'A1', largo:'500', num:'10'},{lbl:'B2', largo:'350', num:'8'}];
+        vars.anchoCama = '5.67';
+        vars.hEnt = gVal('hEnt')||'05:30';
+        vars.hSal = gVal('hSal')||'14:30';
+        vars.finca = gVal('finca')||'Block Test';
+      } else if(ct==='cajas'){
+        vars.totalCajas = '120';
+      } else {
+        vars.qty = '50';
+      }
+      grpActs.push({gai:gai, participantes:addedWids.slice(0,3), vars:vars});
+    }
+    // Si hay segunda grupal, agregarla también
+    if(GRUPAL_ACTS.length > 1){
+      var gai2 = 1;
+      var already2 = false;
+      for(var gi2=0;gi2<grpActs.length;gi2++){ if(grpActs[gi2].gai===gai2){ already2=true; break; } }
+      if(!already2){
+        var gact2 = GRUPAL_ACTS[gai2];
+        var ct2 = grpCalcType(gact2);
+        var vars2 = {};
+        if(ct2==='puertas'){
+          vars2.surcos = [{lbl:'C1', largo:'400', num:'6'}];
+          vars2.anchoCama = '5.67';
+        } else if(ct2==='cajas'){
+          vars2.totalCajas = '85';
+        } else {
+          vars2.qty = '30';
+        }
+        grpActs.push({gai:gai2, participantes:addedWids.slice(1,4), vars:vars2});
+      }
+    }
+    renderGrpActs();
+  }
+
+  // ── 3. Ausencias (2 con motivos distintos) ──
   ausencias.push({name:'Test Ausente Uno',   empNum:'T001', motivo:'enfermedad'});
   ausencias.push({name:'Test Ausente Dos',   empNum:'T002', motivo:'cambio'});
+  ausencias.push({name:'Test Ausente Tres',  empNum:'T003', motivo:'injustificada'});
   renderAusencias();
 
-  updParam();
-  buildSum();
-  saveQuiet();
-  toast('🧪 4 trabajadores + 2 ausencias de prueba agregados');
+  // ── 4. Recalcular todo ──
+  updParam(); updParts(); buildSum(); saveQuiet();
+  toast('🧪 4 workers + '+(grpActs.length)+' grupales + 3 ausencias de prueba');
 }
 
 function testClear(){
   if(!currentUser || !currentUser.isAdmin){ toast('⚠️ Solo para admin'); return; }
-  // Quitar solo los test workers (nombres que empiezan con "Test ")
+  // Quitar test workers (nombres que empiezan con "Test ")
+  var testWids = [];
   for(var i=workers.length-1;i>=0;i--){
-    if(workers[i].name.indexOf('Test ')=== 0) workers.splice(i,1);
+    if(workers[i].name.indexOf('Test ')===0){ testWids.push(workers[i].id); workers.splice(i,1); }
+  }
+  // Quitar test workers de participantes grupales, y quitar grupales vacías
+  for(var gi=grpActs.length-1;gi>=0;gi--){
+    var parts = grpActs[gi].participantes;
+    for(var pi=parts.length-1;pi>=0;pi--){
+      if(testWids.indexOf(parts[pi])>=0) parts.splice(pi,1);
+    }
+    if(!parts.length) grpActs.splice(gi,1);
   }
   // Quitar ausencias de prueba
   for(var j=ausencias.length-1;j>=0;j--){
-    if(ausencias[j].name.indexOf('Test ')=== 0) ausencias.splice(j,1);
+    if(ausencias[j].name.indexOf('Test ')===0) ausencias.splice(j,1);
   }
-  // Re-render
+  // Re-render todo
   var list=gEl('wlist'); list.innerHTML='';
   for(var k=0;k<workers.length;k++) list.appendChild(mkCard(workers[k],k));
-  renderAusencias();
-  updParam(); buildSum(); saveQuiet();
+  renderGrpActs(); renderAusencias();
+  updParam(); updParts(); buildSum(); saveQuiet();
   toast('🗑️ Datos de prueba eliminados');
 }
 </script>
