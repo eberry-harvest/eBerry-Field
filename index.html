@@ -327,18 +327,37 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 <!-- NUEVO DIA MODAL -->
 <div class="ov" id="newDayOv">
   <div class="md">
-    <div class="mt">🌅 Nuevo Día</div>
-    <div class="ms">¿Deseas conservar la lista de trabajadores del día anterior?</div>
-    <div class="mbox" style="background:#eef4fd;border:1.5px solid #3a7fd4;margin-bottom:16px">
-      <div style="font-size:12px;font-weight:600;color:#3a7fd4;margin-bottom:4px">Trabajadores actuales</div>
-      <div id="newDayWCount" style="font-family:Bebas Neue,sans-serif;font-size:28px;color:#3a7fd4">0</div>
-      <div style="font-size:11px;color:#888" id="newDayWNames"></div>
+
+    <!-- PASO 1: Confirmar cambio de día -->
+    <div id="newDayStep1">
+      <div class="mt">🌅 ¿Cambiar de día?</div>
+      <div class="ms">Esta acción guardará el día actual y comenzará un registro nuevo. Asegúrate de haber capturado toda la información.</div>
+      <div class="mbox" style="background:#fff8ec;border:1.5px solid var(--a);margin-bottom:16px">
+        <div style="font-size:12px;font-weight:600;color:var(--a);margin-bottom:4px">Se guardará automáticamente</div>
+        <div id="newDayCurrDate" style="font-family:Bebas Neue,sans-serif;font-size:22px;color:var(--a)">—</div>
+        <div style="font-size:11px;color:#888" id="newDayCurrWorkers"></div>
+      </div>
+      <div class="mbs">
+        <button class="mok" onclick="newDayStep2()" style="flex:2">💾 Sí, guardar y cambiar de día</button>
+        <button class="mca" onclick="gEl('newDayOv').classList.remove('on')" style="flex:1">Cancelar</button>
+      </div>
     </div>
-    <div class="mbs">
-      <button class="mok" onclick="startNewDay(true)" style="flex:1.2">✓ Sí, conservar trabajadores</button>
-      <button class="mca" onclick="startNewDay(false)" style="background:var(--r);color:#fff;border:none;flex:1">✗ No, empezar vacío</button>
+
+    <!-- PASO 2: ¿Conservar trabajadores? -->
+    <div id="newDayStep2" style="display:none">
+      <div class="mt">👥 Trabajadores</div>
+      <div class="ms">¿Deseas conservar la lista de trabajadores para el nuevo día? Sus actividades se borrarán, solo se conservan los nombres.</div>
+      <div class="mbox" style="background:#eef4fd;border:1.5px solid #3a7fd4;margin-bottom:16px">
+        <div style="font-size:12px;font-weight:600;color:#3a7fd4;margin-bottom:4px">Trabajadores del día anterior</div>
+        <div id="newDayWCount" style="font-family:Bebas Neue,sans-serif;font-size:28px;color:#3a7fd4">0</div>
+        <div style="font-size:11px;color:#888" id="newDayWNames"></div>
+      </div>
+      <div class="mbs">
+        <button class="mok" onclick="startNewDay(true)" style="flex:1.2">✓ Sí, conservar nombres</button>
+        <button class="mca" onclick="startNewDay(false)" style="background:var(--r);color:#fff;border:none;flex:1">✗ Empezar vacío</button>
+      </div>
     </div>
-    <button onclick="gEl('newDayOv').classList.remove('on')" style="width:100%;margin-top:9px;padding:10px;border:1.5px solid var(--bd);border-radius:8px;background:#fff;color:var(--gr);font-family:DM Sans,sans-serif;font-size:13px;font-weight:600;cursor:pointer">Cancelar</button>
+
   </div>
 </div>
 
@@ -874,14 +893,9 @@ function onAdminSurqueroChange(name){
   } else {
     NAMES=ALL_WORKERS.map(function(w){return w.name;}); ACTS=ALL_ACTS.slice();
   }
-  workers=[]; wid=0;
-  var wlist=gEl('wlist'); if(wlist){
-    wlist.innerHTML='';
-    var ph=document.createElement('div'); ph.id='wph';
-    ph.style.cssText='text-align:center;padding:40px 18px;color:var(--gr);font-size:14px';
-    ph.textContent='Escribe un nombre en la barra de abajo'; wlist.appendChild(ph);
-  }
-  updParam(); updParts();
+  // ✅ Cargar datos guardados del surquero seleccionado
+  // getUserKey() ya apunta a la key correcta porque inp.value fue actualizado arriba
+  load();
   toast('✅ Cuadrilla de '+name.split(' ')[0]+' cargada — '+NAMES.length+' personas');
 }
 
@@ -1664,8 +1678,16 @@ function copyR(){ if(navigator.clipboard){ navigator.clipboard.writeText(mkRepor
 // ── USER-SPECIFIC STORAGE KEY ──
 function getUserKey(){
   if(!currentUser) return 'pr9';
-  var name = currentUser.isAdmin ? 'admin' : currentUser.name.replace(/\s+/g,'').toLowerCase().slice(0,20);
-  return 'pr9_u_' + name;
+  if(currentUser.isAdmin){
+    // Admin guarda en la key del surquero que está operando
+    // Si hay un surquero seleccionado, usa su key — si no, usa 'admin'
+    var surqSel = gVal('surquero');
+    if(surqSel && surqSel.trim()){
+      return 'pr9_u_' + surqSel.trim().replace(/\s+/g,'').toLowerCase().slice(0,20);
+    }
+    return 'pr9_u_admin';
+  }
+  return 'pr9_u_' + currentUser.name.replace(/\s+/g,'').toLowerCase().slice(0,20);
 }
 function getUserHistKey(fecha){
   return getUserKey() + '_hist_' + fecha;
@@ -1830,28 +1852,31 @@ function checkDateChange(savedData){
   var mo = now.getMonth()+1; var dy = now.getDate();
   var today = now.getFullYear()+'-'+(mo<10?'0'+mo:mo)+'-'+(dy<10?'0'+dy:dy);
 
-  if(savedFecha === today) return false; // Same day, no change needed
+  if(savedFecha === today) return false; // Mismo día — cargar normal
 
-  // Different day! Check if there are workers to save
+  // ✅ Fix: si hay workers guardados, auto-archivar pero NO resetear.
+  // El surquero/admin puede estar trabajando con datos de otro día intencionalmente.
+  // Solo resetear si NO hay workers (datos vacíos de un día pasado sin utilidad).
   var hasWorkers = savedData.w && savedData.w.length > 0;
   if(hasWorkers){
-    // Auto-save to history before clearing
+    // Archivar al historial por si acaso, pero dejar que load() los cargue
     var histKey = getUserHistKey(savedFecha);
     try{
-      localStorage.setItem(histKey, JSON.stringify({
-        v: savedData.v,
-        w: savedData.w,
-        id: savedData.id||0,
-        ep: savedData.ep||[],
-        hp: savedData.hp||[],
-        cp: savedData.cp||[],
-        saved: new Date().toISOString(),
-        autoArchived: true
-      }));
-      toast('📅 Día '+savedFecha+' archivado automáticamente ('+savedData.w.length+' trabajadores)');
+      var existing = localStorage.getItem(histKey);
+      if(!existing){ // Solo archivar si no existe ya
+        localStorage.setItem(histKey, JSON.stringify({
+          v: savedData.v, w: savedData.w,
+          id: savedData.id||0, ep: savedData.ep||[],
+          hp: savedData.hp||[], cp: savedData.cp||[],
+          saved: new Date().toISOString(), autoArchived: true
+        }));
+      }
     }catch(e){}
+    return false; // ✅ NO resetear — dejar que load() cargue los workers
   }
-  return true; // Signal to reset
+
+  // Sin workers y fecha diferente → sí resetear (datos vacíos de otro día)
+  return true;
 }
 
 function showEmptyState(){
@@ -2277,12 +2302,29 @@ function buildPDFWindow(vals, wks, ep, hp, cp){
 
 
 function openNewDay(){
-  saveQuiet();
-  gEl('newDayWCount').textContent=workers.length;
-  var names=workers.slice(0,5).map(function(w){ return w.name.split(' ')[0]+' '+w.name.split(' ')[1]; }).join(', ');
-  if(workers.length>5) names+=' y '+(workers.length-5)+' más...';
-  gEl('newDayWNames').textContent=names||'Sin trabajadores';
+  // Paso 1 — mostrar confirmación con info del día actual
+  var fechaActual = gVal('fecha') || '—';
+  var p = fechaActual.split('-');
+  var fechaLegible = p.length===3 ? p[2]+'/'+p[1]+'/'+p[0] : fechaActual;
+  gEl('newDayCurrDate').textContent = fechaLegible;
+  gEl('newDayCurrWorkers').textContent = workers.length + ' trabajadores · ' + (gVal('rancho')||'sin rancho');
+  // Mostrar paso 1, ocultar paso 2
+  gEl('newDayStep1').style.display='block';
+  gEl('newDayStep2').style.display='none';
   gEl('newDayOv').classList.add('on');
+}
+
+function newDayStep2(){
+  // Guardar antes de continuar
+  saveQuiet();
+  // Rellenar datos del paso 2
+  gEl('newDayWCount').textContent = workers.length;
+  var names = workers.slice(0,5).map(function(w){ return w.name.split(' ')[0]+' '+w.name.split(' ')[1]; }).join(', ');
+  if(workers.length>5) names += ' y '+(workers.length-5)+' más...';
+  gEl('newDayWNames').textContent = names||'Sin trabajadores';
+  // Cambiar al paso 2
+  gEl('newDayStep1').style.display='none';
+  gEl('newDayStep2').style.display='block';
 }
 
 function startNewDay(keepWorkers){
