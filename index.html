@@ -2265,14 +2265,7 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     var gc_=grpPuertasCols[gi4_];
     // Calcular acres para el total
     var gcAncho_ = parseFloat(grpActs_[gi4_] ? (grpActs_[gi4_].vars.anchoCama||0) : 0)||0;
-    var gcAcres_ = gcAncho_>0 ? gc_.totalPuertas*100/gcAncho_ : 0; // metros=puertas*100, acres=metros/ancho
-    // Recalcular metros reales desde surcos
-    var gcMetros_=0;
-    if(grpActs_[gi4_]){
-      var gcSurcos_=grpActs_[gi4_].vars.surcos||[];
-      for(var gsi_=0;gsi_<gcSurcos_.length;gsi_++) gcMetros_+=(parseFloat(gcSurcos_[gsi_].largo)||0)*(parseFloat(gcSurcos_[gsi_].num)||0);
-      gcAcres_ = gcAncho_>0 ? gcMetros_/gcAncho_ : 0;
-    }
+    var gcAcres_ = (gcAncho_>0 && gc_.totalPuertas>0) ? gc_.totalPuertas/gcAncho_ : 0;
     var totalCell_ = (gcAcres_>0?'<span style="font-size:9px;color:#0f6e56;display:block">'+gcAcres_.toFixed(2)+' acres</span>':'')
       +'<span style="font-size:11px">'+gc_.totalPuertas.toFixed(2)+' puertas</span>';
     trTotal+='<td style="text-align:center;background:#e8f4fd;font-weight:700;line-height:1.5">'+totalCell_+'</td>';
@@ -2858,8 +2851,8 @@ function renderGrpActs(){
       }
       // Puertas = metros / 100 (constante)
       var puertasTot = metrosTotal/100;
-      // Acres = metros / ancho cama
-      var acresCalc = anchoCama ? metrosTotal/(parseFloat(anchoCama)||1) : 0;
+      // Acres = puertas ÷ ancho de cama (no metros)
+      var acresCalc = (anchoCama && puertasTot) ? puertasTot/(parseFloat(anchoCama)||1) : 0;
 
       varsHtml = '<div style="font-size:11px;font-weight:700;color:var(--gr);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">📏 Surcos trabajados</div>'
         + filasHtml
@@ -2981,7 +2974,7 @@ function setSurcoVarText(inp){
   for(var si=0;si<surcos.length;si++) metros+=(parseFloat(surcos[si].largo)||0)*(parseFloat(surcos[si].num)||0);
   var puertas = metros/100;
   var anchoCama = parseFloat(g.vars.anchoCama)||0;
-  var acres = anchoCama>0 ? metros/anchoCama : 0;
+  var acres = anchoCama>0 ? puertas/anchoCama : 0;
   // Metros
   var mEl=gEl('gaMetros'+gi), mVal=gEl('gaMetrosVal'+gi);
   if(mEl) mEl.style.display = metros>0?'flex':'none';
