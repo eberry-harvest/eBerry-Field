@@ -2729,17 +2729,8 @@ function getWeekNumber(dateStr){
 }
 
 function sendToSheets() {
-  if (!workers.length && !ausencias.length) { toast('⚠️ No hay trabajadores ni ausencias'); return; }
+  if (!workers.length) { toast('⚠️ No hay trabajadores'); return; }
   if (!gVal('fecha'))  { toast('⚠️ Ingresa la fecha primero'); return; }
-
-  // Mapeo motivo → etiquetas ES/EN para ausencias
-  var _motLabels = {
-    'cambio':        {es:'AUSENCIA - Cambio de rancho',   en:'ABSENCE - Ranch change'},
-    'enfermedad':    {es:'AUSENCIA - Enfermedad',          en:'ABSENCE - Illness'},
-    'injustificada': {es:'AUSENCIA - Falta injustificada', en:'ABSENCE - Unexcused'},
-    'notrabajo':     {es:'AUSENCIA - No hubo trabajo',     en:'ABSENCE - No work available'},
-    '':              {es:'AUSENCIA - Sin motivo',           en:'ABSENCE - No reason given'}
-  };
 
   var payload = {
     fecha:    gVal('fecha'),
@@ -2751,7 +2742,6 @@ function sendToSheets() {
     workers:  []
   };
 
-  // ── Trabajadores con actividades (igual que antes) ──
   for (var i = 0; i < workers.length; i++) {
     var w = workers[i];
     var wOut = { name: w.name, acts: [] };
@@ -2767,30 +2757,10 @@ function sendToSheets() {
         unitPrice:  act.p,
         qty:        act.tipo === 'Hora' ? '' : (a.qty || ''),
         totalHours: act.tipo === 'Hora' ? totalH : '',
-        finca:      a.finca || gVal('finca')
+        finca:      a.finca || gVal('finca') // labor por actividad o la del día
       });
     }
     payload.workers.push(wOut);
-  }
-
-  // ── Ausencias como "workers" con actividad tipo Ausencia ──
-  var ausSent = 0;
-  for (var ai = 0; ai < ausencias.length; ai++) {
-    var aus = ausencias[ai];
-    var mot = aus.motivo || '';
-    var lbl = _motLabels[mot] || _motLabels[''];
-    payload.workers.push({
-      name: aus.name,
-      acts: [{
-        actEs:      lbl.es,
-        actEn:      lbl.en,
-        tipo:       'Ausencia',
-        unitPrice:  0,
-        qty:        '',
-        totalHours: ''
-      }]
-    });
-    ausSent++;
   }
 
   var btn = gEl('sheetsSendBtn');
@@ -2823,10 +2793,7 @@ function sendToSheets() {
     document.body.appendChild(fm);
 
     fr.onload = function() {
-      var msg = '✅ ' + workers.length + ' trabajador(es)';
-      if (ausSent) msg += ' + ' + ausSent + ' ausencia(s)';
-      msg += ' enviados a Payroll';
-      toast(msg);
+      toast('✅ ' + workers.length + ' trabajadores enviados a Payroll Field Master');
       if (btn) {
         btn.textContent = '✅ Enviado';
         btn.style.background = '#2d7a2d';
