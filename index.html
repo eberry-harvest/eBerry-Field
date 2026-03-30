@@ -635,15 +635,7 @@ var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwjC6Gjcb3_VRmjnV
 var currentUser = null; // {name, pin, crew, isAdmin}
 
 // ── CONFIG (loaded from Sheets CONFIG tab) ──
-var ADMIN_PIN_HASH = '158a323a7ba44870f23d96f1516dd70aa48e9a72db4ebb026b0a89e212a208ab'; // SHA-256 de PIN default — Sheets lo sobreescribe
-
-// ── Hash PIN usando Web Crypto (SHA-256) — retorna Promise ──
-function hashPin(pin){
-  return crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(pin)))
-    .then(function(buf){
-      return Array.from(new Uint8Array(buf)).map(function(b){return ('0'+b.toString(16)).slice(-2)}).join('');
-    });
-}
+var ADMIN_PIN = '2026'; // default — Sheets lo sobreescribe si es diferente
 
 // ── DATA (loaded from Sheets) ──
 var NAMES = []; // workers for current crew
@@ -775,29 +767,26 @@ function checkPin(){
   pinBuffer = '';
   updPinDots();
 
-  // Hash el PIN ingresado y comparar con admin hash
-  hashPin(pin).then(function(hashed){
+  // Admin PIN — no session check needed
+  if(pin === ADMIN_PIN){
+    loginSuccess({name:'Administrador', pin:ADMIN_PIN, crew:'ALL', isAdmin:true});
+    return;
+  }
 
-    // Admin PIN — no session check needed
-    if(hashed === ADMIN_PIN_HASH){
-      loginSuccess({name:'Administrador', pin:pin, crew:'ALL', isAdmin:true});
-      return;
+  // Check against lideres list
+  var matchedUser = null;
+  for(var i=0;i<LIDERES.length;i++){
+    if(LIDERES[i].pin === pin){
+      matchedUser = {name:LIDERES[i].name, pin:pin, crew:LIDERES[i].crew, isAdmin:false, empNum:LIDERES[i].empNum};
+      break;
     }
+  }
 
-    // Check against lideres list (PINs siguen en texto plano desde Sheets)
-    var matchedUser = null;
-    for(var i=0;i<LIDERES.length;i++){
-      if(LIDERES[i].pin === pin){
-        matchedUser = {name:LIDERES[i].name, pin:pin, crew:LIDERES[i].crew, isAdmin:false, empNum:LIDERES[i].empNum};
-        break;
-      }
-    }
-
-    if(!matchedUser){
-      gEl('loginErr').textContent = '❌ PIN incorrecto, intenta de nuevo';
-      setTimeout(function(){ gEl('loginErr').textContent=''; }, 2000);
-      return;
-    }
+  if(!matchedUser){
+    gEl('loginErr').textContent = '❌ PIN incorrecto, intenta de nuevo';
+    setTimeout(function(){ gEl('loginErr').textContent=''; }, 2000);
+    return;
+  }
 
   // ── Check for duplicate session ──
   gEl('loginErr').textContent = '🔍 Verificando sesión...';
@@ -829,27 +818,23 @@ function checkPin(){
       proceedLogin(_pendingSessionUser);
     }
   });
-
-  }); // cierre hashPin().then()
 }
 
 function forceSessionTakeover(){
-  var enteredPin = gEl('dupAdminPin').value.trim();
-  if(enteredPin.length < 4){
+  var adminPin = gEl('dupAdminPin').value.trim();
+  if(adminPin.length < 4){
     gEl('dupAdminErr').textContent = '❌ Ingresa el PIN de 4 dígitos del Admin';
     return;
   }
-  // Hashear el PIN ingresado y comparar con el hash guardado
-  hashPin(enteredPin).then(function(hashed){
-    if(hashed !== ADMIN_PIN_HASH){
-      gEl('dupAdminErr').textContent = '❌ PIN incorrecto';
-      gEl('dupAdminPin').value = '';
-      return;
-    }
-    // Force close old session via server (envía PIN plano al server que lo valida contra CONFIG)
-    var user = _pendingSessionUser;
-    gEl('dupAdminErr').textContent = '🔄 Cerrando sesión anterior...';
-    sessionCall({cmd:'force', surquero:user.name, adminPin:enteredPin}, function(err, data){
+  if(adminPin !== ADMIN_PIN){
+    gEl('dupAdminErr').textContent = '❌ PIN incorrecto';
+    gEl('dupAdminPin').value = '';
+    return;
+  }
+  // Force close old session via server
+  var user = _pendingSessionUser;
+  gEl('dupAdminErr').textContent = '🔄 Cerrando sesión anterior...';
+  sessionCall({cmd:'force', surquero:user.name, adminPin:ADMIN_PIN}, function(err, data){
     if(!err && data && data.success){
       gEl('dupSessOv').classList.remove('on');
       toast('✅ Sesión anterior cerrada por Admin');
@@ -858,7 +843,6 @@ function forceSessionTakeover(){
       gEl('dupAdminErr').textContent = '❌ Error al cerrar sesión: ' + (data&&data.error||'sin conexión');
     }
   });
-  }); // cierre hashPin().then()
 }
 
 function cancelDupSession(){
@@ -1060,7 +1044,7 @@ function loadSheetsData(){
       var ok  = data.success || data['éxito'] || data.exito;
       var cfg = data.config  || data['configuración'] || data.configuracion || {};
       if(ok && cfg && cfg.admin_pin){
-        hashPin(String(cfg.admin_pin).trim()).then(function(h){ ADMIN_PIN_HASH = h; });
+        ADMIN_PIN = String(cfg.admin_pin).trim();
       }
     }
     
