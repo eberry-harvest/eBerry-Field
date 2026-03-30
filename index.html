@@ -1444,8 +1444,8 @@ function updPreview(wi){
     if(a.finca && a.finca !== gVal('finca')) label += ' 📍'+a.finca;
     h+='<span class="'+cls+'">'+label+'</span>';
   }
-  var ex=grpPay(wi);
-  if(ex>0) h+='<span class="wpill pay">Grp $'+ex.toFixed(0)+'</span>';
+  var exD=grpPayDetail(wi); var ex=exD.pay;
+  if(ex>0) h+='<span class="wpill pay">Grp '+exD.label+'</span>';
   pv.innerHTML=h;
 }
 
@@ -1649,8 +1649,8 @@ function buildSum(){
       var u=act.hr?(a.ini&&a.fin?a.ini+'→'+a.fin+'('+nh(a.ini,a.fin)+'h)':'sin horario'):act.tipo==='$'?'$'+a.qty:a.qty+' '+act.tipo;
       dets.push(act.es.split(' ').slice(0,2).join(' ')+'('+u+')');
     }
-    var ex=grpPay(w.id);
-    h+='<div class="sr"><span class="sn">'+(i+1)+'. '+w.name+'</span><span class="sd">'+(dets.join(' + ')||'—')+(ex>0?' +Grp($'+ex.toFixed(2)+')':'')+
+    var exD=grpPayDetail(w.id); var ex=exD.pay;
+    h+='<div class="sr"><span class="sn">'+(i+1)+'. '+w.name+'</span><span class="sd">'+(dets.join(' + ')||'—')+(ex>0?' +Grp('+exD.label+')':'')+
       '</span><span class="sp">$'+(w.totalPay||0).toFixed(2)+'</span></div>';
   }
   gEl('sw').innerHTML=h||'<div style="color:var(--gr);font-size:13px;text-align:center;padding:10px">Sin datos</div>';
@@ -3095,7 +3095,12 @@ function calcGrpAct(gi){
 }
 
 function grpPay(wid_){
-  var ex = 0;
+  return grpPayDetail(wid_).pay;
+}
+
+// Devuelve {pay, label} — label incluye puertas c/u para el resumen
+function grpPayDetail(wid_){
+  var ex = 0; var parts = [];
   for(var gi=0;gi<grpActs.length;gi++){
     var g   = grpActs[gi];
     var act = GRUPAL_ACTS[g.gai]; if(!act) continue;
@@ -3106,20 +3111,25 @@ function grpPay(wid_){
       var metros=0; var surcos=g.vars.surcos||[];
       for(var si=0;si<surcos.length;si++) metros+=(parseFloat(surcos[si].largo)||0)*(parseFloat(surcos[si].num)||0);
       var puertas=metros/100;
-      if(puertas) ex+=puertas*act.p/np;
+      if(puertas){
+        var ppx=puertas/np;
+        var pago=ppx*act.p;
+        ex+=pago;
+        parts.push(ppx.toFixed(2)+' ptas · $'+pago.toFixed(2));
+      }
     } else if(ct==='cajas'){
       var totalC=parseFloat(g.vars.totalC)||0;
       var precioC=parseFloat(g.vars.precioC)||act.p||0.80;
-      if(totalC) ex+=totalC/np*precioC;
+      if(totalC){ var pago2=totalC/np*precioC; ex+=pago2; parts.push('$'+pago2.toFixed(2)); }
     } else if(ct==='hora'){
       var h=nh(g.vars.ini||'',g.vars.fin||'');
-      if(h) ex+=h*act.p;
+      if(h){ var pago3=h*act.p; ex+=pago3; parts.push('$'+pago3.toFixed(2)); }
     } else {
       var totalP=parseFloat(g.vars.totalP)||0;
-      if(totalP) ex+=totalP/np*act.p;
+      if(totalP){ var pago4=totalP/np*act.p; ex+=pago4; parts.push('$'+pago4.toFixed(2)); }
     }
   }
-  return ex;
+  return {pay:ex, label:parts.join(' + ')};
 }
 
 // renderGrpActs legacy eliminada — ver renderGrpActs() en sistema dinámico (arriba)
