@@ -1757,7 +1757,9 @@ function load(){
     // Always re-apply auto-fill after load
     applyAutoFill();
     setTimeout(renderGrpActs, 100);
-    saveQuiet();
+    // ✅ NO llamar saveQuiet() aquí — evita guardar estado incompleto
+    // antes de que el DOM y los workers terminen de renderizarse.
+    // El guardado ocurre cuando el surquero interactúa con la app.
   }catch(e){ showEmptyState(); applyAutoFill(); toast('⚠️ Error al cargar: '+e.message); }
 }
 
@@ -2593,7 +2595,7 @@ function sendToSheets() {
 
 // ── GROUP ACTIVITY SYSTEM (dinámico desde GRUPAL_ACTS) ──
 // grpActs = [{gai: índice en GRUPAL_ACTS, participantes:[wid,...], vars:{}}]
-var grpActs = [];
+// ✅ grpActs declarada en línea 1077 junto con workers/wid — NO redeclarar aquí
 
 // Detecta el tipo de cálculo de una actividad grupal
 // 'puertas' = acres × ancho × precio ÷ personas
