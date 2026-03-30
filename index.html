@@ -857,9 +857,21 @@ function loginSuccess(user){
   currentUser = user;
   gEl('loginScreen').classList.add('hide');
   var btn = gEl('logoutBtn'); if(btn) btn.style.display = 'block';
-  // Mostrar badge ADMIN solo para administrador
   var badge = gEl('adminBadge');
   if(badge) badge.style.display = user.isAdmin ? 'block' : 'none';
+
+  // ✅ Inicializar display del surquero ANTES de load()
+  var disp     = gEl('surqueroDisplay');
+  var adminSel = gEl('surqueroAdminSel');
+  if(!user.isAdmin){
+    // Surquero normal: mostrar nombre bloqueado, ocultar select
+    if(disp){ disp.textContent = user.name; disp.style.display='block'; }
+    if(adminSel) adminSel.style.display='none';
+  } else {
+    // Admin: ocultar display, select se llena en applyAutoFill
+    if(disp) disp.style.display='none';
+    if(adminSel) adminSel.style.display='none'; // lo muestra applyAutoFill después
+  }
 
   if(!user.isAdmin){
     filterDataForCrew(user.crew);
@@ -1804,32 +1816,34 @@ function load(){
 // Apply auto-fill values that should always override saved data
 function applyAutoFill(){
   if(!currentUser) return;
-  // Surquero — always locked to logged-in user
   var disp = gEl('surqueroDisplay');
   var inp  = gEl('surquero');
+  var adminSel = gEl('surqueroAdminSel');
+
   if(!currentUser.isAdmin){
-    if(disp) disp.textContent = currentUser.name;
+    // Surquero normal — mostrar display bloqueado, ocultar select de admin
+    if(disp){ disp.textContent = currentUser.name; disp.style.display='block'; }
     if(inp)  inp.value = currentUser.name;
-    // Rancho — always from crew
+    if(adminSel) adminSel.style.display='none'; // ✅ siempre oculto para surqueros
+    // Rancho — siempre del crew
     var crewBase = currentUser.crew.replace(/\s*\d+$/,'').trim();
     var rEl = gEl('rancho'); if(rEl) rEl.value = crewBase;
   } else {
-    // Admin: ocultar display, mostrar select con surqueros
-    if(disp) disp.style.display="none";
-    var adminSel = gEl("surqueroAdminSel");
+    // Admin — ocultar display, mostrar select con surqueros
+    if(disp) disp.style.display='none';
     if(adminSel){
-      adminSel.style.display="block";
+      adminSel.style.display='block';
       adminSel.innerHTML = '<option value="">— Selecciona un surquero —</option>';
       for(var li=0;li<LIDERES.length;li++){
-        var opt=document.createElement("option");
+        var opt=document.createElement('option');
         opt.value=LIDERES[li].name; opt.textContent=LIDERES[li].name;
         adminSel.appendChild(opt);
       }
     }
-    if(inp) inp.value="";
+    if(inp) inp.value='';
   }
 
-  // Auto-fill fecha with today if empty or different
+  // Auto-fill fecha con hoy si está vacía
   var now = new Date();
   var mo = now.getMonth()+1; var dy = now.getDate();
   var today = now.getFullYear()+'-'+(mo<10?'0'+mo:mo)+'-'+(dy<10?'0'+dy:dy);
@@ -1837,8 +1851,6 @@ function applyAutoFill(){
   if(fEl && !fEl.value) fEl.value = today;
 
   // ✅ Nunca borrar hEnt/hSal/lIni/lFin si ya tienen valor capturado
-  // (applyAutoFill no debe pisar horas del día en curso)
-
   updDate();
 }
 
