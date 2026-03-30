@@ -2994,8 +2994,11 @@ function calcGrpAct(gi){
     for(var si=0;si<surcos.length;si++) metros+=(parseFloat(surcos[si].largo)||0)*(parseFloat(surcos[si].num)||0);
     var puertas = metros/100;
     if(!puertas||!np){ res.style.display='none'; return; }
-    ppp = puertas*act.p/np;
-    res.innerHTML = metros.toFixed(0)+' ft ÷ 100 = <strong>'+puertas.toFixed(2)+' puertas</strong> × $'+act.p+' = <strong>$'+(puertas*act.p).toFixed(2)+'</strong> ÷ '+np+' = <strong style="color:var(--a)">$'+ppp.toFixed(2)+' c/u</strong>';
+    var puertasPorPersona = puertas/np;
+    ppp = puertasPorPersona*act.p;
+    res.innerHTML = metros.toFixed(1)+' ft ÷ 100 = <strong>'+puertas.toFixed(2)+' puertas</strong>'
+      +' ÷ '+np+' = <strong style="color:var(--g)">'+puertasPorPersona.toFixed(2)+' puertas c/u</strong> 📋'
+      +' × $'+act.p+' = <strong style="color:var(--a)">$'+ppp.toFixed(2)+' c/u</strong>';
   } else if(ct==='cajas'){
     var totalC  = parseFloat(g.vars.totalC)||0;
     var precioC = parseFloat(g.vars.precioC)||act.p||0.80;
