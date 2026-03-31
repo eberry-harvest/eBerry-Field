@@ -119,8 +119,19 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .cn{font-weight:600;font-size:14px}
 .cd{font-size:11px;color:var(--gr);margin-top:3px}
 .sa{background:none;border:none;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;color:var(--g);cursor:pointer;text-decoration:underline;display:block;text-align:right;margin-bottom:5px;padding:3px 0}
-.ga{background:var(--ap);border:1.5px solid var(--a);border-radius:12px;padding:13px;margin-bottom:11px}
-.gat{font-weight:700;font-size:14px;margin-bottom:8px}
+.ga{background:var(--ap);border:1.5px solid var(--a);border-radius:12px;margin-bottom:11px;overflow:hidden}
+.gaHead{display:flex;align-items:flex-start;padding:12px 13px;gap:9px;cursor:pointer}
+.gaSum{flex:1;min-width:0}
+.gaPreview{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}
+.ga.op .gaPreview{display:none}
+.gaPill{background:#fff;border-radius:12px;padding:2px 8px;font-size:10px;font-weight:600;color:var(--a);white-space:nowrap}
+.gaPill.ptas{background:var(--gp);color:var(--g)}
+.gaTot{font-family:'Bebas Neue',sans-serif;font-size:17px;color:var(--a);white-space:nowrap}
+.gaArr{color:var(--gr);font-size:15px;transition:.25s}
+.ga.op .gaArr{transform:rotate(180deg)}
+.gaBody{display:none;padding:0 13px 13px;border-top:1px solid rgba(196,135,52,.2)}
+.ga.op .gaBody{display:block}
+.gat{font-weight:700;font-size:14px;margin-bottom:0}
 .gat em{color:var(--a);font-style:normal}
 .pl{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0}
 .pc{border:1.5px solid var(--bd);border-radius:20px;padding:5px 10px;font-size:12px;font-weight:500;cursor:pointer;background:#fff}
@@ -3047,30 +3058,36 @@ function renderGrpActs(){
     var act = GRUPAL_ACTS[g.gai];
     if(!act) continue;
     var ct  = grpCalcType(act);
+    // Estado open: default true si no existe
+    if(g.open===undefined) g.open=true;
     var card = document.createElement('div');
-    card.className = 'ga'; card.style.marginBottom='12px';
+    card.className = 'ga'+(g.open?' op':''); card.id='ga'+gi;
 
-    var headerHtml = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
-      +'<div class="gat" style="margin:0">🌿 '+act.es+'</div>'
-      +'<button data-gai="'+g.gai+'" onclick="removeGrpAct(parseInt(this.dataset.gai))" style="background:var(--rp);color:var(--r);border:none;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer">✕ Quitar</button>'
+    // ── HEADER clickable (siempre visible) ──
+    var headHtml = '<div class="gaHead" data-gi="'+gi+'" onclick="togGrpCard(parseInt(this.dataset.gi))">'
+      +'<div class="gaSum">'
+      +'<div class="gat">🌿 '+act.es+'</div>'
+      +'<div class="gaPreview" id="gaPrev'+gi+'"></div>'
+      +'</div>'
+      +'<span class="gaTot" id="gaTot'+gi+'"></span>'
+      +'<span class="gaArr">▾</span>'
+      +'</div>';
+
+    // ── BODY colapsable ──
+    var removeBtn = '<div style="display:flex;justify-content:flex-end;margin-bottom:10px">'
+      +'<button data-gai="'+g.gai+'" onclick="event.stopPropagation();removeGrpAct(parseInt(this.dataset.gai))" style="background:var(--rp);color:var(--r);border:none;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer">✕ Quitar</button>'
       +'</div>';
 
     var varsHtml = '';
     if(ct === 'puertas'){
-      // ── Sistema de surcos dinámico ──
-      // g.vars.surcos = [{largo:'', num:''}]  → filas capturadas por el surquero
-      // g.vars.anchoCama = ''                  → ancho de cama para calcular acres
       if(!g.vars.surcos || !g.vars.surcos.length) g.vars.surcos = [{largo:'',num:''}];
       var anchoCama = g.vars.anchoCama||'';
-
-      // Construir filas de surcos
       var filasHtml = '';
       for(var fi=0;fi<g.vars.surcos.length;fi++){
         var sf = g.vars.surcos[fi];
         var sub = (parseFloat(sf.largo)||0)*(parseFloat(sf.num)||0);
         var lbl = sf.lbl||'';
         filasHtml += '<div style="background:var(--lt);border:1.5px solid var(--bd);border-radius:8px;padding:9px 10px;margin-bottom:8px">'
-          // Fila 1: etiqueta + subtotal
           +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px">'
           +'<div style="display:flex;align-items:center;gap:6px">'
           +'<span style="font-size:10px;font-weight:700;color:var(--gr);text-transform:uppercase">Bloque</span>'
@@ -3085,7 +3102,6 @@ function renderGrpActs(){
             +' style="background:var(--rp);color:var(--r);border:none;border-radius:5px;padding:5px 9px;font-size:11px;font-weight:700;cursor:pointer">✕ Borrar</button>'
             :'<span></span>')
           +'</div>'
-          // Fila 2: largo × surcos
           +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">'
           +'<div><label style="font-size:10px">Largo surco (pies)</label>'
           +'<input type="text" inputmode="decimal" value="'+(sf.largo||'')+'" placeholder="ej: 709.5"'
@@ -3098,30 +3114,23 @@ function renderGrpActs(){
           +'</div>'
           +'</div>';
       }
-
-      // Calcular metros lineales totales (suma de todas las filas)
       var metrosTotal = 0;
       for(var fi2=0;fi2<g.vars.surcos.length;fi2++){
         metrosTotal += (parseFloat(g.vars.surcos[fi2].largo)||0)*(parseFloat(g.vars.surcos[fi2].num)||0);
       }
-      // Puertas = metros / 100 (constante)
       var puertasTot = metrosTotal/100;
-      // Acres = puertas ÷ ancho de cama (no metros)
       var acresCalc = (anchoCama && puertasTot) ? puertasTot/(parseFloat(anchoCama)||1) : 0;
 
       varsHtml = '<div style="font-size:11px;font-weight:700;color:var(--gr);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">📏 Surcos trabajados</div>'
         + filasHtml
         +'<button data-gi="'+gi+'" onclick="addSurcoFila(parseInt(this.dataset.gi))"'
         +' style="width:100%;padding:8px;border:2px dashed var(--g2);border-radius:7px;background:none;color:var(--g);font-family:\'DM Sans\',sans-serif;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:10px">＋ Agregar otro surco</button>'
-        // Metros lineales totales — siempre presente con ID para actualizar
         +'<div id="gaMetros'+gi+'" style="background:var(--gp);border-radius:7px;padding:9px 12px;margin-bottom:8px;display:'+(metrosTotal>0?'flex':'none')+';justify-content:space-between;align-items:center">'
         +'<span style="font-size:12px;font-weight:600;color:var(--g)">📐 Metros lineales totales</span>'
         +'<b style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:var(--g)" id="gaMetrosVal'+gi+'">'+metrosTotal.toFixed(1)+' ft</b></div>'
-        // Puertas totales — siempre presente con ID
         +'<div id="gaPuertas'+gi+'" style="background:var(--dk);border-radius:7px;padding:9px 12px;margin-bottom:8px;display:'+(metrosTotal>0?'flex':'none')+';justify-content:space-between;align-items:center">'
         +'<span style="font-size:12px;font-weight:600;color:rgba(255,255,255,.7)">🚪 Puertas totales (÷100)</span>'
         +'<b style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:var(--a)" id="gaPuertasVal'+gi+'">'+puertasTot.toFixed(2)+'</b></div>'
-        // Horario de la actividad grupal
         +'<div class="r2" style="margin-bottom:8px">'
         +'<div><label style="font-size:10px">🟢 Entrada</label>'
         +'<input type="time" step="1800" value="'+(g.vars.ini||'')+'"'
@@ -3132,17 +3141,14 @@ function renderGrpActs(){
         +' data-gi="'+gi+'" data-v="fin" onchange="setGrpVar(this)"'
         +' style="font-size:14px;padding:9px 10px;width:100%"></div>'
         +'</div>'
-        // Ancho de cama
         +'<div style="margin-bottom:6px"><label style="font-size:10px">🌱 Ancho de cama (para calcular acres)</label>'
         +'<input type="text" inputmode="decimal" value="'+anchoCama+'" placeholder="ej: 5.5"'
         +' data-gi="'+gi+'" data-v="anchoCama" oninput="setGrpVar(this)"'
         +' style="font-size:14px;padding:9px 10px;width:100%"></div>'
-        // Labor / Finca de esta actividad grupal
         +'<div style="margin-bottom:6px"><label style="font-size:10px">📍 Labor / Finca (aparece en el PDF)</label>'
         +'<input type="text" value="'+(g.vars.finca||'')+'" placeholder="ej: El Columpio, Block 3..."'
         +' data-gi="'+gi+'" data-v="finca" oninput="setGrpVar(this)"'
         +' style="font-size:14px;padding:9px 10px;width:100%"></div>'
-        // Acres — siempre presente con ID
         +'<div id="gaAcres'+gi+'" style="background:var(--bp);border-radius:7px;padding:9px 12px;margin-bottom:8px;display:'+(metrosTotal>0&&anchoCama&&parseFloat(anchoCama)>0?'flex':'none')+';justify-content:space-between;align-items:center">'
         +'<span style="font-size:12px;font-weight:600;color:var(--b)">🌿 Acres trabajados</span>'
         +'<b style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:var(--b)" id="gaAcresVal'+gi+'">'+acresCalc.toFixed(3)+'</b></div>';
@@ -3163,7 +3169,6 @@ function renderGrpActs(){
         +'<input type="time" value="'+hFin+'" data-gi="'+gi+'" data-v="fin" onchange="setGrpVar(this)" style="font-size:14px;padding:10px 11px"></div>'
         +'</div>';
     } else {
-      // pieza — cantidad total a dividir
       var totalP = g.vars.totalP||'';
       varsHtml = '<div style="margin-bottom:8px"><label style="font-size:10px">Cantidad total ('+act.tipo+')</label>'
         +'<input type="number" min="0" step="1" value="'+totalP+'" placeholder="0" data-gi="'+gi+'" data-v="totalP" onchange="setGrpVar(this)" style="font-size:14px;padding:10px 11px;width:100%"></div>';
@@ -3176,7 +3181,8 @@ function renderGrpActs(){
     // Resultado
     var resHtml = '<div class="gr2 gaR" id="gaR'+gi+'" style="display:none"></div>';
 
-    card.innerHTML = headerHtml + varsHtml + partHtml + resHtml;
+    card.innerHTML = headHtml
+      + '<div class="gaBody">' + removeBtn + varsHtml + partHtml + resHtml + '</div>';
     list.appendChild(card);
 
     // Render participantes
@@ -3184,6 +3190,56 @@ function renderGrpActs(){
     calcGrpAct(gi);
   }
   updParts();
+}
+
+function togGrpCard(gi){
+  var g=grpActs[gi]; if(!g)return;
+  g.open=!g.open;
+  var c=gEl('ga'+gi); if(c)c.classList.toggle('op',g.open);
+  autoSave();
+}
+
+// Actualiza el preview (pills) del header cuando la tarjeta está colapsada
+function updGrpPreview(gi){
+  var g=grpActs[gi]; if(!g)return;
+  var act=GRUPAL_ACTS[g.gai]; if(!act)return;
+  var ct=grpCalcType(act);
+  var np=g.participantes.length;
+  var prev=gEl('gaPrev'+gi);
+  var tot=gEl('gaTot'+gi);
+
+  // Calcular datos del resumen
+  var ppp=0, qtyLabel='';
+  if(ct==='puertas'){
+    var metros=0; var surcos=g.vars.surcos||[];
+    for(var si=0;si<surcos.length;si++) metros+=(parseFloat(surcos[si].largo)||0)*(parseFloat(surcos[si].num)||0);
+    var puertas=metros/100;
+    if(puertas&&np){
+      var ppx=puertas/np;
+      ppp=ppx*act.p;
+      qtyLabel=ppx.toFixed(1)+' ptas c/u';
+    }
+  } else if(ct==='cajas'){
+    var totalC=parseFloat(g.vars.totalC)||0;
+    var precioC=parseFloat(g.vars.precioC)||act.p||0.80;
+    if(totalC&&np){ ppp=totalC/np*precioC; qtyLabel=(totalC/np).toFixed(1)+' cajas c/u'; }
+  } else if(ct==='hora'){
+    var h=nh(g.vars.ini||'',g.vars.fin||'');
+    if(h&&np){ ppp=h*act.p; qtyLabel=h+'h c/u'; }
+  } else {
+    var totalP=parseFloat(g.vars.totalP)||0;
+    if(totalP&&np){ ppp=totalP/np*act.p; qtyLabel=(totalP/np).toFixed(1)+' '+act.tipo+' c/u'; }
+  }
+
+  // Construir pills
+  var pills='';
+  if(np) pills+='<span class="gaPill">👤 '+np+' trabajador'+(np>1?'es':'')+'</span>';
+  if(qtyLabel) pills+='<span class="gaPill ptas">'+qtyLabel+'</span>';
+  if(ppp) pills+='<span class="gaPill pay">$'+ppp.toFixed(2)+' c/u</span>';
+  if(!np&&!ppp) pills+='<span class="gaPill">Sin datos aún</span>';
+
+  if(prev) prev.innerHTML=pills;
+  if(tot) tot.textContent=ppp&&np?'$'+(ppp*np).toFixed(2):'';
 }
 
 function setGrpVar(inp){
@@ -3321,7 +3377,7 @@ function calcGrpAct(gi){
     var surcos = g.vars.surcos||[];
     for(var si=0;si<surcos.length;si++) metros+=(parseFloat(surcos[si].largo)||0)*(parseFloat(surcos[si].num)||0);
     var puertas = metros/100;
-    if(!puertas||!np){ res.style.display='none'; return; }
+    if(!puertas||!np){ res.style.display='none'; updGrpPreview(gi); return; }
     var puertasPorPersona = puertas/np;
     ppp = puertasPorPersona*act.p;
     res.innerHTML = metros.toFixed(1)+' ft ÷ 100 = <strong>'+puertas.toFixed(2)+' puertas</strong>'
@@ -3330,22 +3386,24 @@ function calcGrpAct(gi){
   } else if(ct==='cajas'){
     var totalC  = parseFloat(g.vars.totalC)||0;
     var precioC = parseFloat(g.vars.precioC)||act.p||0.80;
-    if(!totalC||!np){ res.style.display='none'; return; }
+    if(!totalC||!np){ res.style.display='none'; updGrpPreview(gi); return; }
     ppp = totalC/np*precioC;
     res.innerHTML = totalC+' cajas ÷ '+np+' = <strong>'+(totalC/np).toFixed(1)+'</strong> × $'+precioC+' = <strong style="color:var(--a)">$'+ppp.toFixed(2)+' c/u</strong>';
   } else if(ct==='hora'){
     var ini = g.vars.ini||''; var fin = g.vars.fin||'';
     var h   = nh(ini,fin);
-    if(!h||!np){ res.style.display='none'; return; }
+    if(!h||!np){ res.style.display='none'; updGrpPreview(gi); return; }
     ppp = h*act.p;
     res.innerHTML = h+' h × $'+act.p+' = <strong style="color:var(--a)">$'+ppp.toFixed(2)+' c/u</strong>';
   } else {
     var totalP = parseFloat(g.vars.totalP)||0;
-    if(!totalP||!np){ res.style.display='none'; return; }
+    if(!totalP||!np){ res.style.display='none'; updGrpPreview(gi); return; }
     ppp = totalP/np*act.p;
     res.innerHTML = totalP+' '+act.tipo+' ÷ '+np+' = <strong>'+(totalP/np).toFixed(1)+'</strong> × $'+act.p+' = <strong style="color:var(--a)">$'+ppp.toFixed(2)+' c/u</strong>';
   }
   res.style.display='block';
+  // Actualizar preview del header colapsado
+  updGrpPreview(gi);
   // Actualizar totales de todos los participantes
   for(var i=0;i<workers.length;i++) updTot(workers[i].id);
 }
