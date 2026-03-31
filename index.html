@@ -1327,7 +1327,7 @@ function mkCard(w,wi){
   b.appendChild(rb);
   b.appendChild(document.createElement('br'));
   c.appendChild(b);
-  for(var i=0;i<w.acts.length;i++) mkActRow(w.id,i);
+  for(var i=0;i<w.acts.length;i++) mkActRow(w.id,i,ac);
   return c;
 }
 
@@ -1346,10 +1346,10 @@ function addAct(wid_){
   autoSave();
 }
 
-function mkActRow(wid_,ai){
+function mkActRow(wid_,ai,_cont){
   var w=getW(wid_); if(!w||!w.acts[ai])return;
   var a=w.acts[ai]; var act=ACTS[a.ai];
-  var cont=gEl('ac'+wid_); if(!cont)return;
+  var cont=_cont||gEl('ac'+wid_); if(!cont)return;
   var div=document.createElement('div');
   div.className='ar'; div.id='ar'+wid_+'_'+ai;
   var arh=document.createElement('div'); arh.className='arh';
