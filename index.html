@@ -2854,6 +2854,68 @@ function sendToSheets() {
     ausSent++;
   }
 
+  // ── Actividades grupales → una fila por participante ──
+  // Cada participante recibe su qty (puertas/cajas/piezas c/u) en col K,
+  // precio en col L, y FieldSync calcula payEst en col M.
+  var grpSent = 0;
+  for (var gi = 0; gi < grpActs.length; gi++) {
+    var g   = grpActs[gi];
+    var act = GRUPAL_ACTS[g.gai];
+    if (!act) continue;
+    var ct  = grpCalcType(act);
+    var np  = g.participantes.length;
+    if (!np) continue;
+
+    var qtyPerPerson = 0;
+    var unitP = act.p || 0;
+
+    if (ct === 'puertas') {
+      var metros = 0;
+      var surcos = g.vars.surcos || [];
+      for (var si = 0; si < surcos.length; si++) metros += (parseFloat(surcos[si].largo) || 0) * (parseFloat(surcos[si].num) || 0);
+      qtyPerPerson = (metros / 100) / np; // puertas ÷ personas
+    } else if (ct === 'cajas') {
+      var totalC = parseFloat(g.vars.totalC) || 0;
+      qtyPerPerson = totalC / np;
+      unitP = parseFloat(g.vars.precioC) || act.p || 0.80;
+    } else if (ct === 'hora') {
+      var hGrp = nh(g.vars.ini || '', g.vars.fin || '');
+      qtyPerPerson = hGrp || 0; // horas (igual para todos)
+    } else {
+      var totalP = parseFloat(g.vars.totalP) || 0;
+      qtyPerPerson = totalP / np;
+    }
+
+    if (!qtyPerPerson) continue;
+
+    // Buscar o crear la fila de cada participante
+    for (var pi = 0; pi < g.participantes.length; pi++) {
+      var w = getW(g.participantes[pi]);
+      if (!w) continue;
+
+      // Buscar si este worker ya tiene una entrada en payload.workers
+      var found = null;
+      for (var pw = 0; pw < payload.workers.length; pw++) {
+        if (payload.workers[pw].name === w.name) { found = payload.workers[pw]; break; }
+      }
+      if (!found) {
+        found = { name: w.name, acts: [] };
+        payload.workers.push(found);
+      }
+
+      found.acts.push({
+        actEs:      act.es,
+        actEn:      act.en || act.es,
+        tipo:       ct === 'hora' ? 'Hora' : (act.tipo || ct.charAt(0).toUpperCase() + ct.slice(1)),
+        unitPrice:  unitP,
+        qty:        Math.round(qtyPerPerson * 100) / 100,
+        totalHours: ct === 'hora' ? qtyPerPerson : '',
+        finca:      g.vars.labor || gVal('finca')
+      });
+      grpSent++;
+    }
+  }
+
   var btn = gEl('sheetsSendBtn');
   if (btn) { btn.textContent = '📤 Enviando...'; btn.disabled = true; }
 
@@ -2885,6 +2947,7 @@ function sendToSheets() {
 
     fr.onload = function() {
       var msg = '✅ ' + workers.length + ' trabajador(es)';
+      if (grpSent) msg += ' + ' + grpSent + ' grupal(es)';
       if (ausSent) msg += ' + ' + ausSent + ' ausencia(s)';
       msg += ' enviados a Payroll';
       toast(msg);
