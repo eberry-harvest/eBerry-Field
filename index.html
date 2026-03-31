@@ -1456,6 +1456,7 @@ function onFin(wi,ai,v){ var w=getW(wi); if(!w||!w.acts[ai])return; w.acts[ai].f
 function recalc(wi,ai){
   var w=getW(wi); if(!w||!w.acts[ai])return;
   var a=w.acts[ai]; var act=ACTS[a.ai]; var pay=0;
+  if(!act) return;
   if(act.hr){ pay=totalShiftHours(a)*act.p; }
   else if(act.tipo==='$'){ pay=parseFloat(a.qty)||0; }
   else { pay=(parseFloat(a.qty)||0)*act.p; }
@@ -1472,6 +1473,7 @@ function recalc(wi,ai){
 function updBadge(wi,ai){
   var w=getW(wi); if(!w||!w.acts[ai])return;
   var a=w.acts[ai]; var act=ACTS[a.ai];
+  if(!act) return;
   var bd=gEl('bd'+wi+'_'+ai); if(!bd)return;
   if(act.hr){
     var totalH=totalShiftHours(a);
@@ -3033,7 +3035,7 @@ function addGrpAct(gai){
   for(var i=0;i<grpActs.length;i++){
     if(grpActs[i].gai===gai){ toast('⚠️ Ya está agregada'); gEl('grpPickOv').classList.remove('on'); return; }
   }
-  grpActs.push({gai:gai, participantes:[], vars:{}});
+  grpActs.push({gai:gai, participantes:[], vars:{}, open:true});
   gEl('grpPickOv').classList.remove('on');
   renderGrpActs(); autoSave();
 }
