@@ -1248,23 +1248,79 @@ function updBanner(){
 
 function onAC(v){
   var dr=gEl('drop'); if(v.length<2){dr.classList.remove('on');return;}
-  var q=v.toLowerCase(), res=[];
-  for(var i=0;i<NAMES.length;i++){
-    if(NAMES[i].toLowerCase().indexOf(q)>=0){
-      var found=false; for(var j=0;j<workers.length;j++){ if(workers[j].name===NAMES[i]){found=true;break;} }
-      if(!found)res.push(NAMES[i]);
-    }
-    if(res.length>=7)break;
+  var q=v.trim().toLowerCase();
+  // Separar palabras para búsqueda inteligente
+  var words=q.split(/\s+/).filter(function(w){return w.length>0;});
+
+  // Helper: ¿ya está en la lista del día?
+  function alreadyAdded(nm){
+    for(var j=0;j<workers.length;j++){ if(workers[j].name===nm) return true; }
+    return false;
   }
-  if(!res.length){dr.classList.remove('on');return;}
-  var esc=v.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
-  var rx=new RegExp('('+esc+')','gi');
+  // Helper: ¿todas las palabras hacen match en el nombre?
+  function matchesAllWords(nameLower){
+    for(var wi=0;wi<words.length;wi++){
+      if(nameLower.indexOf(words[wi])<0) return false;
+    }
+    return true;
+  }
+
+  // 1) Buscar en crew actual (NAMES)
+  var crewRes=[];
+  for(var i=0;i<NAMES.length;i++){
+    if(matchesAllWords(NAMES[i].toLowerCase()) && !alreadyAdded(NAMES[i])){
+      crewRes.push(NAMES[i]);
+    }
+    if(crewRes.length>=5)break;
+  }
+
+  // 2) Si hay espacio + 2 letras en la segunda palabra, buscar también en ALL_WORKERS
+  var otherRes=[];
+  var searchAll = words.length>=2 && words[words.length-1].length>=2;
+  if(searchAll){
+    for(var i2=0;i2<ALL_WORKERS.length;i2++){
+      var aw=ALL_WORKERS[i2];
+      if(matchesAllWords(aw.name.toLowerCase()) && !alreadyAdded(aw.name)){
+        // No duplicar los del crew actual
+        var inCrew=false;
+        for(var c=0;c<crewRes.length;c++){ if(crewRes[c]===aw.name){inCrew=true;break;} }
+        if(!inCrew) otherRes.push({name:aw.name, crew:aw.crew||''});
+      }
+      if(otherRes.length>=5)break;
+    }
+  }
+
+  if(!crewRes.length && !otherRes.length){dr.classList.remove('on');return;}
+
+  // Construir highlight regex con todas las palabras
+  var rxParts=[];
+  for(var rp=0;rp<words.length;rp++){
+    rxParts.push(words[rp].replace(/[.*+?^${}()|[\]\\]/g,'\\$&'));
+  }
+  var rx=new RegExp('('+rxParts.join('|')+')','gi');
+
   dr.innerHTML='';
-  for(var k=0;k<res.length;k++){
+  // Crew actual primero
+  for(var k=0;k<crewRes.length;k++){
     var d=document.createElement('div'); d.className='di';
-    d.innerHTML=res[k].replace(rx,'<mark>$1</mark>');
-    (function(nm){ d.addEventListener('mousedown',function(){ gEl('srch').value=nm; dr.classList.remove('on'); doAdd(nm); }); })(res[k]);
+    d.innerHTML=crewRes[k].replace(rx,'<mark>$1</mark>');
+    (function(nm){ d.addEventListener('mousedown',function(){ gEl('srch').value=nm; dr.classList.remove('on'); doAdd(nm); }); })(crewRes[k]);
     dr.appendChild(d);
+  }
+  // Separador si hay resultados de otros crews
+  if(crewRes.length && otherRes.length){
+    var sep=document.createElement('div');
+    sep.style.cssText='padding:5px 13px;font-size:10px;font-weight:700;color:var(--gr);text-transform:uppercase;letter-spacing:.5px;border-top:1px solid var(--bd);background:var(--lt)';
+    sep.textContent='Otros crews';
+    dr.appendChild(sep);
+  }
+  // Otros crews
+  for(var k2=0;k2<otherRes.length;k2++){
+    var d2=document.createElement('div'); d2.className='di';
+    d2.innerHTML=otherRes[k2].name.replace(rx,'<mark>$1</mark>')
+      +'<span style="font-size:10px;color:var(--gr);margin-left:6px">'+esc(otherRes[k2].crew)+'</span>';
+    (function(nm){ d2.addEventListener('mousedown',function(){ gEl('srch').value=nm; dr.classList.remove('on'); doAdd(nm); }); })(otherRes[k2].name);
+    dr.appendChild(d2);
   }
   dr.classList.add('on');
 }
