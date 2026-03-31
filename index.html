@@ -323,6 +323,21 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
   </div>
 </div>
 
+<!-- CONTRACT BLOCK MODAL -->
+<div class="ov" id="ioeOv">
+  <div class="md">
+    <div class="mt" style="color:var(--r)">🚫 Contrato no autorizado</div>
+    <div class="ms" id="ioeMsg" style="line-height:1.6"></div>
+    <div style="background:var(--rp);border-radius:8px;padding:12px;margin:10px 0;text-align:center">
+      <div style="font-size:12px;font-weight:700;color:var(--r)">Comunícate a las oficinas de eBerry</div>
+      <a href="tel:8636754289" style="font-family:'Bebas Neue',sans-serif;font-size:24px;color:var(--r);text-decoration:none">863 675 4289</a>
+    </div>
+    <div class="mbs">
+      <button class="mca" onclick="gEl('ioeOv').classList.remove('on')">Entendido</button>
+    </div>
+  </div>
+</div>
+
 <!-- HISTORY MODAL -->
 <div class="ov" id="histOv">
   <div class="md" style="max-height:80vh;overflow-y:auto">
@@ -665,7 +680,8 @@ function hashPin(pin){
 
 // ── DATA (loaded from Sheets) ──
 var NAMES = []; // workers for current crew
-var ALL_WORKERS = []; // [{name, crew, empNum}]
+var ALL_WORKERS = []; // [{name, crew, empNum, ioe}]
+var CONTRATOS = {}; // {ioeKey: [rancho1, rancho2, ...]}
 var ACTS = [];  // actividades individuales del rancho actual
 var GRUPAL_ACTS = []; // actividades grupales del rancho actual
 var ALL_ACTS = []; // all activities from sheet
@@ -1094,6 +1110,7 @@ function loadSheetsData(){
   fetchFromScript('workers', function(err, data){
     if(!err && data && data.success && data.workers){
       ALL_WORKERS = data.workers;
+      if(data.contratos) CONTRATOS = data.contratos;
     } else {
       ALL_WORKERS = [];
       toast('⚠️ Usando datos locales (sin conexión)');
@@ -1327,6 +1344,39 @@ function onAC(v){
 function closeAC(){ setTimeout(function(){ gEl('drop').classList.remove('on'); },200); }
 function addFrom(){ var n=gEl('srch').value.trim(); if(!n){toast('⚠️ Escribe un nombre');return;} doAdd(n); }
 
+// ── Validación de contrato IOE vs rancho ──
+function checkContrato(name){
+  var rancho = (gVal('rancho')||'').trim().toLowerCase();
+  if(!rancho) return null; // sin rancho configurado, no validar
+  // Buscar worker en ALL_WORKERS para obtener su IOE
+  var wk = null;
+  for(var i=0;i<ALL_WORKERS.length;i++){
+    if(ALL_WORKERS[i].name.toLowerCase()===name.toLowerCase()){ wk=ALL_WORKERS[i]; break; }
+  }
+  if(!wk || !wk.ioe) return null; // sin IOE, no validar
+  // Buscar ranchos permitidos para ese IOE en CONTRATOS
+  var allowed = CONTRATOS[wk.ioe];
+  if(!allowed || !allowed.length) return null; // sin datos de contrato, no bloquear
+  // Verificar si el rancho actual está en la lista permitida
+  for(var j=0;j<allowed.length;j++){
+    if(allowed[j].toLowerCase()===rancho) return null; // ✅ permitido
+  }
+  // 🚫 No permitido — devolver info para el mensaje
+  return { ioe: wk.ioe, allowed: allowed, rancho: gVal('rancho').trim() };
+}
+
+function showIoeBlock(info, name){
+  var msg = '⚠️ '+name+'\n\n'
+    +'Tu contrato es '+info.ioe+'\n\n'
+    +'Solo puedes trabajar en:\n';
+  for(var i=0;i<info.allowed.length;i++) msg += '  • '+info.allowed[i]+'\n';
+  msg += '\nNo puedes trabajar en "'+info.rancho+'".';
+  gEl('ioeMsg').textContent = msg;
+  gEl('ioeMsg').style.whiteSpace = 'pre-line';
+  gEl('ioeOv').classList.add('on');
+  gEl('srch').value='';
+}
+
 function doAdd(name){
   if(nameInArr(workers,name)){toast('⚠️ Ya está en la lista');return;}
 
@@ -1335,6 +1385,11 @@ function doAdd(name){
 
   // Check if in current crew
   var inCrew = officialName !== name || !!findInStrArr(NAMES,name);
+
+  // 🚫 Validar contrato antes de agregar
+  var ioeCheck = checkContrato(officialName);
+  if(ioeCheck){ showIoeBlock(ioeCheck, officialName); return; }
+
   if(inCrew){ doAddConfirmed(officialName); return; }
 
   // Check if in another crew (from ALL_WORKERS) — use official name from DB
@@ -1342,6 +1397,10 @@ function doAdd(name){
   var foundInDB = !!dbMatch;
   var otherCrew = dbMatch ? dbMatch.crew : '';
   if(dbMatch) officialName = dbMatch.name;
+
+  // Re-check contrato con nombre oficial del DB
+  var ioeCheck2 = checkContrato(officialName);
+  if(ioeCheck2){ showIoeBlock(ioeCheck2, officialName); return; }
 
   pendingUnk = officialName; // always use official name
   if(foundInDB && otherCrew){
@@ -3720,7 +3779,7 @@ function saveCache(workers, acts, lideres){
   try{
     localStorage.setItem(CACHE_KEY, JSON.stringify({
       workers: workers, acts: acts, lideres: lideres,
-      ts: Date.now()
+      contratos: CONTRATOS, ts: Date.now()
     }));
   }catch(e){}
 }
@@ -3777,6 +3836,7 @@ window.addEventListener('DOMContentLoaded', function(){
     ALL_WORKERS = cache.workers;
     ALL_ACTS    = cache.acts || [];
     LIDERES     = cache.lideres || [];
+    if(cache.contratos) CONTRATOS = cache.contratos;
     setLoading(false);
     showLogin();
     // Refresh in background silently
@@ -3792,6 +3852,7 @@ function refreshDataBackground(){
   fetchFromScript('workers', function(err, data){
     if(!err && data && data.success && data.workers){
       ALL_WORKERS = data.workers;
+      if(data.contratos) CONTRATOS = data.contratos;
       buildLideres();
       saveCache(ALL_WORKERS, ALL_ACTS, LIDERES);
     }
