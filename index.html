@@ -1353,10 +1353,12 @@ function checkContrato(name){
   for(var i=0;i<ALL_WORKERS.length;i++){
     if(ALL_WORKERS[i].name.toLowerCase()===name.toLowerCase()){ wk=ALL_WORKERS[i]; break; }
   }
-  if(!wk || !wk.ioe) return null; // sin IOE, no validar
+  if(!wk) return null; // no está en DB, dejar pasar (manual entry)
+  // 🚫 Sin número de contrato IOE — bloquear
+  if(!wk.ioe) return { noIoe: true, rancho: gVal('rancho').trim() };
   // Buscar ranchos permitidos para ese IOE en CONTRATOS
   var allowed = CONTRATOS[wk.ioe];
-  if(!allowed || !allowed.length) return null; // sin datos de contrato, no bloquear
+  if(!allowed || !allowed.length) return null; // sin datos de contrato en tab, no bloquear
   // Verificar si el rancho actual está en la lista permitida
   for(var j=0;j<allowed.length;j++){
     if(allowed[j].toLowerCase()===rancho) return null; // ✅ permitido
@@ -1366,11 +1368,19 @@ function checkContrato(name){
 }
 
 function showIoeBlock(info, name){
-  var msg = '⚠️ '+name+'\n\n'
-    +'Tu contrato es '+info.ioe+'\n\n'
-    +'Solo puedes trabajar en:\n';
-  for(var i=0;i<info.allowed.length;i++) msg += '  • '+info.allowed[i]+'\n';
-  msg += '\nNo puedes trabajar en "'+info.rancho+'".';
+  var msg = '';
+  if(info.noIoe){
+    msg = '⚠️ '+name+'\n\n'
+      +'No tienes número de contrato registrado.\n\n'
+      +'Sin contrato no puedes trabajar en ningún rancho.\n\n'
+      +'Favor de contactar con la oficina para regularizar tu situación.';
+  } else {
+    msg = '⚠️ '+name+'\n\n'
+      +'Tu contrato es '+info.ioe+'\n\n'
+      +'Solo puedes trabajar en:\n';
+    for(var i=0;i<info.allowed.length;i++) msg += '  • '+info.allowed[i]+'\n';
+    msg += '\nNo puedes trabajar en "'+info.rancho+'".';
+  }
   gEl('ioeMsg').textContent = msg;
   gEl('ioeMsg').style.whiteSpace = 'pre-line';
   gEl('ioeOv').classList.add('on');
