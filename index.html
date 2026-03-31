@@ -1413,7 +1413,15 @@ function doAdd(name){
   gEl('unkN').textContent=officialName;
   gEl('unkOv').classList.add('on');
 }
-function okUnk(){ if(pendingUnk){ doAddConfirmed(pendingUnk); pendingUnk=null; } gEl('unkOv').classList.remove('on'); }
+function okUnk(){
+  if(pendingUnk){
+    // Validar contrato antes de confirmar
+    var ioeChk = checkContrato(pendingUnk);
+    if(ioeChk){ showIoeBlock(ioeChk, pendingUnk); pendingUnk=null; gEl('unkOv').classList.remove('on'); return; }
+    doAddConfirmed(pendingUnk); pendingUnk=null;
+  }
+  gEl('unkOv').classList.remove('on');
+}
 function noUnk(){ pendingUnk=null; gEl('unkOv').classList.remove('on'); }
 function doAddConfirmed(name){
   var w={id:wid++,name:name,open:true,acts:[],totalPay:0};
