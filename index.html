@@ -2764,14 +2764,14 @@ function askDelAll(){
   gEl('delAllOv').classList.add('on');
 }
 function confirmDelAll(){
-  // Iota: solo reset de workers/participantes (no ausencias ni grpActs)
-  workers=[]; wid=0; estP=[]; hilP=[]; cajasP=[];
+  // Mu: reset de workers + grpActs (no ausencias)
+  workers=[]; wid=0; estP=[]; hilP=[]; cajasP=[]; grpActs=[];
   var list=gEl('wlist'); list.innerHTML='';
   var ph=document.createElement('div'); ph.id='wph';
   ph.style.cssText='text-align:center;padding:40px 18px;color:var(--gr);font-size:14px';
   ph.textContent='Escribe un nombre en la barra de abajo 👇';
   list.appendChild(ph);
-  updParts(); gEl('delAllOv').classList.remove('on');
+  updParts(); renderGrpActs(); gEl('delAllOv').classList.remove('on');
   toast('✓ Lista limpia'); autoSave();
 }
 
@@ -3416,7 +3416,7 @@ function showAllEmployeesAsAbsent(){
     card.className = 'aus-card';
     card.style.cssText='padding:10px 13px;display:flex;align-items:center;justify-content:space-between';
     card.innerHTML = '<div>'
-      +'<span class="aus-name" style="font-size:13px">\U0001f464 '+esc(w.name)+'</span>'
+      +'<span class="aus-name" style="font-size:13px">👤 '+esc(w.name)+'</span>'
       +(w.empNum ? '<span class="aus-empnum">#'+esc(w.empNum)+'</span>' : '')
       +'</div>'
       +(w.crew ? '<span style="font-size:10px;color:var(--gr);background:var(--gp);border-radius:5px;padding:2px 7px">'+esc(w.crew)+'</span>' : '');
