@@ -348,7 +348,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
       <a href="tel:8636754289" style="font-family:'Bebas Neue',sans-serif;font-size:24px;color:var(--r);text-decoration:none">863 675 4289</a>
     </div>
     <div class="mbs">
-      <button class="mca" onclick="gEl('ioeOv').classList.remove('on')">Entendido</button>
+      <button class="mca" onclick="gEl('ioeOv').classList.remove('on'); if(qrActive) resumeQR();">Entendido</button>
     </div>
   </div>
 </div>
@@ -1377,10 +1377,12 @@ function addFrom(){ var n=gEl('srch').value.trim(); if(!n){toast('⚠️ Escribe
 var qrScanner = null;
 var qrSessionCount = 0;
 var qrCooldown = false; // evita escaneos duplicados
+var qrActive = false;   // true mientras el scanner está abierto — modales saben que deben regresar al scanner
 
 function startQR(){
   var ov = gEl('qrOv');
   ov.classList.add('on');
+  qrActive = true;
   qrSessionCount = 0;
   updQRCount();
   setQRStatus('Apunta la cámara al código QR del trabajador','');
@@ -1401,7 +1403,26 @@ function startQR(){
   }, 300);
 }
 
+function pauseQR(){
+  // Pausa la cámara sin cerrar el overlay (para mostrar modales encima)
+  if(qrScanner){ qrScanner.stop().catch(function(){}); }
+}
+function resumeQR(){
+  // Reanuda la cámara después de cerrar un modal
+  if(!qrActive) return;
+  setQRStatus('Apunta la cámara al siguiente QR','');
+  setTimeout(function(){
+    if(qrScanner){
+      qrScanner.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 },
+        onQRSuccess, function(){}
+      ).catch(function(err){ setQRStatus('⚠️ Error al reanudar cámara','err'); });
+    }
+  }, 500);
+}
 function stopQR(){
+  qrActive = false;
   if(qrScanner){
     qrScanner.stop().then(function(){
       qrScanner.clear();
@@ -1427,9 +1448,9 @@ function updQRCount(){
 }
 
 function onQRSuccess(decoded){
-  if(qrCooldown) return; // ignorar escaneos repetidos
+  if(qrCooldown) return;
   qrCooldown = true;
-  setTimeout(function(){ qrCooldown = false; }, 2000); // 2s cooldown entre escaneos
+  setTimeout(function(){ qrCooldown = false; }, 2500);
 
   // Formato esperado: EBERRY|NombreCompleto|NumEmpleado
   var parts = decoded.split('|');
@@ -1442,23 +1463,18 @@ function onQRSuccess(decoded){
   var qrName = parts[1].trim();
   var qrEmpNum = parts[2].trim();
 
-  // Verificar que no esté ya en la lista del día
+  // Verificar duplicado
   if(nameInArr(workers, qrName)){
     setQRStatus('⚠️ ' + qrName + ' ya está en la lista','err');
     setTimeout(function(){ setQRStatus('Apunta la cámara al siguiente QR',''); }, 2000);
     return;
   }
 
-  // Buscar en ALL_WORKERS por empNum para validar identidad
+  // Buscar en ALL_WORKERS por empNum
   var wkMatch = null;
   for(var i=0; i<ALL_WORKERS.length; i++){
-    if(ALL_WORKERS[i].empNum === qrEmpNum){
-      wkMatch = ALL_WORKERS[i];
-      break;
-    }
+    if(ALL_WORKERS[i].empNum === qrEmpNum){ wkMatch = ALL_WORKERS[i]; break; }
   }
-
-  // Si encontramos por empNum, usar el nombre oficial de la base de datos
   var officialName = wkMatch ? wkMatch.name : qrName;
 
   // Re-verificar duplicado con nombre oficial
@@ -1468,34 +1484,38 @@ function onQRSuccess(decoded){
     return;
   }
 
-  // Validar contrato IOE
+  // Validar contrato IOE — usar modal real
   var ioeCheck = checkContrato(officialName);
   if(ioeCheck){
-    // Mostrar bloqueo de contrato pero NO cerrar el scanner
-    if(ioeCheck.noIoe){
-      setQRStatus('🚫 ' + officialName + ': Sin contrato IOE. Contactar oficina.','err');
-    } else {
-      setQRStatus('🚫 ' + officialName + ': Contrato ' + ioeCheck.ioe + ' no válido para ' + ioeCheck.rancho,'err');
-    }
-    setTimeout(function(){ setQRStatus('Apunta la cámara al siguiente QR',''); }, 3000);
+    pauseQR();
+    showIoeBlock(ioeCheck, officialName);
     return;
   }
 
-  // Si no está en la DB pero el QR es válido (formato correcto), agregar con confirmación visual
-  if(!wkMatch){
-    // Trabajador no encontrado en DB — agregar pero avisar
-    setQRStatus('⚠️ ' + qrName + ' (#' + qrEmpNum + ') no está en la base de datos. Agregado.','err');
-  } else {
+  // En crew actual → auto-agregar
+  var inCrew = !!findInStrArr(NAMES, officialName);
+  if(inCrew){
+    doAddConfirmed(officialName);
+    qrSessionCount++;
+    updQRCount();
     setQRStatus('✓ ' + officialName + ' agregado','ok');
+    setTimeout(function(){ setQRStatus('Apunta la cámara al siguiente QR',''); }, 2000);
+    return;
   }
 
-  // Agregar el trabajador
-  doAddConfirmed(officialName);
-  qrSessionCount++;
-  updQRCount();
-
-  // Limpiar mensaje después de 2s para el siguiente escaneo
-  setTimeout(function(){ setQRStatus('Apunta la cámara al siguiente QR',''); }, 2000);
+  // Otro crew o no en DB → pausar scanner y mostrar modal de confirmación
+  pauseQR();
+  var otherCrew = wkMatch ? wkMatch.crew : '';
+  pendingUnk = officialName;
+  if(wkMatch && otherCrew){
+    gEl('unkS').textContent='📷 QR: Esta persona pertenece al crew "'+otherCrew+'". ¿Confirmas que deseas agregarlo a este día?';
+  } else if(wkMatch){
+    gEl('unkS').textContent='📷 QR: Esta persona está en la base de datos. ¿Confirmas agregarlo?';
+  } else {
+    gEl('unkS').textContent='📷 QR: '+qrName+' (#'+qrEmpNum+') no está en la base de datos. ¿Deseas agregarlo de todas formas?';
+  }
+  gEl('unkN').textContent=officialName;
+  gEl('unkOv').classList.add('on');
 }
 
 // ── Validación de contrato IOE vs rancho ──
@@ -1579,16 +1599,23 @@ function doAdd(name){
 }
 function okUnk(){
   if(pendingUnk){
-    // Validar contrato antes de confirmar
     var ioeChk = checkContrato(pendingUnk);
     if(ioeChk){ showIoeBlock(ioeChk, pendingUnk); pendingUnk=null; gEl('unkOv').classList.remove('on'); return; }
-    doAddConfirmed(pendingUnk); pendingUnk=null;
+    doAddConfirmed(pendingUnk);
+    if(qrActive){ qrSessionCount++; updQRCount(); }
+    pendingUnk=null;
   }
   gEl('unkOv').classList.remove('on');
+  if(qrActive) resumeQR();
 }
-function noUnk(){ pendingUnk=null; gEl('unkOv').classList.remove('on'); }
+function noUnk(){ pendingUnk=null; gEl('unkOv').classList.remove('on'); if(qrActive) resumeQR(); }
 function doAddConfirmed(name){
-  var w={id:wid++,name:name,open:true,acts:[],totalPay:0};
+  // Buscar empNum del worker en ALL_WORKERS
+  var _empNum = '';
+  for(var _aw=0;_aw<ALL_WORKERS.length;_aw++){
+    if(ALL_WORKERS[_aw].name.toLowerCase()===name.toLowerCase()){ _empNum=ALL_WORKERS[_aw].empNum||''; break; }
+  }
+  var w={id:wid++,name:name,empNum:_empNum,open:true,acts:[],totalPay:0};
   workers.push(w);
   gEl('srch').value='';
   var ph=gEl('wph'); if(ph)ph.parentNode.removeChild(ph);
@@ -1606,9 +1633,10 @@ function mkCard(w,wi){
   var c=document.createElement('div');
   c.className='wc'+(w.open?' op':''); c.id='wc'+w.id;
   var h=document.createElement('div'); h.className='wh';
+  var empTag = w.empNum ? '<span style="font-size:10px;color:var(--gr);font-weight:400;margin-left:6px">#'+esc(w.empNum)+'</span>' : '';
   h.innerHTML='<span class="wn">'+numStr(wi+1)+'</span>'+
     '<div class="wsum">'+
-      '<span class="wname">'+esc(w.name)+'</span>'+
+      '<span class="wname">'+esc(w.name)+empTag+'</span>'+
       '<div class="wpreview" id="wp'+w.id+'"></div>'+
     '</div>'+
     '<span class="wtot" id="wt'+w.id+'"></span>'+
@@ -2732,7 +2760,8 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
   var rows='';
   for(i=0;i<wks.length;i++){
     var w=wks[i];
-    var td='<td class="numcol">'+(i+1)+'</td><td class="namecol" style="border-right:3px solid #1a2b8c">'+esc(w.name)+'</td>';
+    var empLbl = w.empNum ? ' <span style="font-size:8px;color:#888;font-weight:400">#'+esc(w.empNum)+'</span>' : '';
+    var td='<td class="numcol">'+(i+1)+'</td><td class="namecol" style="border-right:3px solid #1a2b8c">'+esc(w.name)+empLbl+'</td>';
     for(j=0;j<actCols.length;j++){
       var col2=actCols[j];
       // Para columnas hr individuales, celda vacía si no es el worker dueño
