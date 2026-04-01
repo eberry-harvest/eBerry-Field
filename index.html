@@ -2939,7 +2939,7 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
           break;
         }
       }
-      if(unitPr) break;
+      if(unitPr && entLbl) break;
     }
     if(!unitPr&&ACTS[col4.ai]&&ACTS[col4.ai].p) unitPr='$'+parseFloat(ACTS[col4.ai].p).toFixed(2);
     trTotal+='<td style="text-align:center;border:1px solid #ccc;border-top:3px solid #1a2b8c;color:#1a2b8c;font-weight:700">'+totLbl+'</td>';
