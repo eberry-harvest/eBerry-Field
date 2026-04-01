@@ -16,7 +16,7 @@
 <style>
 :root{--g:#1a2b8c;--g2:#2d4eb5;--gp:#eef1ff;--a:#cc2222;--ap:#fff0f0;--b:#2d7a2d;--bp:#edfaed;--r:#d94040;--rp:#ffeaea;--dk:#0f1a3d;--gr:#6b7db3;--lt:#f4f6ff;--bd:#c8d0f0}
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'DM Sans',sans-serif;background:var(--lt);color:var(--dk);padding-bottom:140px}
+body{font-family:'DM Sans',sans-serif;background:var(--lt);color:var(--dk);padding-bottom:140px;-webkit-overflow-scrolling:touch}
 header{background:var(--g);color:#fff;padding:12px 14px 0;position:sticky;top:0;z-index:200;box-shadow:0 2px 16px rgba(0,0,0,.2)}
 .htop{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
 .logo{font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:2px}
@@ -33,7 +33,7 @@ header{background:var(--g);color:#fff;padding:12px 14px 0;position:sticky;top:0;
 .ct{font-family:'Bebas Neue',sans-serif;font-size:15px;color:var(--g);letter-spacing:1px;margin-bottom:11px}
 lbl,label{display:block;font-size:11px;font-weight:700;color:var(--gr);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;margin-top:10px}
 label:first-child{margin-top:0}
-input,select,textarea{width:100%;padding:11px 12px;border:1.5px solid var(--bd);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:15px;color:var(--dk);background:var(--lt);outline:none;-webkit-appearance:none}
+input,select,textarea{width:100%;padding:11px 12px;border:1.5px solid var(--bd);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:16px;color:var(--dk);background:var(--lt);outline:none;-webkit-appearance:none}
 input:focus,select:focus{border-color:var(--g);background:#fff}
 select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%237a8c7e' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:32px}
 .r2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
@@ -90,7 +90,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .ar.ca{border-color:var(--a)}
 .ar.cb{border-color:var(--b)}
 .arh{display:flex;align-items:center;gap:6px;margin-bottom:9px}
-.arh select{flex:1;font-size:13px;padding:8px 9px}
+.arh select{flex:1;font-size:16px;padding:8px 9px}
 .xbtn{background:var(--rp);color:var(--r);border:none;border-radius:5px;padding:8px 10px;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0}
 .ttog{display:flex;align-items:center;gap:10px;padding:9px 10px;margin-bottom:7px;cursor:pointer;border-radius:7px;background:#fff;border:1.5px solid var(--bd);-webkit-tap-highlight-color:transparent}
 .ttog.on{background:var(--gp);border-color:var(--g)}
@@ -100,17 +100,17 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .ttog.on .tlbl{color:var(--g)}
 .tinp{display:none;margin-bottom:8px}
 .tinp.on{display:grid;grid-template-columns:1fr 1fr;gap:7px}
-.tinp input{font-size:14px;padding:10px 11px}
+.tinp input{font-size:16px;padding:10px 11px}
 .tbadge{border-radius:6px;padding:7px 10px;font-size:12px;font-weight:600;margin-bottom:7px;display:flex;align-items:center;justify-content:space-between}
 .tbadge.hr{background:var(--bp);color:var(--b)}
 .tbadge.rf{background:#eee;color:var(--gr)}
 .tbadge b{font-family:'Bebas Neue',sans-serif;font-size:17px}
 .qr{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:2px}
-.qr input{font-size:14px;padding:10px 11px}
+.qr input{font-size:16px;padding:10px 11px}
 .qr .ro{background:#f0f0f0;color:var(--g);font-weight:700}
 .sub{background:var(--ap);border-radius:5px;padding:6px 10px;font-size:13px;font-weight:700;color:var(--a);text-align:right;margin-top:6px;display:none}
 .shift-row{display:grid;grid-template-columns:1fr 1fr auto;gap:6px;align-items:end;margin-bottom:6px}
-.shift-row input{font-size:14px;padding:10px 11px}
+.shift-row input{font-size:16px;padding:10px 11px}
 .shift-del{background:var(--rp);color:var(--r);border:none;border-radius:5px;padding:10px 9px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0}
 .shift-add{width:100%;padding:8px;border:2px dashed var(--b);border-radius:7px;background:none;color:var(--b);font-family:"DM Sans",sans-serif;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:6px}
 .shift-total{background:var(--bp);border-radius:6px;padding:6px 10px;font-size:12px;font-weight:600;color:var(--b);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center}
@@ -302,7 +302,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 /* ── INVOICE TAB ── */
 .inv-row{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:10px;background:var(--lt);border:1.5px solid var(--bd);border-radius:8px;margin-bottom:8px;position:relative}
 .inv-row.auto{background:var(--gp);border-color:var(--g)}
-.inv-row input,.inv-row select{font-size:13px;padding:8px 9px}
+.inv-row input,.inv-row select{font-size:16px;padding:8px 9px}
 .inv-row label{font-size:10px;margin-top:4px}
 .inv-row .inv-full{grid-column:1/-1}
 .inv-del{position:absolute;top:6px;right:6px;background:var(--rp);color:var(--r);border:none;border-radius:5px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer}
@@ -442,7 +442,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
       <button class="fidClose" onclick="stopFaceID()">✕ Cerrar</button>
     </div>
     <div class="fidCam" id="fidCam">
-      <video id="fidVideo" autoplay playsinline></video>
+      <video id="fidVideo" autoplay playsinline muted></video>
       <canvas id="fidCanvas"></canvas>
       <div class="fidGuide" id="fidGuide"></div>
     </div>
@@ -476,7 +476,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
         <button class="faceCapBack" onclick="backToFaceList()">← Volver a la lista</button>
       </div>
       <div class="faceCamWrap" id="faceCamWrap">
-        <video id="faceCamVideo" autoplay playsinline></video>
+        <video id="faceCamVideo" autoplay playsinline muted></video>
         <canvas id="faceCanvas"></canvas>
         <img id="faceImgPreview" style="display:none">
         <div class="faceGuide" id="faceGuide"></div>
@@ -2924,7 +2924,8 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
           if(act2.unitPrice) unitPr='$'+parseFloat(act2.unitPrice).toFixed(2);
           else if(ACTS[col4.ai]&&ACTS[col4.ai].p) unitPr='$'+parseFloat(ACTS[col4.ai].p).toFixed(2);
           if(act2.finca) laborLbl=act2.finca;
-          if(col4.hr){
+          // Extraer horario de TODAS las actividades (Hora, Ficha, Caja, $)
+          if(!entLbl){
             if(act2.shifts&&act2.shifts.length>1){
               var eL=[],sL=[];
               for(var si=0;si<act2.shifts.length;si++){ if(act2.shifts[si].ini)eL.push(act2.shifts[si].ini); if(act2.shifts[si].fin)sL.push(act2.shifts[si].fin); }
@@ -3640,11 +3641,11 @@ function renderGrpActs(){
           +'<div><label style="font-size:10px">Largo surco (pies)</label>'
           +'<input type="text" inputmode="decimal" value="'+(sf.largo||'')+'" placeholder="ej: 709.5"'
           +' data-gi="'+gi+'" data-fi="'+fi+'" data-sv="largo" oninput="setSurcoVarText(this)"'
-          +' style="font-size:14px;padding:9px 10px;width:100%"></div>'
+          +' style="font-size:16px;padding:9px 10px;width:100%"></div>'
           +'<div><label style="font-size:10px">Núm. surcos</label>'
           +'<input type="text" inputmode="decimal" value="'+(sf.num||'')+'" placeholder="ej: 12"'
           +' data-gi="'+gi+'" data-fi="'+fi+'" data-sv="num" oninput="setSurcoVarText(this)"'
-          +' style="font-size:14px;padding:9px 10px;width:100%"></div>'
+          +' style="font-size:16px;padding:9px 10px;width:100%"></div>'
           +'</div>'
           +'</div>';
       }
@@ -3669,20 +3670,20 @@ function renderGrpActs(){
         +'<div><label style="font-size:10px">🟢 Entrada</label>'
         +'<input type="time" step="1800" value="'+(g.vars.ini||'')+'"'
         +' data-gi="'+gi+'" data-v="ini" onchange="setGrpVar(this)"'
-        +' style="font-size:14px;padding:9px 10px;width:100%"></div>'
+        +' style="font-size:16px;padding:9px 10px;width:100%"></div>'
         +'<div><label style="font-size:10px">🏁 Salida</label>'
         +'<input type="time" step="1800" value="'+(g.vars.fin||'')+'"'
         +' data-gi="'+gi+'" data-v="fin" onchange="setGrpVar(this)"'
-        +' style="font-size:14px;padding:9px 10px;width:100%"></div>'
+        +' style="font-size:16px;padding:9px 10px;width:100%"></div>'
         +'</div>'
         +'<div style="margin-bottom:6px"><label style="font-size:10px">🌱 Ancho de cama (para calcular acres)</label>'
         +'<input type="text" inputmode="decimal" value="'+anchoCama+'" placeholder="ej: 5.5"'
         +' data-gi="'+gi+'" data-v="anchoCama" oninput="setGrpVar(this)"'
-        +' style="font-size:14px;padding:9px 10px;width:100%"></div>'
+        +' style="font-size:16px;padding:9px 10px;width:100%"></div>'
         +'<div style="margin-bottom:6px"><label style="font-size:10px">📍 Labor / Finca (aparece en el PDF)</label>'
         +'<input type="text" value="'+(g.vars.finca||'')+'" placeholder="ej: El Columpio, Block 3..."'
         +' data-gi="'+gi+'" data-v="finca" oninput="setGrpVar(this)"'
-        +' style="font-size:14px;padding:9px 10px;width:100%"></div>'
+        +' style="font-size:16px;padding:9px 10px;width:100%"></div>'
         +'<div id="gaAcres'+gi+'" style="background:var(--bp);border-radius:7px;padding:9px 12px;margin-bottom:8px;display:'+(metrosTotal>0&&anchoCama&&parseFloat(anchoCama)>0?'flex':'none')+';justify-content:space-between;align-items:center">'
         +'<span style="font-size:12px;font-weight:600;color:var(--b)">🌿 Acres trabajados</span>'
         +'<b style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:var(--b)" id="gaAcresVal'+gi+'">'+acresCalc.toFixed(3)+'</b></div>';
@@ -3690,50 +3691,50 @@ function renderGrpActs(){
       var totalC = g.vars.totalC||''; var precioC = g.vars.precioC||act.p||0.80;
       varsHtml = '<div class="r2" style="margin-bottom:8px">'
         +'<div><label style="font-size:10px">Total cajas</label>'
-        +'<input type="number" min="0" step="1" value="'+totalC+'" placeholder="0" data-gi="'+gi+'" data-v="totalC" onchange="setGrpVar(this)" style="font-size:14px;padding:10px 11px"></div>'
+        +'<input type="number" min="0" step="1" value="'+totalC+'" placeholder="0" data-gi="'+gi+'" data-v="totalC" onchange="setGrpVar(this)" style="font-size:16px;padding:10px 11px"></div>'
         +'<div><label style="font-size:10px">$/caja</label>'
-        +'<input type="number" min="0" step="0.01" value="'+precioC+'" data-gi="'+gi+'" data-v="precioC" onchange="setGrpVar(this)" style="font-size:14px;padding:10px 11px"></div>'
+        +'<input type="number" min="0" step="0.01" value="'+precioC+'" data-gi="'+gi+'" data-v="precioC" onchange="setGrpVar(this)" style="font-size:16px;padding:10px 11px"></div>'
         +'</div>'
         +'<div class="r2" style="margin-bottom:8px">'
         +'<div><label style="font-size:10px">🟢 Entrada</label>'
         +'<input type="time" step="1800" value="'+(g.vars.ini||'')+'"'
         +' data-gi="'+gi+'" data-v="ini" onchange="setGrpVar(this)"'
-        +' style="font-size:14px;padding:9px 10px;width:100%"></div>'
+        +' style="font-size:16px;padding:9px 10px;width:100%"></div>'
         +'<div><label style="font-size:10px">🏁 Salida</label>'
         +'<input type="time" step="1800" value="'+(g.vars.fin||'')+'"'
         +' data-gi="'+gi+'" data-v="fin" onchange="setGrpVar(this)"'
-        +' style="font-size:14px;padding:9px 10px;width:100%"></div>'
+        +' style="font-size:16px;padding:9px 10px;width:100%"></div>'
         +'</div>'
         +'<div style="margin-bottom:6px"><label style="font-size:10px">📍 Labor / Finca (aparece en el PDF)</label>'
         +'<input type="text" value="'+(g.vars.finca||'')+'" placeholder="ej: El Columpio, Block 3..."'
         +' data-gi="'+gi+'" data-v="finca" oninput="setGrpVar(this)"'
-        +' style="font-size:14px;padding:9px 10px;width:100%"></div>';
+        +' style="font-size:16px;padding:9px 10px;width:100%"></div>';
     } else if(ct === 'hora'){
       var hIni = g.vars.ini||''; var hFin = g.vars.fin||'';
       varsHtml = '<div class="r2" style="margin-bottom:8px">'
         +'<div><label style="font-size:10px">🟢 Inicio</label>'
-        +'<input type="time" value="'+hIni+'" data-gi="'+gi+'" data-v="ini" onchange="setGrpVar(this)" style="font-size:14px;padding:10px 11px"></div>'
+        +'<input type="time" value="'+hIni+'" data-gi="'+gi+'" data-v="ini" onchange="setGrpVar(this)" style="font-size:16px;padding:10px 11px"></div>'
         +'<div><label style="font-size:10px">🏁 Fin</label>'
-        +'<input type="time" value="'+hFin+'" data-gi="'+gi+'" data-v="fin" onchange="setGrpVar(this)" style="font-size:14px;padding:10px 11px"></div>'
+        +'<input type="time" value="'+hFin+'" data-gi="'+gi+'" data-v="fin" onchange="setGrpVar(this)" style="font-size:16px;padding:10px 11px"></div>'
         +'</div>';
     } else {
       var totalP = g.vars.totalP||'';
       varsHtml = '<div style="margin-bottom:8px"><label style="font-size:10px">Cantidad total ('+act.tipo+')</label>'
-        +'<input type="number" min="0" step="1" value="'+totalP+'" placeholder="0" data-gi="'+gi+'" data-v="totalP" onchange="setGrpVar(this)" style="font-size:14px;padding:10px 11px;width:100%"></div>'
+        +'<input type="number" min="0" step="1" value="'+totalP+'" placeholder="0" data-gi="'+gi+'" data-v="totalP" onchange="setGrpVar(this)" style="font-size:16px;padding:10px 11px;width:100%"></div>'
         +'<div class="r2" style="margin-bottom:8px">'
         +'<div><label style="font-size:10px">🟢 Entrada</label>'
         +'<input type="time" step="1800" value="'+(g.vars.ini||'')+'"'
         +' data-gi="'+gi+'" data-v="ini" onchange="setGrpVar(this)"'
-        +' style="font-size:14px;padding:9px 10px;width:100%"></div>'
+        +' style="font-size:16px;padding:9px 10px;width:100%"></div>'
         +'<div><label style="font-size:10px">🏁 Salida</label>'
         +'<input type="time" step="1800" value="'+(g.vars.fin||'')+'"'
         +' data-gi="'+gi+'" data-v="fin" onchange="setGrpVar(this)"'
-        +' style="font-size:14px;padding:9px 10px;width:100%"></div>'
+        +' style="font-size:16px;padding:9px 10px;width:100%"></div>'
         +'</div>'
         +'<div style="margin-bottom:6px"><label style="font-size:10px">📍 Labor / Finca (aparece en el PDF)</label>'
         +'<input type="text" value="'+(g.vars.finca||'')+'" placeholder="ej: El Columpio, Block 3..."'
         +' data-gi="'+gi+'" data-v="finca" oninput="setGrpVar(this)"'
-        +' style="font-size:14px;padding:9px 10px;width:100%"></div>';
+        +' style="font-size:16px;padding:9px 10px;width:100%"></div>';
     }
 
     // Participantes
