@@ -2929,14 +2929,14 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
             if(act2.shifts&&act2.shifts.length>1){
               var eL=[],sL=[];
               for(var si=0;si<act2.shifts.length;si++){ if(act2.shifts[si].ini)eL.push(act2.shifts[si].ini); if(act2.shifts[si].fin)sL.push(act2.shifts[si].fin); }
-              entLbl=eL.join('<br>'); salLbl=sL.join('<br>');
-            } else if(act2.shifts&&act2.shifts.length===1){
+              if(eL.length){ entLbl=eL.join('<br>'); salLbl=sL.join('<br>'); }
+            } else if(act2.shifts&&act2.shifts.length===1&&(act2.shifts[0].ini||act2.shifts[0].fin)){
               entLbl=act2.shifts[0].ini||''; salLbl=act2.shifts[0].fin||'';
             } else if(act2.ini||act2.fin){
               entLbl=act2.ini||''; salLbl=act2.fin||'';
             }
           }
-          break;
+          if(unitPr&&entLbl&&laborLbl) break;
         }
       }
       if(unitPr && entLbl) break;
