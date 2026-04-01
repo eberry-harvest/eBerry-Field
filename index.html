@@ -11,6 +11,7 @@
 <meta name="theme-color" content="#1a2b8c">
 <link rel="manifest" id="manifestLink">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <style>
 :root{--g:#1a2b8c;--g2:#2d4eb5;--gp:#eef1ff;--a:#cc2222;--ap:#fff0f0;--b:#2d7a2d;--bp:#edfaed;--r:#d94040;--rp:#ffeaea;--dk:#0f1a3d;--gr:#6b7db3;--lt:#f4f6ff;--bd:#c8d0f0}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -51,6 +52,20 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .di:active{background:var(--gp)}
 .di mark{background:none;color:var(--g);font-weight:700}
 .abtn{background:var(--g);color:#fff;border:none;border-radius:8px;padding:11px 15px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:700;cursor:pointer;flex-shrink:0}
+.qrbtn{background:var(--g2);color:#fff;border:none;border-radius:8px;padding:11px 12px;font-size:18px;cursor:pointer;flex-shrink:0;line-height:1;display:flex;align-items:center;justify-content:center}
+.qrbtn:active{opacity:.8}
+.qrOv{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:500;display:none;flex-direction:column;align-items:center;justify-content:center;padding:20px}
+.qrOv.on{display:flex}
+.qrBox{background:#fff;border-radius:16px;width:100%;max-width:380px;overflow:hidden}
+.qrHead{background:var(--g);color:#fff;padding:14px 16px;display:flex;align-items:center;justify-content:space-between}
+.qrHead span{font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:1px}
+.qrClose{background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:8px;padding:6px 12px;font-size:14px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif}
+#qrReader{width:100%;min-height:280px}
+#qrReader video{border-radius:0!important}
+.qrStatus{padding:12px 16px;text-align:center;font-size:13px;font-weight:600;color:var(--gr);min-height:44px;display:flex;align-items:center;justify-content:center}
+.qrStatus.ok{background:var(--bp);color:var(--b)}
+.qrStatus.err{background:var(--rp);color:var(--r)}
+.qrCount{background:var(--gp);color:var(--g);padding:8px 16px;font-size:12px;font-weight:700;text-align:center;border-top:1px solid var(--bd)}
 .nav{display:flex;padding:8px 12px 15px;gap:8px}
 .np{flex:1;padding:12px;border:1.5px solid var(--bd);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:700;cursor:pointer;background:var(--lt);color:var(--gr)}
 .nn{flex:2;padding:12px;border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:700;cursor:pointer;background:var(--g);color:#fff}
@@ -644,6 +659,19 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
   </div>
 </div>
 
+<!-- QR SCANNER OVERLAY -->
+<div class="qrOv" id="qrOv">
+  <div class="qrBox">
+    <div class="qrHead">
+      <span>📷 Escanear QR</span>
+      <button class="qrClose" onclick="stopQR()">✕ Cerrar</button>
+    </div>
+    <div id="qrReader"></div>
+    <div class="qrStatus" id="qrStatus">Apunta la cámara al código QR del trabajador</div>
+    <div class="qrCount" id="qrCount" style="display:none"></div>
+  </div>
+</div>
+
 <!-- STICKY BOTTOM -->
 <div class="btm">
   <div class="addbar" id="addbar">
@@ -651,6 +679,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
       <div class="drop" id="drop"></div>
       <input type="text" id="srch" placeholder="🔍 Buscar o escribir nombre..." autocomplete="off" oninput="onAC(this.value)" onblur="closeAC()">
     </div>
+    <button class="qrbtn" onclick="startQR()" title="Escanear QR">📷</button>
     <button class="abtn" onclick="addFrom()">+ Agregar</button>
   </div>
   <div class="nav">
@@ -1344,6 +1373,131 @@ function onAC(v){
 function closeAC(){ setTimeout(function(){ gEl('drop').classList.remove('on'); },200); }
 function addFrom(){ var n=gEl('srch').value.trim(); if(!n){toast('⚠️ Escribe un nombre');return;} doAdd(n); }
 
+// ── QR SCANNER ──
+var qrScanner = null;
+var qrSessionCount = 0;
+var qrCooldown = false; // evita escaneos duplicados
+
+function startQR(){
+  var ov = gEl('qrOv');
+  ov.classList.add('on');
+  qrSessionCount = 0;
+  updQRCount();
+  setQRStatus('Apunta la cámara al código QR del trabajador','');
+
+  // Pequeño delay para que el DOM se renderice antes de iniciar la cámara
+  setTimeout(function(){
+    if(qrScanner) { try{qrScanner.clear();}catch(e){} }
+    qrScanner = new Html5Qrcode("qrReader");
+    qrScanner.start(
+      { facingMode: "environment" }, // cámara trasera
+      { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 },
+      onQRSuccess,
+      function(){} // silenciar errores de frames sin QR
+    ).catch(function(err){
+      setQRStatus('⚠️ No se pudo acceder a la cámara. Verifica los permisos.','err');
+      console.error('QR Camera error:', err);
+    });
+  }, 300);
+}
+
+function stopQR(){
+  if(qrScanner){
+    qrScanner.stop().then(function(){
+      qrScanner.clear();
+    }).catch(function(){});
+  }
+  gEl('qrOv').classList.remove('on');
+}
+
+function setQRStatus(msg, cls){
+  var el = gEl('qrStatus');
+  el.textContent = msg;
+  el.className = 'qrStatus' + (cls ? ' '+cls : '');
+}
+
+function updQRCount(){
+  var el = gEl('qrCount');
+  if(qrSessionCount > 0){
+    el.style.display = 'block';
+    el.textContent = '✓ ' + qrSessionCount + ' trabajador' + (qrSessionCount>1?'es':'') + ' agregado' + (qrSessionCount>1?'s':'') + ' por QR';
+  } else {
+    el.style.display = 'none';
+  }
+}
+
+function onQRSuccess(decoded){
+  if(qrCooldown) return; // ignorar escaneos repetidos
+  qrCooldown = true;
+  setTimeout(function(){ qrCooldown = false; }, 2000); // 2s cooldown entre escaneos
+
+  // Formato esperado: EBERRY|NombreCompleto|NumEmpleado
+  var parts = decoded.split('|');
+  if(parts.length < 3 || parts[0] !== 'EBERRY'){
+    setQRStatus('⚠️ QR no válido. Formato incorrecto.','err');
+    setTimeout(function(){ setQRStatus('Apunta la cámara al siguiente QR',''); }, 2000);
+    return;
+  }
+
+  var qrName = parts[1].trim();
+  var qrEmpNum = parts[2].trim();
+
+  // Verificar que no esté ya en la lista del día
+  if(nameInArr(workers, qrName)){
+    setQRStatus('⚠️ ' + qrName + ' ya está en la lista','err');
+    setTimeout(function(){ setQRStatus('Apunta la cámara al siguiente QR',''); }, 2000);
+    return;
+  }
+
+  // Buscar en ALL_WORKERS por empNum para validar identidad
+  var wkMatch = null;
+  for(var i=0; i<ALL_WORKERS.length; i++){
+    if(ALL_WORKERS[i].empNum === qrEmpNum){
+      wkMatch = ALL_WORKERS[i];
+      break;
+    }
+  }
+
+  // Si encontramos por empNum, usar el nombre oficial de la base de datos
+  var officialName = wkMatch ? wkMatch.name : qrName;
+
+  // Re-verificar duplicado con nombre oficial
+  if(wkMatch && nameInArr(workers, officialName)){
+    setQRStatus('⚠️ ' + officialName + ' ya está en la lista','err');
+    setTimeout(function(){ setQRStatus('Apunta la cámara al siguiente QR',''); }, 2000);
+    return;
+  }
+
+  // Validar contrato IOE
+  var ioeCheck = checkContrato(officialName);
+  if(ioeCheck){
+    // Mostrar bloqueo de contrato pero NO cerrar el scanner
+    if(ioeCheck.noIoe){
+      setQRStatus('🚫 ' + officialName + ': Sin contrato IOE. Contactar oficina.','err');
+    } else {
+      setQRStatus('🚫 ' + officialName + ': Contrato ' + ioeCheck.ioe + ' no válido para ' + ioeCheck.rancho,'err');
+    }
+    setTimeout(function(){ setQRStatus('Apunta la cámara al siguiente QR',''); }, 3000);
+    return;
+  }
+
+  // Si no está en la DB pero el QR es válido (formato correcto), agregar con confirmación visual
+  if(!wkMatch){
+    // Trabajador no encontrado en DB — agregar pero avisar
+    setQRStatus('⚠️ ' + qrName + ' (#' + qrEmpNum + ') no está en la base de datos. Agregado.','err');
+  } else {
+    setQRStatus('✓ ' + officialName + ' agregado','ok');
+  }
+
+  // Agregar el trabajador
+  doAddConfirmed(officialName);
+  qrSessionCount++;
+  updQRCount();
+
+  // Limpiar mensaje después de 2s para el siguiente escaneo
+  setTimeout(function(){ setQRStatus('Apunta la cámara al siguiente QR',''); }, 2000);
+}
+
 // ── Validación de contrato IOE vs rancho ──
 function checkContrato(name){
   var rancho = (gVal('rancho')||'').trim().toLowerCase();
@@ -1771,7 +1925,9 @@ function detPat(){
       var a=w.acts[j];
       // Normalize: lowercase, strip spaces/dots/dashes for comparison only
       var fincaNorm = (a.finca||'').trim().toLowerCase().replace(/[\s\.\-]+/g,'');
-      var key = a.ai + '_' + fincaNorm;
+      // Incluir horario en key para permitir misma actividad con diferente horario
+      var timeKey = (a.ini||'') + '_' + (a.fin||'');
+      var key = a.ai + '_' + fincaNorm + '_' + timeKey;
       if(!seen[key]){
         seen[key]=true;
         pat.push({ai:a.ai,ini:a.ini||'',fin:a.fin||'',showTime:a.showTime||false,qty:'',pay:0,finca:a.finca||''});
