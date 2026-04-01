@@ -276,6 +276,29 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .faceStatus.load{background:#fff8e1;color:#f39c12}
 .faceTabBtn{background:rgba(255,255,255,.15);border:none;border-radius:20px;padding:4px 10px;color:#fff;font-size:12px;font-weight:600;cursor:pointer;display:none}
 .faceTabBtn.vis{display:inline-block}
+/* ── FACE ID SCANNER (Phase 2) ── */
+.fidOv{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:500;display:none;flex-direction:column;align-items:center;justify-content:center;padding:20px}
+.fidOv.on{display:flex}
+.fidBox{background:#fff;border-radius:16px;width:100%;max-width:400px;overflow:hidden}
+.fidHead{background:#8e44ad;color:#fff;padding:14px 16px;display:flex;align-items:center;justify-content:space-between}
+.fidHead span{font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:1px}
+.fidClose{background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:8px;padding:6px 12px;font-size:14px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif}
+.fidCam{width:100%;min-height:300px;position:relative;background:#000;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.fidCam video{width:100%;height:100%;object-fit:cover}
+.fidCam canvas{display:none}
+.fidCam canvas.vis{display:block}
+.fidGuide{position:absolute;width:180px;height:220px;border:3px dashed rgba(255,255,255,.4);border-radius:50%;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none}
+.fidStatus{padding:12px 16px;text-align:center;font-size:13px;font-weight:600;color:var(--gr);min-height:44px;display:flex;align-items:center;justify-content:center}
+.fidStatus.ok{background:var(--bp);color:var(--b)}
+.fidStatus.err{background:var(--rp);color:var(--r)}
+.fidStatus.load{background:#fff8e1;color:#f39c12}
+.fidStatus.match{background:#f0e6ff;color:#8e44ad}
+.fidCount{background:var(--gp);color:var(--g);padding:8px 16px;font-size:12px;font-weight:700;text-align:center;border-top:1px solid var(--bd)}
+.fidBtns{padding:12px 16px;display:flex;gap:10px;border-top:1px solid var(--bd)}
+.fidBtns button{flex:1;padding:12px;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:700;cursor:pointer}
+.fidSnapBtn{background:#8e44ad;color:#fff}
+.fidRetryBtn{background:var(--rp);color:var(--r);display:none}
+.fidRetryBtn.on{display:block}
 /* ── END STYLES ── */
 .loading-txt{color:#fff;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600}
 </style>
@@ -396,6 +419,27 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     </div>
     <div class="mbs">
       <button class="mca" onclick="gEl('ioeOv').classList.remove('on'); if(qrActive) resumeQR();">Entendido</button>
+    </div>
+  </div>
+</div>
+
+<!-- FACE ID SCANNER (Phase 2 — field recognition) -->
+<div class="fidOv" id="fidOv">
+  <div class="fidBox">
+    <div class="fidHead">
+      <span>👤 RECONOCIMIENTO FACIAL</span>
+      <button class="fidClose" onclick="stopFaceID()">✕ Cerrar</button>
+    </div>
+    <div class="fidCam" id="fidCam">
+      <video id="fidVideo" autoplay playsinline></video>
+      <canvas id="fidCanvas"></canvas>
+      <div class="fidGuide" id="fidGuide"></div>
+    </div>
+    <div class="fidStatus" id="fidStatus">Preparando cámara...</div>
+    <div class="fidCount" id="fidCount">👤 0 rostros en base de datos</div>
+    <div class="fidBtns">
+      <button class="fidSnapBtn" id="fidSnapBtn" onclick="snapFaceID()">📸 Identificar</button>
+      <button class="fidRetryBtn" id="fidRetryBtn" onclick="retryFaceID()">🔄 Intentar de nuevo</button>
     </div>
   </div>
 </div>
@@ -765,6 +809,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
       <input type="text" id="srch" placeholder="🔍 Buscar o escribir nombre..." autocomplete="off" oninput="onAC(this.value)" onblur="closeAC()">
     </div>
     <button class="qrbtn" onclick="startQR()" title="Escanear QR">📷</button>
+    <button class="qrbtn" id="faceIdBtn" onclick="startFaceID()" title="Reconocimiento Facial" style="background:#8e44ad">👤</button>
     <button class="abtn" onclick="addFrom()">+ Agregar</button>
   </div>
   <div class="nav">
@@ -800,6 +845,8 @@ var ACTS = [];  // actividades individuales del rancho actual
 var GRUPAL_ACTS = []; // actividades grupales del rancho actual
 var ALL_ACTS = []; // all activities from sheet
 var LIDERES = []; // [{name, empNum, pin}]
+var FACE_DESCRIPTORS = []; // [{name, empNum, descriptor: Float32Array(128)}]
+var faceDataLoaded = false;
 
 // ── FALLBACK DATA (in case Sheets is offline) ──
 // Nota: FALLBACK_NAMES vacío a propósito — si Sheets falla, el surquero
@@ -1058,6 +1105,9 @@ function loginSuccess(user){
 
   // 👤 Mostrar botón registro facial si es admin
   showFaceRegBtn();
+
+  // 👤 Cargar descriptores faciales en background (no bloquea)
+  loadFaceDescriptors();
 
   updParam();
   toast('✅ Bienvenido, ' + (user.isAdmin ? 'Administrador' : user.name.split(' ')[0]) + '!');
@@ -4622,6 +4672,301 @@ function advanceToNextUnregistered(){
 function showFaceRegBtn(){
   var btn = gEl('faceRegBtn');
   if(btn && currentUser && currentUser.isAdmin) btn.classList.add('vis');
+}
+
+// ════════════════════════════════════════════════════════════
+// PHASE 2 — FACE ID SCANNER (field recognition)
+// ════════════════════════════════════════════════════════════
+
+var fidStream = null;
+var fidActive = false;
+var fidSessionCount = 0;
+
+// ── Load face descriptors from Sheets (background, non-blocking) ──
+function loadFaceDescriptors(){
+  var url = SHEETS_URL + '?action=faceData';
+  var x = new XMLHttpRequest();
+  x.open('GET', url, true);
+  x.onload = function(){
+    try {
+      var resp = JSON.parse(x.responseText);
+      if(resp.success && resp.faces){
+        FACE_DESCRIPTORS = [];
+        faceRegisteredMap = {};
+        var skipped = 0;
+        for(var i=0; i<resp.faces.length; i++){
+          var f = resp.faces[i];
+          try {
+            var descArr = typeof f.descriptor === 'string' ? JSON.parse(f.descriptor) : f.descriptor;
+            if(!descArr || !descArr.length || descArr.length !== 128){ skipped++; continue; }
+            FACE_DESCRIPTORS.push({
+              name: f.name,
+              empNum: f.empNum,
+              descriptor: new Float32Array(descArr)
+            });
+            faceRegisteredMap[f.empNum] = true;
+          } catch(pe){ skipped++; continue; }
+        }
+        faceDataLoaded = true;
+        console.log('👤 Face descriptors loaded: ' + FACE_DESCRIPTORS.length + (skipped ? ' ('+skipped+' skipped)' : ''));
+      }
+    } catch(e){
+      console.log('loadFaceDescriptors error:', e);
+      toast('⚠️ Error cargando datos faciales');
+    }
+  };
+  x.onerror = function(){
+    console.log('loadFaceDescriptors: no connection');
+    toast('⚠️ Sin conexión para datos faciales');
+  };
+  x.send();
+}
+
+// ── Euclidean distance between two descriptors ──
+function euclideanDist(d1, d2){
+  var sum = 0;
+  for(var i=0; i<d1.length; i++){
+    var diff = d1[i] - d2[i];
+    sum += diff * diff;
+  }
+  return Math.sqrt(sum);
+}
+
+// ── Find best match in FACE_DESCRIPTORS ──
+function findFaceMatch(descriptor){
+  if(!FACE_DESCRIPTORS.length) return null;
+  var bestDist = Infinity;
+  var bestMatch = null;
+  for(var i=0; i<FACE_DESCRIPTORS.length; i++){
+    var dist = euclideanDist(descriptor, FACE_DESCRIPTORS[i].descriptor);
+    if(dist < bestDist){
+      bestDist = dist;
+      bestMatch = FACE_DESCRIPTORS[i];
+    }
+  }
+  // Threshold: < 0.6 = match, 0.6-0.75 = possible, > 0.75 = no match
+  if(bestDist < 0.6){
+    return { match: bestMatch, distance: bestDist, confidence: 'high' };
+  } else if(bestDist < 0.75){
+    return { match: bestMatch, distance: bestDist, confidence: 'low' };
+  }
+  return null;
+}
+
+// ── Set FID status ──
+function setFIDStatus(type, msg){
+  var el = gEl('fidStatus');
+  if(!el) return;
+  el.className = 'fidStatus' + (type ? ' ' + type : '');
+  el.textContent = msg || '';
+}
+
+// ── Update FID count ──
+function updFIDCount(){
+  var el = gEl('fidCount');
+  if(el) el.textContent = '👤 ' + FACE_DESCRIPTORS.length + ' rostros en base · ' + fidSessionCount + ' identificados esta sesión';
+}
+
+// ── Start Face ID scanner ──
+function startFaceID(){
+  if(!faceDataLoaded || !FACE_DESCRIPTORS.length){
+    toast('⚠️ No hay rostros registrados o aún están cargando');
+    return;
+  }
+  if(!faceModelsLoaded && !faceModelsLoading){
+    loadFaceModels(function(){ startFaceID(); });
+    toast('⏳ Cargando modelos faciales...');
+    return;
+  }
+  if(!faceModelsLoaded){
+    toast('⏳ Modelos aún cargando, espera un momento...');
+    return;
+  }
+
+  fidActive = true;
+  pendingUnk = null; // reset stale state
+  gEl('fidOv').classList.add('on');
+  gEl('fidSnapBtn').style.display = '';
+  gEl('fidRetryBtn').classList.remove('on');
+  gEl('fidGuide').style.display = '';
+  gEl('fidCanvas').classList.remove('vis');
+  gEl('fidVideo').style.display = '';
+  setFIDStatus('', 'Preparando cámara...');
+  updFIDCount();
+
+  var video = gEl('fidVideo');
+  navigator.mediaDevices.getUserMedia({
+    video: { facingMode:'environment', width:{ideal:640}, height:{ideal:480} }
+  }).then(function(stream){
+    fidStream = stream;
+    video.srcObject = stream;
+    setFIDStatus('ok', '📷 Centra el rostro del trabajador y toca "Identificar"');
+  }).catch(function(err){
+    setFIDStatus('err', '❌ No se pudo abrir la cámara: ' + err.message);
+  });
+}
+
+// ── Stop Face ID scanner ──
+function stopFaceID(){
+  fidActive = false;
+  if(fidStream){
+    var tracks = fidStream.getTracks();
+    for(var i=0; i<tracks.length; i++) tracks[i].stop();
+    fidStream = null;
+  }
+  var video = gEl('fidVideo');
+  if(video) video.srcObject = null;
+  gEl('fidOv').classList.remove('on');
+}
+
+// ── Snap and identify ──
+function snapFaceID(){
+  if(!faceModelsLoaded){ setFIDStatus('err','⏳ Modelos aún cargando...'); return; }
+
+  var video = gEl('fidVideo');
+  var canvas = gEl('fidCanvas');
+  canvas.width = video.videoWidth || 640;
+  canvas.height = video.videoHeight || 480;
+  var ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+  // Pause video, show canvas
+  var video = gEl('fidVideo');
+  if(video) video.pause();
+  video.style.display = 'none';
+  canvas.classList.add('vis');
+  gEl('fidGuide').style.display = 'none';
+  gEl('fidSnapBtn').style.display = 'none';
+
+  setFIDStatus('load', '🔍 Detectando e identificando rostro...');
+
+  // Create temp image for face-api
+  var tmpImg = new Image();
+  tmpImg.src = canvas.toDataURL('image/jpeg', 0.85);
+  tmpImg.onload = function(){
+    faceapi.detectSingleFace(tmpImg, new faceapi.TinyFaceDetectorOptions({inputSize:416, scoreThreshold:0.5}))
+      .withFaceLandmarks()
+      .withFaceDescriptor()
+      .then(function(result){
+        if(!result){
+          setFIDStatus('err', '❌ No se detectó ningún rostro. Intenta de nuevo.');
+          gEl('fidRetryBtn').classList.add('on');
+          return;
+        }
+
+        var match = findFaceMatch(result.descriptor);
+
+        if(!match){
+          setFIDStatus('err', '❌ Rostro no reconocido — no coincide con nadie registrado');
+          gEl('fidRetryBtn').classList.add('on');
+          return;
+        }
+
+        if(match.confidence === 'low'){
+          // Low confidence — show info then ask for confirmation
+          setFIDStatus('load', '🤔 Posible: ' + match.match.name + ' (confianza baja)');
+          gEl('fidRetryBtn').classList.add('on');
+          setTimeout(function(){
+            try { handleFaceIDMatch(match.match, true); }
+            catch(e){ setFIDStatus('err', '❌ Error: ' + e.message); gEl('fidRetryBtn').classList.add('on'); }
+          }, 800);
+          return;
+        }
+
+        // High confidence match!
+        var pct = Math.max(0, Math.min(100, (1 - match.distance) * 100)).toFixed(0);
+        setFIDStatus('match', '✅ ' + match.match.name + ' — Confianza: ' + pct + '%');
+        handleFaceIDMatch(match.match, false);
+
+      }).catch(function(err){
+        setFIDStatus('err', '❌ Error: ' + err.message);
+        gEl('fidRetryBtn').classList.add('on');
+      });
+  };
+}
+
+// ── Handle a face match (same validation flow as QR) ──
+function handleFaceIDMatch(matched, needsConfirm){
+  var officialName = matched.name;
+
+  // 1. Check duplicate
+  if(nameInArr(workers, officialName)){
+    setFIDStatus('err', '⚠️ ' + officialName + ' ya está en la lista');
+    setTimeout(function(){ retryFaceID(); }, 2000);
+    return;
+  }
+
+  // 2. Check IOE contract
+  var ioeCheck = checkContrato(officialName);
+  if(ioeCheck){
+    stopFaceID();
+    showIoeBlock(ioeCheck, officialName);
+    return;
+  }
+
+  // 3. Check if in current crew (if NAMES is loaded)
+  var inCrew = NAMES.length > 0 ? !!findInStrArr(NAMES, officialName) : false;
+
+  if(inCrew && !needsConfirm){
+    // Auto-add (high confidence + same crew)
+    doAddConfirmed(officialName);
+    fidSessionCount++;
+    updFIDCount();
+    setFIDStatus('ok', '✅ ' + officialName + ' agregado');
+    // Resume for next scan after 2s
+    setTimeout(function(){ retryFaceID(); }, 2000);
+    return;
+  }
+
+  // 4. Other crew, low confidence, or NAMES not loaded → show confirmation modal
+  stopFaceID();
+  var wkMatch = null;
+  for(var i=0; i<ALL_WORKERS.length; i++){
+    if(ALL_WORKERS[i].name.toLowerCase() === officialName.toLowerCase()){ wkMatch = ALL_WORKERS[i]; break; }
+  }
+  var otherCrew = wkMatch ? wkMatch.crew : '';
+  pendingUnk = officialName;
+
+  if(needsConfirm){
+    gEl('unkS').textContent = '👤 Reconocimiento facial (confianza baja): ¿Es esta persona ' + officialName + '?';
+  } else if(wkMatch && otherCrew && !inCrew){
+    gEl('unkS').textContent = '👤 Facial: ' + officialName + ' pertenece al crew "' + otherCrew + '". ¿Confirmas agregarlo?';
+  } else if(wkMatch){
+    gEl('unkS').textContent = '👤 Facial: ' + officialName + ' identificado. ¿Confirmas agregarlo?';
+  } else {
+    gEl('unkS').textContent = '👤 Facial: Coincidencia encontrada. ¿Agregar a ' + officialName + '?';
+  }
+  gEl('unkN').textContent = officialName;
+  gEl('unkOv').classList.add('on');
+}
+
+// ── Retry / next scan ──
+function retryFaceID(){
+  var canvas = gEl('fidCanvas');
+  var video = gEl('fidVideo');
+  if(canvas) canvas.classList.remove('vis');
+  if(video) video.style.display = '';
+  gEl('fidGuide').style.display = '';
+  gEl('fidSnapBtn').style.display = '';
+  gEl('fidRetryBtn').classList.remove('on');
+  setFIDStatus('ok', '📷 Centra el rostro del trabajador y toca "Identificar"');
+
+  // Restart camera if needed
+  if(!video) return;
+  if(!fidStream){
+    navigator.mediaDevices.getUserMedia({
+      video: { facingMode:'environment', width:{ideal:640}, height:{ideal:480} }
+    }).then(function(stream){
+      fidStream = stream;
+      video.srcObject = stream;
+      video.play().catch(function(){});
+    }).catch(function(err){
+      setFIDStatus('err', '❌ Cámara: ' + err.message);
+    });
+  } else {
+    video.srcObject = fidStream;
+    video.play().catch(function(){});
+  }
 }
 </script>
 </body>
