@@ -2415,10 +2415,10 @@ function load(){
             if(ACTS[ak].es===a.esName){ a.ai=ak; act=ACTS[ak]; break; }
           }
         }
-        if(!act && a.ai>=0 && a.ai<ACTS.length){ act=ACTS[a.ai]; a.esName=act.es; }
+        if(!act && a.ai>=0 && a.ai<ACTS.length){ act=ACTS[a.ai]; }
         if(!act){ a.pay=0; continue; }
         a.esName=act.es;
-        if(act.hr){ a.pay=totalShiftHours(a)*act.p; }
+        if(act.hr){ a.pay=totalShiftHours(a)*(act.p||0); }
         else if(act.tipo==='$'){ a.pay=parseFloat(a.qty)||0; }
         else{ a.pay=(parseFloat(a.qty)||0)*act.p; }
       }
@@ -2701,11 +2701,13 @@ function loadDay(key){
     if(d.ep)estP=d.ep; if(d.hp)hilP=d.hp; if(d.cp)cajasP=d.cp;
     for(var i=0;i<workers.length;i++){
       for(var j=0;j<workers[i].acts.length;j++){
-        var a=workers[i].acts[j]; var act=ACTS[a.ai];
+        var a=workers[i].acts[j];
+        var act=(a.ai>=0 && a.ai<ACTS.length) ? ACTS[a.ai] : null;
+        if(!act && a.esName){ for(var ak=0;ak<ACTS.length;ak++){ if(ACTS[ak].es===a.esName){act=ACTS[ak];a.ai=ak;break;} } }
         if(!act)continue;
-        if(act.hr){ a.pay=totalShiftHours(a)*act.p; }
+        if(act.hr){ a.pay=totalShiftHours(a)*(act.p||0); }
         else if(act.tipo==='$'){ a.pay=parseFloat(a.qty)||0; }
-        else{ a.pay=(parseFloat(a.qty)||0)*act.p; }
+        else{ a.pay=(parseFloat(a.qty)||0)*(act.p||0); }
       }
     }
     updParam(); updParts();
