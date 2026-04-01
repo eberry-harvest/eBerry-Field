@@ -299,6 +299,16 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .fidSnapBtn{background:#8e44ad;color:#fff}
 .fidRetryBtn{background:var(--rp);color:var(--r);display:none}
 .fidRetryBtn.on{display:block}
+/* ── INVOICE TAB ── */
+.inv-row{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:10px;background:var(--lt);border:1.5px solid var(--bd);border-radius:8px;margin-bottom:8px;position:relative}
+.inv-row.auto{background:var(--gp);border-color:var(--g)}
+.inv-row input,.inv-row select{font-size:13px;padding:8px 9px}
+.inv-row label{font-size:10px;margin-top:4px}
+.inv-row .inv-full{grid-column:1/-1}
+.inv-del{position:absolute;top:6px;right:6px;background:var(--rp);color:var(--r);border:none;border-radius:5px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer}
+.inv-auto-row{display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--gp);border-radius:8px;margin-bottom:6px;font-size:13px;font-weight:600;color:var(--g)}
+.inv-auto-row .inv-a-prod{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.inv-auto-row .inv-a-val{font-family:'Bebas Neue',sans-serif;font-size:16px;white-space:nowrap}
 /* ── END STYLES ── */
 .loading-txt{color:#fff;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600}
 </style>
@@ -324,6 +334,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     <button class="tab" onclick="go(2)">③ Act. Grupales</button>
     <button class="tab" onclick="go(3)">④ Resumen</button>
     <button class="tab" onclick="go(4)">⑤ Ausencias</button>
+    <button class="tab" onclick="go(5)">⑥ Invoice</button>
   </div>
 </header>
 <!-- ── LOGIN SCREEN ── -->
@@ -786,6 +797,43 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
       </div>
     </div>
   </div>
+</div>
+
+<div class="pg" id="p5">
+  <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px;margin-bottom:3px">📋 Daily Invoice Sheet</div>
+  <div style="font-size:13px;color:var(--gr);margin-bottom:14px">Resumen diario para oficina — solo genera PDF, no se envía a payroll</div>
+
+  <!-- Auto-filled header info -->
+  <div class="card">
+    <div class="ct">DATOS DEL DÍA</div>
+    <div class="r2">
+      <div><label>Fecha</label><div class="hpill" id="invDate">—</div></div>
+      <div><label>Semana</label><div class="hpill" id="invWeek">—</div></div>
+    </div>
+    <div class="r2" style="margin-top:8px">
+      <div><label>Farm</label><div class="hpill" id="invFarm">—</div></div>
+      <div><label>Crew Leader</label><div class="hpill" id="invCrew">—</div></div>
+    </div>
+  </div>
+
+  <!-- Auto-populated rows from activities -->
+  <div class="card">
+    <div class="ct">ACTIVIDADES (AUTO)</div>
+    <div style="font-size:11px;color:var(--gr);margin-bottom:8px">Generado automáticamente de las actividades del día</div>
+    <div id="invAutoRows"></div>
+    <button class="abtn" onclick="refreshInvoiceAuto()" style="width:100%;margin-top:8px;font-size:13px">🔄 Actualizar desde actividades</button>
+  </div>
+
+  <!-- Manual rows for boxes, loads, etc -->
+  <div class="card">
+    <div class="ct">FILAS MANUALES (Cajas, Viajes, Etc.)</div>
+    <div style="font-size:11px;color:var(--gr);margin-bottom:8px">Agrega productos, cajas, o cualquier dato extra</div>
+    <div id="invManualRows"></div>
+    <button class="addbtn" onclick="addInvRow()">+ Agregar fila</button>
+  </div>
+
+  <!-- PDF button -->
+  <button class="btn pdf" onclick="generateInvoicePDF()" style="margin-top:12px">📄 Generar Invoice PDF</button>
 </div>
 
 <!-- QR SCANNER OVERLAY -->
@@ -2076,8 +2124,8 @@ function okTime(){
     else { w.acts[ai].shifts[0].ini=ini; w.acts[ai].shifts[0].fin=fin; }
     var tg=gEl('tg'+wi+'_'+ai); if(tg)tg.classList.add('on');
     var tf=gEl('tf'+wi+'_'+ai); if(tf)tf.classList.add('on');
-    var act2=ACTS[w.acts[ai].ai];
-    if(act2&&act2.hr) renderShifts(wi,ai);
+    // ✅ Fix: renderShifts para TODAS las actividades, no solo Hora
+    renderShifts(wi,ai);
     recalc(wi,ai);
   }
   ptm=null; gEl('tmOv').classList.remove('on'); toast('✓ Horario aplicado'); autoSave();
@@ -2367,10 +2415,10 @@ function load(){
             if(ACTS[ak].es===a.esName){ a.ai=ak; act=ACTS[ak]; break; }
           }
         }
-        if(!act && a.ai>=0 && a.ai<ACTS.length){ act=ACTS[a.ai]; a.esName=act.es; }
+        if(!act && a.ai>=0 && a.ai<ACTS.length){ act=ACTS[a.ai]; }
         if(!act){ a.pay=0; continue; }
         a.esName=act.es;
-        if(act.hr){ a.pay=totalShiftHours(a)*act.p; }
+        if(act.hr){ a.pay=totalShiftHours(a)*(act.p||0); }
         else if(act.tipo==='$'){ a.pay=parseFloat(a.qty)||0; }
         else{ a.pay=(parseFloat(a.qty)||0)*act.p; }
       }
@@ -2490,13 +2538,14 @@ function go(n){
       syncAusencias(); renderAusencias();
     }
   }
+  if(n===5) refreshInvoiceAuto();
   var pgs=document.querySelectorAll('.pg'); for(var i=0;i<pgs.length;i++) pgs[i].classList.toggle('on',i===n);
   var tabs=document.querySelectorAll('.tab'); for(var i=0;i<tabs.length;i++){ tabs[i].classList.remove('act','done'); if(i===n)tabs[i].classList.add('act'); else if(i<n)tabs[i].classList.add('done'); }
   gEl('addbar').classList.toggle('on',n===1);
   var ausBar=gEl('ausBar'); if(ausBar) ausBar.style.display=(n===4?'block':'none');
   pg=n; updNav(); window.scrollTo(0,0);
 }
-function next(){ if(pg<4)go(pg+1); }
+function next(){ if(pg<5)go(pg+1); }
 function prev(){ if(pg>0)go(pg-1); }
 function updNav(){
   gEl('np').style.display=pg===0?'none':'';
@@ -2652,11 +2701,13 @@ function loadDay(key){
     if(d.ep)estP=d.ep; if(d.hp)hilP=d.hp; if(d.cp)cajasP=d.cp;
     for(var i=0;i<workers.length;i++){
       for(var j=0;j<workers[i].acts.length;j++){
-        var a=workers[i].acts[j]; var act=ACTS[a.ai];
+        var a=workers[i].acts[j];
+        var act=(a.ai>=0 && a.ai<ACTS.length) ? ACTS[a.ai] : null;
+        if(!act && a.esName){ for(var ak=0;ak<ACTS.length;ak++){ if(ACTS[ak].es===a.esName){act=ACTS[ak];a.ai=ak;break;} } }
         if(!act)continue;
-        if(act.hr){ a.pay=totalShiftHours(a)*act.p; }
+        if(act.hr){ a.pay=totalShiftHours(a)*(act.p||0); }
         else if(act.tipo==='$'){ a.pay=parseFloat(a.qty)||0; }
-        else{ a.pay=(parseFloat(a.qty)||0)*act.p; }
+        else{ a.pay=(parseFloat(a.qty)||0)*(act.p||0); }
       }
     }
     updParam(); updParts();
@@ -2769,22 +2820,43 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     return (ord[a.tipo]||0)-(ord[b.tipo]||0);
   });
 
-  // Calcular puertas por persona desde grpActs_
-  var grpPuertasCols = []; // [{label, puertasXPersona: {wid: puertas}}]
+  // Calcular datos por persona desde TODAS las actividades grupales
+  var grpPuertasCols = []; // [{label, ct, perPersona: {wid: valor}, totalVal, np, precio, unitLabel, finca, ini, fin}]
   for(var gi_=0;gi_<grpActs_.length;gi_++){
     var g_=grpActs_[gi_];
     var gact_=GRUPAL_ACTS[g_.gai]; if(!gact_) continue;
     var ct_=grpCalcType(gact_);
-    if(ct_!=='puertas') continue;
-    var metros_=0;
-    var surcos_=g_.vars.surcos||[];
-    for(var si_=0;si_<surcos_.length;si_++) metros_+=(parseFloat(surcos_[si_].largo)||0)*(parseFloat(surcos_[si_].num)||0);
-    var puertas_=metros_/100;
-    var np_=g_.participantes.length; if(!np_||!puertas_) continue;
-    var ppx_=puertas_/np_;
-    var col_={label:gact_.es, puertasXPersona:{}, totalPuertas:puertas_, np:np_, precio:gact_.p, finca:g_.vars.finca||'', ini:g_.vars.ini||'', fin:g_.vars.fin||''};
-    for(var pi_=0;pi_<g_.participantes.length;pi_++) col_.puertasXPersona[g_.participantes[pi_]]=ppx_;
-    grpPuertasCols.push(col_);
+    var np_=g_.participantes.length; if(!np_) continue;
+    var col_=null;
+    if(ct_==='puertas'){
+      var metros_=0;
+      var surcos_=g_.vars.surcos||[];
+      for(var si_=0;si_<surcos_.length;si_++) metros_+=(parseFloat(surcos_[si_].largo)||0)*(parseFloat(surcos_[si_].num)||0);
+      var puertas_=metros_/100;
+      if(!puertas_) continue;
+      var ppx_=puertas_/np_;
+      col_={label:gact_.es, ct:'puertas', perPersona:{}, totalVal:puertas_, np:np_, precio:gact_.p, unitLabel:'Puertas c/u', finca:g_.vars.finca||'', ini:g_.vars.ini||'', fin:g_.vars.fin||''};
+      for(var pi_=0;pi_<g_.participantes.length;pi_++) col_.perPersona[g_.participantes[pi_]]=ppx_;
+    } else if(ct_==='cajas'){
+      var totalC_=parseFloat(g_.vars.totalC)||0;
+      var precioC_=parseFloat(g_.vars.precioC)||gact_.p||0.80;
+      if(!totalC_) continue;
+      var cpx_=totalC_/np_;
+      col_={label:gact_.es, ct:'cajas', perPersona:{}, totalVal:totalC_, np:np_, precio:precioC_, unitLabel:'Cajas c/u', finca:'', ini:'', fin:''};
+      for(var pi2_=0;pi2_<g_.participantes.length;pi2_++) col_.perPersona[g_.participantes[pi2_]]=cpx_;
+    } else if(ct_==='hora'){
+      var hGrp_=nh(g_.vars.ini||'',g_.vars.fin||'');
+      if(!hGrp_) continue;
+      col_={label:gact_.es, ct:'hora', perPersona:{}, totalVal:hGrp_, np:np_, precio:gact_.p, unitLabel:'Horas', finca:'', ini:g_.vars.ini||'', fin:g_.vars.fin||''};
+      for(var pi3_=0;pi3_<g_.participantes.length;pi3_++) col_.perPersona[g_.participantes[pi3_]]=hGrp_;
+    } else {
+      var totalP_=parseFloat(g_.vars.totalP)||0;
+      if(!totalP_) continue;
+      var qpx_=totalP_/np_;
+      col_={label:gact_.es, ct:'generic', perPersona:{}, totalVal:totalP_, np:np_, precio:gact_.p, unitLabel:gact_.tipo||'Qty c/u', finca:'', ini:'', fin:''};
+      for(var pi4_=0;pi4_<g_.participantes.length;pi4_++) col_.perPersona[g_.participantes[pi4_]]=qpx_;
+    }
+    if(col_) grpPuertasCols.push(col_);
   }
 
   var th='<th style="width:28px;text-align:center">#</th><th style="min-width:130px;text-align:left;border-right:3px solid #1a2b8c">Nombre / Name</th>';
@@ -2793,9 +2865,9 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     var unitLbl=col.tipo==='Hora'?'Horas':col.tipo==='Ficha'?'Fichas':col.tipo==='Caja'?'Cajas':'$';
     th+='<th style="text-align:center;min-width:80px">'+col.label+'<br><span style="font-weight:400;font-size:9px;opacity:.8">'+unitLbl+'</span></th>';
   }
-  // ✅ Columnas de actividades grupales tipo puertas
+  // ✅ Columnas de TODAS las actividades grupales
   for(var gi2_=0;gi2_<grpPuertasCols.length;gi2_++){
-    th+='<th style="text-align:center;min-width:80px;background:#e8f4fd">'+grpPuertasCols[gi2_].label+'<br><span style="font-weight:400;font-size:9px;opacity:.8">Puertas c/u</span></th>';
+    th+='<th style="text-align:center;min-width:80px;background:#e8f4fd">'+grpPuertasCols[gi2_].label+'<br><span style="font-weight:400;font-size:9px;opacity:.8">'+grpPuertasCols[gi2_].unitLabel+'</span></th>';
   }
   if(cp&&cp.length&&cajasT) th+='<th style="text-align:center;min-width:80px">Empaque Cajas<br><span style="font-weight:400;font-size:9px;opacity:.8">Cajas c/u</span></th>';
   if(ep&&ep.length&&estA&&estAn) th+='<th style="text-align:center;min-width:80px">Q. Estaca<br><span style="font-weight:400;font-size:9px;opacity:.8">Puertas c/u</span></th>';
@@ -2878,14 +2950,24 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
   if(cp&&cp.length&&cajasT){ trTotal+='<td style="border-top:3px solid #1a2b8c"></td>'; trPrice+='<td></td>'; trLabor+='<td></td>'; trEntry+='<td></td>'; trExit+='<td></td>'; }
   if(ep&&ep.length&&estA&&estAn){ trTotal+='<td style="border-top:3px solid #1a2b8c"></td>'; trPrice+='<td></td>'; trLabor+='<td></td>'; trEntry+='<td></td>'; trExit+='<td></td>'; }
   if(hp&&hp.length&&hilA&&hilAn){ trTotal+='<td style="border-top:3px solid #1a2b8c"></td>'; trPrice+='<td></td>'; trLabor+='<td></td>'; trEntry+='<td></td>'; trExit+='<td></td>'; }
-  // ✅ Totales de puertas grupales
+  // ✅ Totales de TODAS las actividades grupales
   for(var gi4_=0;gi4_<grpPuertasCols.length;gi4_++){
     var gc_=grpPuertasCols[gi4_];
-    // Calcular acres para el total
-    var gcAncho_ = parseFloat(grpActs_[gi4_] ? (grpActs_[gi4_].vars.anchoCama||0) : 0)||0;
-    var gcAcres_ = (gcAncho_>0 && gc_.totalPuertas>0) ? gc_.totalPuertas/gcAncho_ : 0;
-    var totalCell_ = (gcAcres_>0?'<span style="font-size:9px;color:#0f6e56;display:block">'+gcAcres_.toFixed(2)+' acres</span>':'')
-      +'<span style="font-size:11px">'+gc_.totalPuertas.toFixed(2)+' puertas</span>';
+    var totalCell_='';
+    if(gc_.ct==='puertas'){
+      var gcAncho_ = parseFloat(grpActs_[gi4_] ? (grpActs_[gi4_].vars.anchoCama||0) : 0)||0;
+      var gcAcres_ = (gcAncho_>0 && gc_.totalVal>0) ? gc_.totalVal/gcAncho_ : 0;
+      totalCell_ = (gcAcres_>0?'<span style="font-size:9px;color:#0f6e56;display:block">'+gcAcres_.toFixed(2)+' acres</span>':'')
+        +'<span style="font-size:11px">'+gc_.totalVal.toFixed(2)+' puertas</span>';
+    } else if(gc_.ct==='cajas'){
+      totalCell_='<span style="font-size:11px">'+gc_.totalVal.toFixed(0)+' cajas</span>'
+        +'<span style="font-size:9px;color:#555;display:block">÷'+gc_.np+' = '+(gc_.totalVal/gc_.np).toFixed(1)+' c/u</span>';
+    } else if(gc_.ct==='hora'){
+      totalCell_='<span style="font-size:11px">'+gc_.totalVal.toFixed(1)+' hrs</span>';
+    } else {
+      totalCell_='<span style="font-size:11px">'+gc_.totalVal.toFixed(1)+'</span>'
+        +'<span style="font-size:9px;color:#555;display:block">÷'+gc_.np+' = '+(gc_.totalVal/gc_.np).toFixed(1)+' c/u</span>';
+    }
     trTotal+='<td style="text-align:center;background:#e8f4fd;font-weight:700;line-height:1.5;border-top:3px solid #1a2b8c">'+totalCell_+'</td>';
     trPrice+='<td style="text-align:center;background:#e8f4fd;color:#c0392b;font-weight:700">$'+gc_.precio.toFixed(2)+'</td>';
     trLabor+='<td style="background:#e8f4fd;text-align:center;border:1px solid #ddd;color:#3a7fd4;font-size:9px">'+gc_.finca+'</td>';
@@ -2918,9 +3000,9 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
         td+='<td style="text-align:center">'+cv+'</td>';
       } else { td+='<td></td>'; }
     }
-    // ✅ Celdas de actividades grupales tipo puertas
+    // ✅ Celdas de TODAS las actividades grupales
     for(var gi3_=0;gi3_<grpPuertasCols.length;gi3_++){
-      var ppVal=grpPuertasCols[gi3_].puertasXPersona[w.id];
+      var ppVal=grpPuertasCols[gi3_].perPersona[w.id];
       td+='<td style="text-align:center;background:#f0f8ff">'+(ppVal!==undefined?ppVal.toFixed(2):'')+'</td>';
     }
     if(cp&&cp.length&&cajasT) td+='<td style="text-align:center">'+(inA(cp,w.id)?cajasPerPerson.toFixed(1):'')+'</td>';
@@ -3489,18 +3571,13 @@ function showGrpPicker(){
 }
 
 function addGrpAct(gai){
-  for(var i=0;i<grpActs.length;i++){
-    if(grpActs[i].gai===gai){ toast('⚠️ Ya está agregada'); gEl('grpPickOv').classList.remove('on'); return; }
-  }
   grpActs.push({gai:gai, participantes:[], vars:{}, open:true});
   gEl('grpPickOv').classList.remove('on');
   renderGrpActs(); autoSave();
 }
 
-function removeGrpAct(gai){
-  for(var i=0;i<grpActs.length;i++){
-    if(grpActs[i].gai===gai){ grpActs.splice(i,1); break; }
-  }
+function removeGrpAct(gi){
+  grpActs.splice(gi,1);
   renderGrpActs(); updParts(); autoSave();
 }
 
@@ -3534,7 +3611,7 @@ function renderGrpActs(){
 
     // ── BODY colapsable ──
     var removeBtn = '<div style="display:flex;justify-content:flex-end;margin-bottom:10px">'
-      +'<button data-gai="'+g.gai+'" onclick="event.stopPropagation();removeGrpAct(parseInt(this.dataset.gai))" style="background:var(--rp);color:var(--r);border:none;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer">✕ Quitar</button>'
+      +'<button data-gi="'+gi+'" onclick="event.stopPropagation();removeGrpAct(parseInt(this.dataset.gi))" style="background:var(--rp);color:var(--r);border:none;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer">✕ Quitar</button>'
       +'</div>';
 
     var varsHtml = '';
@@ -4666,6 +4743,307 @@ function advanceToNextUnregistered(){
   // All registered!
   setFaceStatus('ok', '🎉 ¡Todos los trabajadores tienen rostro registrado!');
   setTimeout(function(){ backToFaceList(); }, 2000);
+}
+
+// ════════════════════════════════════════════════════════════
+// INVOICE TAB (⑥)
+// ════════════════════════════════════════════════════════════
+
+var invoiceManualRows = []; // [{product, equipment, units, field, blockNum, misc, total}]
+var invRowId = 0;
+
+// ── Refresh auto-populated data from current day ──
+function refreshInvoiceAuto(){
+  // Fill header
+  var fecha = gVal('fecha') || '—';
+  var rancho = gVal('rancho') || '—';
+  var surq = gVal('surquero') || (currentUser ? currentUser.name : '—');
+  gEl('invDate').textContent = fecha;
+  gEl('invFarm').textContent = rancho;
+  gEl('invCrew').textContent = surq;
+
+  // Calculate week number
+  try {
+    var dp = fecha.split('-');
+    var dt = new Date(parseInt(dp[0]), parseInt(dp[1])-1, parseInt(dp[2]));
+    var jan1 = new Date(dt.getFullYear(),0,1);
+    var wk = Math.ceil((((dt-jan1)/86400000)+jan1.getDay()+1)/7);
+    gEl('invWeek').textContent = 'Wk ' + wk;
+  } catch(e){ gEl('invWeek').textContent = '—'; }
+
+  // Build auto rows from worker activities + group activities
+  var container = gEl('invAutoRows');
+  container.innerHTML = '';
+  var autoData = buildInvoiceAutoData();
+  if(!autoData.length){
+    container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--gr);font-size:13px">Sin actividades registradas aún</div>';
+    return;
+  }
+  for(var i=0; i<autoData.length; i++){
+    var r = autoData[i];
+    container.innerHTML += '<div class="inv-auto-row">'
+      + '<div class="inv-a-prod">' + r.product + ' · ' + r.equipment + '</div>'
+      + (r.units ? '<div style="font-size:12px;color:var(--gr)">' + r.units + '</div>' : '')
+      + '<div class="inv-a-val">' + r.field + '</div>'
+      + '<div style="font-size:11px;color:var(--gr)">' + r.blockNum + '</div>'
+      + '</div>';
+  }
+}
+
+// ── Extract invoice data from current activities ──
+function buildInvoiceAutoData(){
+  var rows = [];
+  var rancho = gVal('rancho') || '';
+
+  // 1. Individual activities — aggregate by activity+finca
+  var actMap = {}; // key → {product, equipment, totalPersonas, totalField, isHr}
+  for(var wi=0; wi<workers.length; wi++){
+    var w = workers[wi];
+    for(var ai=0; ai<w.acts.length; ai++){
+      var a = w.acts[ai];
+      // ✅ Fix: usar esName (no a.es) — así se guardan las actividades
+      var esName = a.esName || (a.ai>=0 && a.ai<ACTS.length ? ACTS[a.ai].es : '');
+      if(!esName) continue;
+      var act = (a.ai>=0 && a.ai<ACTS.length) ? ACTS[a.ai] : null;
+      var isHr = act ? !!act.hr : false;
+      var finca = a.finca || rancho;
+      var key = finca + '|' + esName;
+      if(!actMap[key]){
+        actMap[key] = {product: finca, equipment: esName, personas: 0, totalField: 0, isHr: isHr};
+      }
+      actMap[key].personas++;
+      if(isHr){
+        // Hora: sumar horas trabajadas
+        var hrs = totalShiftHours(a);
+        actMap[key].totalField += hrs;
+      } else {
+        // Ficha: sumar fichas/piezas del pago ÷ precio
+        var price = act ? (act.p||0) : 0;
+        var qty = price > 0 ? (parseFloat(a.pay)||0) / price : 0;
+        actMap[key].totalField += qty;
+      }
+    }
+  }
+  for(var k in actMap){
+    var m = actMap[k];
+    var blockLabel = m.isHr ? 'Horas' : 'Piezas';
+    rows.push({
+      product: m.product,
+      equipment: m.equipment,
+      units: m.personas + ' Personas',
+      field: m.totalField.toFixed(2),
+      blockNum: blockLabel
+    });
+  }
+
+  // 2. Group activities — puertas→acres, cajas, horas
+  for(var gi=0; gi<grpActs.length; gi++){
+    var ga = grpActs[gi];
+    var gact = GRUPAL_ACTS[ga.gai];
+    if(!gact) continue;
+    var ct = grpCalcType(gact);
+    var v = ga.vars || {};
+
+    if(ct === 'puertas'){
+      // Calculate total acres from surcos
+      var totalPtas = 0;
+      var surcos = v.surcos || [];
+      for(var si=0; si<surcos.length; si++){
+        var largo = parseFloat(surcos[si].largo) || 0;
+        var num = parseFloat(surcos[si].num) || 0;
+        totalPtas += (largo * num) / 100;
+      }
+      var anchoCama = parseFloat(v.anchoCama) || 5.67;
+      var acres = totalPtas / anchoCama;
+      rows.push({
+        product: gact.farm || rancho,
+        equipment: gact.es,
+        units: ga.participantes.length + ' Personas',
+        field: acres.toFixed(2),
+        blockNum: 'Acres'
+      });
+    } else if(ct === 'cajas'){
+      var totalCajas = parseFloat(v.totalCajas) || 0;
+      rows.push({
+        product: gact.farm || rancho,
+        equipment: gact.es,
+        units: ga.participantes.length + ' Personas',
+        field: totalCajas.toFixed(0),
+        blockNum: 'Cajas'
+      });
+    } else {
+      var qty = parseFloat(v.qty) || 0;
+      rows.push({
+        product: gact.farm || rancho,
+        equipment: gact.es,
+        units: ga.participantes.length + ' Personas',
+        field: qty.toFixed(2),
+        blockNum: ct === 'hora' ? 'Horas' : 'Piezas'
+      });
+    }
+  }
+
+  return rows;
+}
+
+// ── Add manual invoice row ──
+function addInvRow(){
+  var rid = invRowId++;
+  invoiceManualRows.push({id: rid, product:'', equipment:'', units:'', field:'', blockNum:'', misc:'', total:''});
+  renderInvManualRows();
+}
+
+// ── Remove manual invoice row ──
+function delInvRow(rid){
+  for(var i=0;i<invoiceManualRows.length;i++){
+    if(invoiceManualRows[i].id === rid){ invoiceManualRows.splice(i,1); break; }
+  }
+  renderInvManualRows();
+}
+
+// ── Save manual row values from inputs ──
+function saveInvRowValues(){
+  for(var i=0;i<invoiceManualRows.length;i++){
+    var r = invoiceManualRows[i];
+    var pre = 'inv_' + r.id + '_';
+    var el;
+    el=gEl(pre+'prod'); if(el) r.product=el.value;
+    el=gEl(pre+'equip'); if(el) r.equipment=el.value;
+    el=gEl(pre+'units'); if(el) r.units=el.value;
+    el=gEl(pre+'field'); if(el) r.field=el.value;
+    el=gEl(pre+'block'); if(el) r.blockNum=el.value;
+    el=gEl(pre+'misc'); if(el) r.misc=el.value;
+    el=gEl(pre+'total'); if(el) r.total=el.value;
+  }
+}
+
+// ── Render manual rows ──
+function renderInvManualRows(){
+  saveInvRowValues();
+  var container = gEl('invManualRows');
+  container.innerHTML = '';
+  for(var i=0;i<invoiceManualRows.length;i++){
+    var r = invoiceManualRows[i];
+    var pre = 'inv_' + r.id + '_';
+    container.innerHTML +=
+      '<div class="inv-row">'
+      + '<button class="inv-del" onclick="delInvRow('+r.id+')">✕</button>'
+      + '<div><label>Product</label><input id="'+pre+'prod" type="text" placeholder="Ej: Jumbo Pepper" value="'+(r.product||'')+'"></div>'
+      + '<div><label>Equipment</label><input id="'+pre+'equip" type="text" placeholder="Ej: Pepper" value="'+(r.equipment||'')+'"></div>'
+      + '<div><label>Units</label><input id="'+pre+'units" type="text" inputmode="numeric" placeholder="Ej: 1674" value="'+(r.units||'')+'"></div>'
+      + '<div><label>Field</label><input id="'+pre+'field" type="text" placeholder="Ej: Cajas" value="'+(r.field||'')+'"></div>'
+      + '<div><label>Block Numbers</label><input id="'+pre+'block" type="text" placeholder="Ej: A1, B2" value="'+(r.blockNum||'')+'"></div>'
+      + '<div><label>Misc.</label><input id="'+pre+'misc" type="text" placeholder="" value="'+(r.misc||'')+'"></div>'
+      + '<div class="inv-full"><label>Total</label><input id="'+pre+'total" type="text" placeholder="" value="'+(r.total||'')+'"></div>'
+      + '</div>';
+  }
+}
+
+// ── Generate Invoice PDF ──
+function generateInvoicePDF(){
+  saveInvRowValues();
+  var fecha = gVal('fecha') || '—';
+  var rancho = gVal('rancho') || '—';
+  var surq = gVal('surquero') || (currentUser ? currentUser.name : '—');
+  var weekStr = gEl('invWeek') ? gEl('invWeek').textContent : '—';
+
+  // Combine auto + manual rows
+  var autoRows = buildInvoiceAutoData();
+  var allRows = [];
+
+  for(var i=0; i<autoRows.length; i++){
+    var ar = autoRows[i];
+    allRows.push({product:ar.product, equipment:ar.equipment, units:ar.units, field:ar.field, blockNum:ar.blockNum, misc:'', total:''});
+  }
+  for(var j=0; j<invoiceManualRows.length; j++){
+    allRows.push(invoiceManualRows[j]);
+  }
+
+  // Build PDF HTML
+  var html = '<!DOCTYPE html><html><head><meta charset="UTF-8">'
+    + '<title>Invoice ' + fecha + '</title>'
+    + '<style>'
+    + 'body{font-family:Arial,sans-serif;margin:20px;color:#222}'
+    + '.header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:5px}'
+    + '.logo-area{font-size:28px;font-weight:900;letter-spacing:1px}'
+    + '.logo-area em{color:#cc2222;font-style:normal}'
+    + '.logo-sub{font-size:10px;color:#666;margin-top:2px}'
+    + '.date-area{text-align:right;font-size:14px}'
+    + '.date-area b{font-size:16px}'
+    + '.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:0;margin:8px 0 12px;font-size:13px}'
+    + '.info-grid div{padding:3px 0}'
+    + '.info-grid b{font-weight:700}'
+    + 'h2{font-size:18px;text-align:center;margin:12px 0 10px;text-transform:uppercase;letter-spacing:2px}'
+    + 'table{width:100%;border-collapse:collapse;margin-bottom:10px}'
+    + 'th{background:#333;color:#fff;padding:8px 6px;font-size:11px;text-transform:uppercase;letter-spacing:.5px;text-align:left}'
+    + 'td{border:1px solid #ccc;padding:7px 6px;font-size:12px;vertical-align:top}'
+    + 'tr:nth-child(even) td{background:#f9f9f9}'
+    + '.empty-row td{height:22px}'
+    + '.comments{border:1px solid #ccc;padding:10px;font-size:12px;margin-top:5px}'
+    + '.comments b{font-size:11px;text-transform:uppercase;color:#666}'
+    + '@media print{body{margin:10px}}'
+    + '</style></head><body>';
+
+  // Header
+  html += '<div class="header">'
+    + '<div><div class="logo-area"><span style="font-size:22px">🫐</span> <em>e</em>berry</div>'
+    + '<div class="logo-sub">Harvest Company<br>100 S Hall<br>Labelle, FL 33935</div></div>'
+    + '<div class="date-area"><b>DATE:</b> ' + formatDateInv(fecha) + '</div>'
+    + '</div>';
+
+  // Info grid
+  html += '<div class="info-grid">'
+    + '<div><b>FARM:</b> ' + rancho + '</div>'
+    + '<div><b>CREW LEADER:</b> ' + surq + '</div>'
+    + '<div><b>WEEK#:</b> ' + weekStr + '</div>'
+    + '<div></div></div>';
+
+  // Title
+  html += '<h2>Daily Invoice Sheet</h2>';
+
+  // Table
+  html += '<table><tr><th>Product</th><th>Equipment</th><th>Units</th><th>Field</th><th>Block Numbers</th><th>Misc.</th><th>TOTAL</th></tr>';
+
+  for(var r=0; r<allRows.length; r++){
+    var row = allRows[r];
+    html += '<tr>'
+      + '<td>' + (row.product||'') + '</td>'
+      + '<td>' + (row.equipment||'') + '</td>'
+      + '<td>' + (row.units||'') + '</td>'
+      + '<td>' + (row.field||'') + '</td>'
+      + '<td>' + (row.blockNum||'') + '</td>'
+      + '<td>' + (row.misc||'') + '</td>'
+      + '<td>' + (row.total||'') + '</td>'
+      + '</tr>';
+  }
+
+  // Fill empty rows to match printed form (minimum 15 rows)
+  var emptyNeeded = Math.max(0, 15 - allRows.length);
+  for(var e=0; e<emptyNeeded; e++){
+    html += '<tr class="empty-row"><td></td><td></td><td></td><td></td><td></td><td></td><td></td></tr>';
+  }
+
+  html += '</table>';
+
+  // Comments
+  html += '<div class="comments"><b>Comments:</b><br><br></div>';
+
+  html += '</body></html>';
+
+  // Open in new window for print
+  var win = window.open('','_blank','width=800,height=1000');
+  if(!win){ toast('⚠️ Habilita pop-ups para ver el PDF'); return; }
+  win.document.write(html);
+  win.document.close();
+  setTimeout(function(){ win.print(); }, 600);
+}
+
+// ── Format date for invoice (MM/DD/YY) ──
+function formatDateInv(fecha){
+  try {
+    var p = fecha.split('-');
+    return p[1] + '/' + p[2] + '/' + p[0].slice(2);
+  } catch(e){ return fecha; }
 }
 
 // ── Show face reg button for admin ──
