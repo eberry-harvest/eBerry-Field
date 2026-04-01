@@ -12,6 +12,7 @@
 <link rel="manifest" id="manifestLink">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 <style>
 :root{--g:#1a2b8c;--g2:#2d4eb5;--gp:#eef1ff;--a:#cc2222;--ap:#fff0f0;--b:#2d7a2d;--bp:#edfaed;--r:#d94040;--rp:#ffeaea;--dk:#0f1a3d;--gr:#6b7db3;--lt:#f4f6ff;--bd:#c8d0f0}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -230,6 +231,51 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .aus-opt.sel-enfermedad .aus-lbl{color:var(--b)}
 .aus-opt.sel-injustificada .aus-lbl{color:var(--r)}
 .aus-opt.sel-notrabajo .aus-lbl{color:#f39c12}
+/* ── FACE REGISTRATION ── */
+.faceOv{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:700;display:none;flex-direction:column}
+.faceOv.on{display:flex}
+.faceHead{background:var(--g);color:#fff;padding:14px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0}
+.faceHead span{font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:1px;flex:1}
+.faceCount{font-size:12px;font-weight:700;background:rgba(255,255,255,.2);border-radius:20px;padding:4px 12px}
+.faceClose{background:rgba(255,255,255,.2);border:none;color:#fff;border-radius:8px;padding:6px 12px;font-size:14px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif}
+.faceBody{flex:1;overflow-y:auto;background:#fff}
+.faceSearch{width:100%;padding:14px 16px;border:none;border-bottom:2px solid var(--bd);font-family:'DM Sans',sans-serif;font-size:15px;outline:none;background:var(--lt)}
+.faceSearch:focus{border-bottom-color:var(--g);background:#fff}
+.faceList{overflow-y:auto}
+.faceItem{display:flex;align-items:center;padding:12px 16px;border-bottom:1px solid var(--bd);cursor:pointer;gap:12px;-webkit-tap-highlight-color:transparent}
+.faceItem:active{background:var(--gp)}
+.faceItem .fi-status{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.faceItem .fi-status.pending{background:var(--rp);color:var(--r)}
+.faceItem .fi-status.done{background:var(--bp);color:var(--b)}
+.faceItem .fi-info{flex:1;min-width:0}
+.faceItem .fi-name{font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.faceItem .fi-emp{font-size:11px;color:var(--gr)}
+.faceItem .fi-arrow{color:var(--gr);font-size:14px}
+.faceCap{display:none;flex-direction:column;height:100%}
+.faceCap.on{display:flex}
+.faceCapHead{padding:14px 16px;background:var(--gp);border-bottom:1px solid var(--bd)}
+.faceCapName{font-family:'Bebas Neue',sans-serif;font-size:20px;color:var(--g);letter-spacing:1px}
+.faceCapEmp{font-size:11px;color:var(--gr);font-weight:600}
+.faceCapBack{background:none;border:none;color:var(--g);font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer;padding:0;margin-top:6px}
+.faceCamWrap{flex:1;position:relative;background:#000;min-height:300px;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.faceCamWrap video{width:100%;height:100%;object-fit:cover}
+.faceCamWrap canvas{display:none}
+.faceCamWrap img{max-width:100%;max-height:100%;object-fit:contain}
+.faceGuide{position:absolute;width:200px;height:240px;border:3px dashed rgba(255,255,255,.5);border-radius:50%;top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none}
+.faceBtns{padding:14px 16px;background:#fff;border-top:1px solid var(--bd);display:flex;gap:10px;flex-shrink:0}
+.faceBtns button,.faceBtns label{flex:1;padding:13px;border:none;border-radius:10px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:700;cursor:pointer;text-align:center;display:flex;align-items:center;justify-content:center;gap:6px}
+.fSnapBtn{background:var(--g);color:#fff}
+.fUpBtn{background:var(--gp);color:var(--g);border:1.5px solid var(--g)!important}
+.fRegBtn{background:var(--b);color:#fff;display:none!important}
+.fRegBtn.ready{display:flex!important}
+.fRetakeBtn{background:var(--rp);color:var(--r);display:none!important}
+.fRetakeBtn.ready{display:flex!important}
+.faceStatus{padding:10px 16px;text-align:center;font-size:13px;font-weight:600;min-height:40px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.faceStatus.ok{background:var(--bp);color:var(--b)}
+.faceStatus.err{background:var(--rp);color:var(--r)}
+.faceStatus.load{background:#fff8e1;color:#f39c12}
+.faceTabBtn{background:rgba(255,255,255,.15);border:none;border-radius:20px;padding:4px 10px;color:#fff;font-size:12px;font-weight:600;cursor:pointer;display:none}
+.faceTabBtn.vis{display:inline-block}
 /* ── END STYLES ── */
 .loading-txt{color:#fff;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600}
 </style>
@@ -242,6 +288,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
       <div style="font-size:9px;color:rgba(255,255,255,.6);letter-spacing:.5px;margin-top:-2px;font-weight:600">HARVEST COMPANY LLC</div>
     </div>
     <div id="adminBadge" style="display:none;background:var(--a);border-radius:20px;padding:4px 12px;font-size:12px;font-weight:700;color:#fff;letter-spacing:1px">🔐 ADMIN</div>
+    <button id="faceRegBtn" class="faceTabBtn" onclick="openFaceReg()">👤 Registro</button>
     <div style="display:flex;align-items:center;gap:6px">
       <div class="dpill" id="hdate">—</div>
       <button onclick="showHistory()" style="background:rgba(255,255,255,.15);border:none;border-radius:20px;padding:4px 10px;color:#fff;font-size:12px;font-weight:600;cursor:pointer">📅</button>
@@ -349,6 +396,44 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     </div>
     <div class="mbs">
       <button class="mca" onclick="gEl('ioeOv').classList.remove('on'); if(qrActive) resumeQR();">Entendido</button>
+    </div>
+  </div>
+</div>
+
+<!-- FACE REGISTRATION OVERLAY (admin only) -->
+<div class="faceOv" id="faceOv">
+  <div class="faceHead">
+    <span>👤 REGISTRO FACIAL</span>
+    <div class="faceCount" id="faceCount">0 / 0</div>
+    <button class="faceClose" onclick="closeFaceReg()">✕ Cerrar</button>
+  </div>
+  <div class="faceBody" id="faceBody">
+    <!-- LIST VIEW (default) -->
+    <div id="faceListView">
+      <input type="text" class="faceSearch" id="faceSearchInput" placeholder="🔍 Buscar trabajador..." oninput="filterFaceList(this.value)">
+      <div class="faceList" id="faceListContainer"></div>
+    </div>
+    <!-- CAPTURE VIEW -->
+    <div class="faceCap" id="faceCapView">
+      <div class="faceCapHead">
+        <div class="faceCapName" id="faceCapName">—</div>
+        <div class="faceCapEmp" id="faceCapEmp">#—</div>
+        <button class="faceCapBack" onclick="backToFaceList()">← Volver a la lista</button>
+      </div>
+      <div class="faceCamWrap" id="faceCamWrap">
+        <video id="faceCamVideo" autoplay playsinline></video>
+        <canvas id="faceCanvas"></canvas>
+        <img id="faceImgPreview" style="display:none">
+        <div class="faceGuide" id="faceGuide"></div>
+      </div>
+      <div class="faceStatus" id="faceCapStatus"></div>
+      <div class="faceBtns" id="faceCapBtns">
+        <button class="fSnapBtn" id="fSnapBtn" onclick="snapFace()">📸 Tomar Foto</button>
+        <label class="fUpBtn" for="faceFileInput">📁 Subir Foto</label>
+        <input type="file" id="faceFileInput" accept="image/*" onchange="uploadFaceFile(this)" style="display:none">
+        <button class="fRetakeBtn" id="fRetakeBtn" onclick="retakeFace()">🔄 Otra Foto</button>
+        <button class="fRegBtn" id="fRegSaveBtn" onclick="saveFaceDescriptor()">✓ Registrar</button>
+      </div>
     </div>
   </div>
 </div>
@@ -797,6 +882,7 @@ function logoutUser(){
   // Hide logout button
   var btn = gEl('logoutBtn'); if(btn) btn.style.display = 'none';
   var badge = gEl('adminBadge'); if(badge) badge.style.display = 'none';
+  var fBtn = gEl('faceRegBtn'); if(fBtn) fBtn.classList.remove('vis');
   // Reset pin state
   pinBuffer = '';
   updPinDots();
@@ -969,6 +1055,9 @@ function loginSuccess(user){
   // 🧪 Mostrar/ocultar card de pruebas
   var testCard = gEl('testCard');
   if(testCard) testCard.style.display = user.isAdmin ? 'block' : 'none';
+
+  // 👤 Mostrar botón registro facial si es admin
+  showFaceRegBtn();
 
   updParam();
   toast('✅ Bienvenido, ' + (user.isAdmin ? 'Administrador' : user.name.split(' ')[0]) + '!');
@@ -4205,6 +4294,334 @@ function testClear(){
   renderGrpActs(); renderAusencias();
   updParam(); updParts(); buildSum(); saveQuiet();
   toast('🗑️ Datos de prueba eliminados');
+}
+
+// ════════════════════════════════════════════════════════════
+// FACE REGISTRATION SYSTEM (Phase 1)
+// ════════════════════════════════════════════════════════════
+
+var FACE_MODELS_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights/';
+var faceModelsLoaded = false;
+var faceModelsLoading = false;
+var faceCamStream = null;
+var faceCurrentWorker = null; // {name, empNum}
+var faceCurrentDescriptor = null; // Float32Array(128)
+var faceRegisteredMap = {}; // empNum → true (loaded from Sheets)
+
+// ── Load face-api models ──
+function loadFaceModels(cb){
+  if(faceModelsLoaded){ if(cb) cb(); return; }
+  if(faceModelsLoading) return;
+  faceModelsLoading = true;
+  setFaceStatus('load', '⏳ Cargando modelos de reconocimiento facial (~6MB)...');
+  Promise.all([
+    faceapi.nets.tinyFaceDetector.loadFromUri(FACE_MODELS_URL),
+    faceapi.nets.faceLandmark68Net.loadFromUri(FACE_MODELS_URL),
+    faceapi.nets.faceRecognitionNet.loadFromUri(FACE_MODELS_URL)
+  ]).then(function(){
+    faceModelsLoaded = true;
+    faceModelsLoading = false;
+    setFaceStatus('ok', '✅ Modelos cargados correctamente');
+    if(cb) cb();
+  }).catch(function(err){
+    faceModelsLoading = false;
+    setFaceStatus('err', '❌ Error cargando modelos: ' + err.message);
+  });
+}
+
+// ── Status helper ──
+function setFaceStatus(type, msg){
+  var el = gEl('faceCapStatus');
+  if(!el) return;
+  el.className = 'faceStatus' + (type ? ' ' + type : '');
+  el.textContent = msg || '';
+}
+
+// ── Open Face Registration (admin only) ──
+function openFaceReg(){
+  if(!currentUser || !currentUser.isAdmin){ toast('⚠️ Solo para admin'); return; }
+  gEl('faceOv').classList.add('on');
+  gEl('faceListView').style.display = '';
+  gEl('faceCapView').classList.remove('on');
+  gEl('faceSearchInput').value = '';
+  // Load registered map from Sheets
+  loadRegisteredFaces(function(){
+    renderFaceList('');
+  });
+}
+
+// ── Close Face Registration ──
+function closeFaceReg(){
+  stopFaceCam();
+  gEl('faceOv').classList.remove('on');
+}
+
+// ── Load registered faces from Sheets ──
+function loadRegisteredFaces(cb){
+  var url = SHEETS_URL + '?action=faceData';
+  var x = new XMLHttpRequest();
+  x.open('GET', url, true);
+  x.onload = function(){
+    try {
+      var resp = JSON.parse(x.responseText);
+      if(resp.success && resp.faces){
+        faceRegisteredMap = {};
+        for(var i=0; i<resp.faces.length; i++){
+          faceRegisteredMap[resp.faces[i].empNum] = true;
+        }
+      }
+    } catch(e){ console.log('loadRegisteredFaces parse error', e); }
+    if(cb) cb();
+  };
+  x.onerror = function(){ if(cb) cb(); };
+  x.send();
+}
+
+// ── Render worker list for face registration ──
+function renderFaceList(filter){
+  var container = gEl('faceListContainer');
+  container.innerHTML = '';
+  var f = (filter || '').toLowerCase().trim();
+  var totalRegistered = 0;
+  var total = 0;
+  var html = '';
+  for(var i=0; i<ALL_WORKERS.length; i++){
+    var w = ALL_WORKERS[i];
+    if(!w.name || !w.empNum) continue;
+    total++;
+    var isReg = !!faceRegisteredMap[w.empNum];
+    if(isReg) totalRegistered++;
+    if(f && w.name.toLowerCase().indexOf(f) === -1 && w.empNum.toLowerCase().indexOf(f) === -1) continue;
+    html += '<div class="faceItem" onclick="selectFaceWorker(\'' + w.name.replace(/'/g,"\\'") + '\',\'' + w.empNum + '\')">'
+      + '<div class="fi-status ' + (isReg ? 'done' : 'pending') + '">' + (isReg ? '✅' : '⬤') + '</div>'
+      + '<div class="fi-info"><div class="fi-name">' + w.name + '</div><div class="fi-emp">#' + w.empNum + '</div></div>'
+      + '<div class="fi-arrow">›</div></div>';
+  }
+  container.innerHTML = html;
+  gEl('faceCount').textContent = totalRegistered + ' / ' + total;
+}
+
+// ── Filter worker list ──
+function filterFaceList(val){
+  renderFaceList(val);
+}
+
+// ── Select worker for face capture ──
+function selectFaceWorker(name, empNum){
+  faceCurrentWorker = {name: name, empNum: empNum};
+  faceCurrentDescriptor = null;
+  gEl('faceCapName').textContent = name;
+  gEl('faceCapEmp').textContent = '#' + empNum;
+  gEl('faceListView').style.display = 'none';
+  gEl('faceCapView').classList.add('on');
+  // Reset buttons
+  gEl('fSnapBtn').style.display = '';
+  document.querySelector('.fUpBtn').style.display = '';
+  gEl('fRetakeBtn').classList.remove('ready');
+  gEl('fRegSaveBtn').classList.remove('ready');
+  gEl('faceImgPreview').style.display = 'none';
+  gEl('faceCamVideo').style.display = '';
+  gEl('faceGuide').style.display = '';
+  setFaceStatus('', '');
+  // Start camera & load models
+  startFaceCam();
+  loadFaceModels();
+}
+
+// ── Back to list ──
+function backToFaceList(){
+  stopFaceCam();
+  gEl('faceCapView').classList.remove('on');
+  gEl('faceListView').style.display = '';
+  renderFaceList(gEl('faceSearchInput').value);
+}
+
+// ── Start camera ──
+function startFaceCam(){
+  var video = gEl('faceCamVideo');
+  if(faceCamStream){ video.srcObject = faceCamStream; return; }
+  navigator.mediaDevices.getUserMedia({
+    video: { facingMode: 'environment', width: {ideal: 640}, height: {ideal: 480} }
+  }).then(function(stream){
+    faceCamStream = stream;
+    video.srcObject = stream;
+    setFaceStatus('ok', '📷 Cámara lista — centra el rostro y toma la foto');
+  }).catch(function(err){
+    setFaceStatus('err', '❌ No se pudo abrir la cámara: ' + err.message);
+  });
+}
+
+// ── Stop camera ──
+function stopFaceCam(){
+  if(faceCamStream){
+    var tracks = faceCamStream.getTracks();
+    for(var i=0; i<tracks.length; i++) tracks[i].stop();
+    faceCamStream = null;
+  }
+  var video = gEl('faceCamVideo');
+  if(video) video.srcObject = null;
+}
+
+// ── Snap photo from camera ──
+function snapFace(){
+  if(!faceModelsLoaded){ setFaceStatus('err','⏳ Espera, los modelos aún están cargando...'); return; }
+  var video = gEl('faceCamVideo');
+  var canvas = gEl('faceCanvas');
+  canvas.width = video.videoWidth || 640;
+  canvas.height = video.videoHeight || 480;
+  var ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+  // Show preview
+  var img = gEl('faceImgPreview');
+  img.src = canvas.toDataURL('image/jpeg', 0.85);
+  img.style.display = '';
+  video.style.display = 'none';
+  gEl('faceGuide').style.display = 'none';
+  stopFaceCam();
+  // Process face
+  processFaceImage(img);
+}
+
+// ── Upload photo from file ──
+function uploadFaceFile(input){
+  if(!input.files || !input.files[0]) return;
+  if(!faceModelsLoaded){ setFaceStatus('err','⏳ Espera, los modelos aún están cargando...'); return; }
+  var file = input.files[0];
+  var reader = new FileReader();
+  reader.onload = function(e){
+    var img = gEl('faceImgPreview');
+    img.src = e.target.result;
+    img.style.display = '';
+    gEl('faceCamVideo').style.display = 'none';
+    gEl('faceGuide').style.display = 'none';
+    stopFaceCam();
+    img.onload = function(){ processFaceImage(img); };
+  };
+  reader.readAsDataURL(file);
+  input.value = ''; // reset so same file can be re-selected
+}
+
+// ── Process image with face-api.js ──
+function processFaceImage(imgEl){
+  setFaceStatus('load', '🔍 Detectando rostro...');
+  gEl('fSnapBtn').style.display = 'none';
+  document.querySelector('.fUpBtn').style.display = 'none';
+  faceapi.detectSingleFace(imgEl, new faceapi.TinyFaceDetectorOptions({inputSize:416, scoreThreshold:0.5}))
+    .withFaceLandmarks()
+    .withFaceDescriptor()
+    .then(function(result){
+      if(!result){
+        setFaceStatus('err', '❌ No se detectó ningún rostro. Intenta con otra foto.');
+        gEl('fRetakeBtn').classList.add('ready');
+        return;
+      }
+      faceCurrentDescriptor = result.descriptor;
+      setFaceStatus('ok', '✅ Rostro detectado — Score: ' + (result.detection.score*100).toFixed(1) + '%');
+      gEl('fRetakeBtn').classList.add('ready');
+      gEl('fRegSaveBtn').classList.add('ready');
+    }).catch(function(err){
+      setFaceStatus('err', '❌ Error procesando: ' + err.message);
+      gEl('fRetakeBtn').classList.add('ready');
+    });
+}
+
+// ── Retake photo ──
+function retakeFace(){
+  faceCurrentDescriptor = null;
+  gEl('faceImgPreview').style.display = 'none';
+  gEl('faceCamVideo').style.display = '';
+  gEl('faceGuide').style.display = '';
+  gEl('fSnapBtn').style.display = '';
+  document.querySelector('.fUpBtn').style.display = '';
+  gEl('fRetakeBtn').classList.remove('ready');
+  gEl('fRegSaveBtn').classList.remove('ready');
+  setFaceStatus('', '');
+  startFaceCam();
+  loadFaceModels();
+}
+
+// ── Save face descriptor to Google Sheets ──
+function saveFaceDescriptor(){
+  if(!faceCurrentWorker || !faceCurrentDescriptor){
+    setFaceStatus('err', '❌ No hay descriptor listo para guardar');
+    return;
+  }
+  setFaceStatus('load', '💾 Guardando descriptor facial...');
+  gEl('fRegSaveBtn').classList.remove('ready');
+
+  // Convert Float32Array to regular array for JSON
+  var descArray = [];
+  for(var i=0; i<faceCurrentDescriptor.length; i++){
+    descArray.push(Math.round(faceCurrentDescriptor[i]*1000000)/1000000); // 6 decimals
+  }
+
+  var payload = JSON.stringify({
+    action: 'saveFace',
+    name: faceCurrentWorker.name,
+    empNum: faceCurrentWorker.empNum,
+    descriptor: descArray
+  });
+
+  var x = new XMLHttpRequest();
+  x.open('POST', SHEETS_URL, true);
+  x.setRequestHeader('Content-Type', 'text/plain');
+  x.onload = function(){
+    try {
+      var resp = JSON.parse(x.responseText);
+      if(resp.success){
+        faceRegisteredMap[faceCurrentWorker.empNum] = true;
+        setFaceStatus('ok', '✅ ¡Rostro de ' + faceCurrentWorker.name + ' registrado!');
+        // Auto-advance to next unregistered worker after 1.5s
+        setTimeout(function(){
+          advanceToNextUnregistered();
+        }, 1500);
+      } else {
+        setFaceStatus('err', '❌ Error: ' + (resp.error || 'desconocido'));
+        gEl('fRegSaveBtn').classList.add('ready');
+      }
+    } catch(e){
+      setFaceStatus('err', '❌ Error de red: ' + e.message);
+      gEl('fRegSaveBtn').classList.add('ready');
+    }
+  };
+  x.onerror = function(){
+    setFaceStatus('err', '❌ Sin conexión');
+    gEl('fRegSaveBtn').classList.add('ready');
+  };
+  x.send(payload);
+}
+
+// ── Auto-advance to next unregistered worker ──
+function advanceToNextUnregistered(){
+  var currentIdx = -1;
+  for(var i=0; i<ALL_WORKERS.length; i++){
+    if(ALL_WORKERS[i].empNum === faceCurrentWorker.empNum){ currentIdx = i; break; }
+  }
+  // Find next unregistered starting from current+1
+  for(var j=currentIdx+1; j<ALL_WORKERS.length; j++){
+    var w = ALL_WORKERS[j];
+    if(w.name && w.empNum && !faceRegisteredMap[w.empNum]){
+      selectFaceWorker(w.name, w.empNum);
+      return;
+    }
+  }
+  // If none found after current, wrap around
+  for(var k=0; k<currentIdx; k++){
+    var w2 = ALL_WORKERS[k];
+    if(w2.name && w2.empNum && !faceRegisteredMap[w2.empNum]){
+      selectFaceWorker(w2.name, w2.empNum);
+      return;
+    }
+  }
+  // All registered!
+  setFaceStatus('ok', '🎉 ¡Todos los trabajadores tienen rostro registrado!');
+  setTimeout(function(){ backToFaceList(); }, 2000);
+}
+
+// ── Show face reg button for admin ──
+function showFaceRegBtn(){
+  var btn = gEl('faceRegBtn');
+  if(btn && currentUser && currentUser.isAdmin) btn.classList.add('vis');
 }
 </script>
 </body>
