@@ -55,7 +55,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .abtn{background:var(--g);color:#fff;border:none;border-radius:8px;padding:11px 15px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:700;cursor:pointer;flex-shrink:0}
 .qrbtn{background:var(--g2);color:#fff;border:none;border-radius:8px;padding:11px 12px;font-size:18px;cursor:pointer;flex-shrink:0;line-height:1;display:flex;align-items:center;justify-content:center}
 .qrbtn:active{opacity:.8}
-.qrOv{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:500;display:none;flex-direction:column;align-items:center;justify-content:center;padding:20px}
+.qrOv{position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.85);z-index:500;display:none;flex-direction:column;align-items:center;justify-content:center;padding:20px}
 .qrOv.on{display:flex}
 .qrBox{background:#fff;border-radius:16px;width:100%;max-width:380px;overflow:hidden}
 .qrHead{background:var(--g);color:#fff;padding:14px 16px;display:flex;align-items:center;justify-content:space-between}
@@ -117,7 +117,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .shift-total b{font-family:"Bebas Neue",sans-serif;font-size:17px}
 .addbtn{width:100%;padding:10px;border:2px dashed var(--g2);border-radius:8px;background:none;color:var(--g);font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer;margin-top:5px;display:flex;align-items:center;justify-content:center;gap:5px}
 .rmbtn{float:right;margin-top:8px;background:var(--rp);color:var(--r);border:none;border-radius:5px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer}
-.ov{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:600;display:none;align-items:flex-end;justify-content:center}
+.ov{position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.5);z-index:600;display:none;align-items:flex-end;justify-content:center}
 .ov.on{display:flex}
 .md{background:#fff;border-radius:18px 18px 0 0;padding:20px 17px 32px;max-width:460px;width:100%;max-height:85vh;overflow-y:auto}
 .mt{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1px;margin-bottom:5px}
@@ -173,7 +173,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 
 /* ── LOGIN SCREEN ── */
-#loginScreen{position:fixed;inset:0;background:var(--g);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px}
+#loginScreen{position:fixed;top:0;right:0;bottom:0;left:0;background:var(--g);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px}
 #loginScreen.hide{display:none}
 .login-logo{font-family:'Bebas Neue',sans-serif;font-size:42px;letter-spacing:3px;color:#fff;margin-bottom:4px}
 .login-logo em{color:var(--a);font-style:normal}
@@ -193,7 +193,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .login-user{background:var(--gp);border-radius:8px;padding:8px 12px;font-size:13px;font-weight:600;color:var(--g);text-align:center;margin-bottom:12px}
 
 /* ── LOADING OVERLAY ── */
-#loadingOv{position:fixed;inset:0;background:rgba(26,43,140,.92);z-index:8888;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px}
+#loadingOv{position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(26,43,140,.92);z-index:8888;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px}
 #loadingOv.hide{display:none}
 .loading-spin{width:40px;height:40px;border:4px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -232,7 +232,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .aus-opt.sel-injustificada .aus-lbl{color:var(--r)}
 .aus-opt.sel-notrabajo .aus-lbl{color:#f39c12}
 /* ── FACE REGISTRATION ── */
-.faceOv{position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:700;display:none;flex-direction:column}
+.faceOv{position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.92);z-index:700;display:none;flex-direction:column}
 .faceOv.on{display:flex}
 .faceHead{background:var(--g);color:#fff;padding:14px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0}
 .faceHead span{font-family:'Bebas Neue',sans-serif;font-size:18px;letter-spacing:1px;flex:1}
@@ -277,7 +277,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .faceTabBtn{background:rgba(255,255,255,.15);border:none;border-radius:20px;padding:4px 10px;color:#fff;font-size:12px;font-weight:600;cursor:pointer;display:none}
 .faceTabBtn.vis{display:inline-block}
 /* ── FACE ID SCANNER (Phase 2) ── */
-.fidOv{position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:500;display:none;flex-direction:column;align-items:center;justify-content:center;padding:20px}
+.fidOv{position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.85);z-index:500;display:none;flex-direction:column;align-items:center;justify-content:center;padding:20px}
 .fidOv.on{display:flex}
 .fidBox{background:#fff;border-radius:16px;width:100%;max-width:400px;overflow:hidden}
 .fidHead{background:#8e44ad;color:#fff;padding:14px 16px;display:flex;align-items:center;justify-content:space-between}
@@ -752,17 +752,17 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
   <div class="card"><div class="ct">👥 Por Trabajador</div><div id="sw"></div></div>
   <div class="card">
     <div class="ct">📤 Enviar</div>
-    <button class="btn" style="background:#3a7fd4;color:#fff" onclick="openNewDay()">🌅 Nuevo Día</button>
-    <button class="btn pdf" onclick="genPDF()">📄 Generar PDF para Payroll</button>
-    <button class="btn bw" style="display:none" onclick="sendPDFWhatsApp()">📲 Enviar PDF por WhatsApp</button>
-    <!-- ── PAYROLL FIELD MASTER BUTTON ── -->
-    <button id="sheetsSendBtn" class="btn" style="background:#1a3a5c;color:#fff" onclick="sendToSheets()">📊 Enviar a Payroll Field Master</button>
-    <button class="btn bg" onclick="save()">💾 Guardar</button>
+    <button class="btn bg" onclick="save()"><span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#1a7a4a;color:#fff;font-weight:900;font-size:12px;margin-right:6px">1</span>💾 Guardar</button>
     <p style="font-size:11px;color:var(--gr);text-align:center">Guardado localmente en el dispositivo</p>
+    <!-- ── PAYROLL FIELD MASTER BUTTON ── -->
+    <button id="sheetsSendBtn" class="btn" style="background:#1a3a5c;color:#fff" onclick="sendToSheets()"><span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#1a7a4a;color:#fff;font-weight:900;font-size:12px;margin-right:6px">2</span>📊 Enviar a Payroll Field Master</button>
+    <button class="btn pdf" onclick="genPDF()"><span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#1a7a4a;color:#fff;font-weight:900;font-size:12px;margin-right:6px">3</span>📄 Generar PDF para Payroll</button>
+    <button class="btn bw" style="display:none" onclick="sendPDFWhatsApp()">📲 Enviar PDF por WhatsApp</button>
+    <button class="btn" style="background:#3a7fd4;color:#fff" onclick="openNewDay()"><span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#1a7a4a;color:#fff;font-weight:900;font-size:12px;margin-right:6px">4</span>🌅 Nuevo Día</button>
     <div style="height:1px;background:var(--bd);margin:10px 0"></div>
     <div style="font-size:11px;font-weight:700;color:var(--gr);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">📲 Compartir datos entre dispositivos</div>
-    <button class="btn" style="background:#6c3483;color:#fff" onclick="exportData()">📥 Exportar datos (descargar)</button>
-    <button class="btn" style="background:#1a5276;color:#fff" onclick="importData()">📤 Importar datos (cargar)</button>
+    <button class="btn" style="background:#6c3483;color:#fff" onclick="exportData()"><span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#1a7a4a;color:#fff;font-weight:900;font-size:12px;margin-right:6px">5</span>📥 Exportar datos (descargar)</button>
+    <button class="btn" style="background:#1a5276;color:#fff" onclick="importData()"><span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#1a7a4a;color:#fff;font-weight:900;font-size:12px;margin-right:6px">6</span>📤 Importar datos (cargar)</button>
     <input type="file" id="importFile" accept=".json" style="display:none" onchange="onImportFile(this)">
     <p style="font-size:11px;color:var(--gr);text-align:center">Exporta para mandar a otro cel por WhatsApp</p>
   </div>
@@ -821,7 +821,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
     <div class="ct">ACTIVIDADES (AUTO)</div>
     <div style="font-size:11px;color:var(--gr);margin-bottom:8px">Generado automáticamente de las actividades del día</div>
     <div id="invAutoRows"></div>
-    <button class="abtn" onclick="refreshInvoiceAuto()" style="width:100%;margin-top:8px;font-size:13px">🔄 Actualizar desde actividades</button>
+    <button class="abtn" onclick="refreshInvoiceAuto()" style="width:100%;margin-top:8px;font-size:13px"><span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#1a7a4a;color:#fff;font-weight:900;font-size:12px;margin-right:6px">1</span>🔄 Actualizar desde actividades</button>
   </div>
 
   <!-- Manual rows for boxes, loads, etc -->
@@ -833,7 +833,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
   </div>
 
   <!-- PDF button -->
-  <button class="btn pdf" onclick="generateInvoicePDF()" style="margin-top:12px">📄 Generar Invoice PDF</button>
+  <button class="btn pdf" onclick="generateInvoicePDF()" style="margin-top:12px"><span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#1a7a4a;color:#fff;font-weight:900;font-size:12px;margin-right:6px">2</span>📄 Generar Invoice PDF</button>
 </div>
 
 <!-- QR SCANNER OVERLAY -->
@@ -1621,7 +1621,7 @@ function stopQR(){
 }
 
 // ── Pausa QR automática cuando cualquier modal .ov se abre ──
-(function(){
+if(typeof MutationObserver!=='undefined')(function(){
   var ovs=document.querySelectorAll('.ov');
   var obs=new MutationObserver(function(muts){
     if(!qrActive)return;
