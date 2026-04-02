@@ -2019,7 +2019,7 @@ function recalc(wi,ai){
   if(row) row.className='ar'+(pay>0?(act.hr?' cb':' ca'):'');
   updTot(wi);
   // Zeta: actualizar badge automáticamente si hay horario involucrado
-  if(act.hr || a.ini || a.fin) updBadge(wi,ai);
+  if(act.hr || act.payType==='Daywork' || a.ini || a.fin) updBadge(wi,ai);
 }
 
 function updBadge(wi,ai){
@@ -2042,6 +2042,24 @@ function updBadge(wi,ai){
         shiftStr=(a.ini&&a.fin?a.ini+' → '+a.fin:'');
       }
       bd.innerHTML='<span>⏱️ '+shiftStr+'</span><b>'+totalH+' H × $'+getHRate(w,act).toFixed(2)+'</b>';
+      bd.style.display='flex';
+    } else bd.style.display='none';
+  } else if(act.payType==='Daywork'){
+    // Daywork: mostrar turnos como referencia (sin afectar pago)
+    var totalH2=totalShiftHours(a);
+    if(totalH2>0){
+      var shiftStr2='';
+      if(a.shifts&&a.shifts.length>1){
+        var parts2=[];
+        for(var s2=0;s2<a.shifts.length;s2++){
+          var sh2=a.shifts[s2];
+          if(sh2.ini&&sh2.fin) parts2.push('T'+(s2+1)+': '+sh2.ini+'→'+sh2.fin+' ('+nh(sh2.ini,sh2.fin)+'h)');
+        }
+        shiftStr2=parts2.join(' + ');
+      } else {
+        shiftStr2=(a.ini&&a.fin?a.ini+' → '+a.fin:'');
+      }
+      bd.innerHTML='<span>⏱️ '+shiftStr2+'</span><b>'+totalH2+' h ref.</b>';
       bd.style.display='flex';
     } else bd.style.display='none';
   } else {
@@ -2098,11 +2116,12 @@ function togTime(wi,ai){
   var show=!w.acts[ai].showTime; w.acts[ai].showTime=show;
   var tg=gEl('tg'+wi+'_'+ai); if(tg)tg.classList.toggle('on',show);
   var tf=gEl('tf'+wi+'_'+ai); if(tf)tf.classList.toggle('on',show);
-  if(act&&act.hr&&show){
+  var usaShifts2 = act && (act.hr || act.payType==='Daywork');
+  if(usaShifts2 && show){
     renderShifts(wi,ai);
     var ex=findTime(w.acts[ai].ai, wi);
     if(ex){ var _wi=wi,_ai=ai,_e=ex; setTimeout(function(){ showTm(_wi,_ai,_e.ini,_e.fin); },50); }
-  } else if(!act||!act.hr){
+  } else if(!usaShifts2){
     if(show){
       var ex=findTime(w.acts[ai].ai, wi);
       if(ex){ var _wi=wi,_ai=ai,_e=ex; setTimeout(function(){ showTm(_wi,_ai,_e.ini,_e.fin); },50); }
@@ -2119,7 +2138,7 @@ function chAct(wi,ai,nai){
   var cont=gEl('ac'+wi); if(!cont)return;
   cont.innerHTML='';
   for(var i=0;i<w.acts.length;i++) mkActRow(wi,i);
-  if(ACTS[nai].hr){
+  if(ACTS[nai].hr || ACTS[nai].payType==='Daywork'){
     w.acts[ai].showTime=true;
     var ex=findTime(nai, wi);
     if(ex){ var _wi=wi,_ai=ai,_e=ex; setTimeout(function(){ showTm(_wi,_ai,_e.ini,_e.fin); },100); }
