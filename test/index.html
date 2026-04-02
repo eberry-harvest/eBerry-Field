@@ -1908,7 +1908,8 @@ function mkActRow(wid_,ai,_cont){
   var sel=document.createElement('select');
   for(var i=0;i<ACTS.length;i++){
     var o=document.createElement('option'); o.value=i;
-    o.textContent=ACTS[i].es+' — $'+ACTS[i].p+'/'+ACTS[i].tipo;
+    var tipoLabel=ACTS[i].payType==='Daywork'?'Día Trabajado':ACTS[i].tipo;
+    o.textContent=ACTS[i].es+' — $'+ACTS[i].p+'/'+tipoLabel;
     if(i===a.ai)o.selected=true; sel.appendChild(o);
   }
   (function(wi2,ai2){ sel.addEventListener('change',function(){ chAct(wi2,ai2,parseInt(this.value)); }); })(wid_,ai);
@@ -4387,6 +4388,14 @@ window.addEventListener('DOMContentLoaded', function(){
     ALL_ACTS    = cache.acts || [];
     LIDERES     = cache.lideres || [];
     if(cache.contratos) CONTRATOS = cache.contratos;
+    // Tau: re-normalize cached ACTS — fix Daywork that was cached as Hora
+    // Old cache may not have payType at all, so check both conditions
+    for(var ci=0;ci<ALL_ACTS.length;ci++){
+      var ca=ALL_ACTS[ci];
+      if(ca.payType==='Daywork' || (ca.hr && ca.en && /daywork/i.test(ca.en))){
+        ca.tipo='Ficha'; ca.hr=false; if(!ca.payType) ca.payType='Daywork';
+      }
+    }
     setLoading(false);
     showLogin();
     // Refresh in background silently
