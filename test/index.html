@@ -2272,9 +2272,14 @@ function buildSum(){
       // ✅ Fix: buscar act por ai; si no existe, intentar por esName (JSON de otro día)
       var act=ACTS[a.ai];
       if(!act && a.esName){
+        // Tau: matchear por nombre + tipo para distinguir duplicados (ej: Operador Daywork vs Hours)
         for(var ak=0;ak<ACTS.length;ak++){
-          if(ACTS[ak].es===a.esName){ act=ACTS[ak]; a.ai=ak; break; }
+          if(ACTS[ak].es===a.esName && (!a.tipo || ACTS[ak].tipo===a.tipo)){ act=ACTS[ak]; a.ai=ak; break; }
         }
+        // Fallback: si no matchea con tipo, buscar solo por nombre
+        if(!act){ for(var ak2=0;ak2<ACTS.length;ak2++){
+          if(ACTS[ak2].es===a.esName){ act=ACTS[ak2]; a.ai=ak2; break; }
+        }}
       }
       if(!act){ dets.push((a.esName||'Act.#'+a.ai)+'($'+(a.pay||0).toFixed(2)+')'); continue; }
       var u=act.hr?(a.ini&&a.fin?a.ini+'→'+a.fin+'('+nh(a.ini,a.fin)+'h)':'sin horario'):act.tipo==='$'?'$'+a.qty:a.qty+' '+act.tipo;
@@ -2295,7 +2300,10 @@ function mkReport(){
     for(var j=0;j<w.acts.length;j++){
       var a=w.acts[j],pay=a.pay||0; tot+=pay;
       var act=ACTS[a.ai];
-      if(!act && a.esName){ for(var ak=0;ak<ACTS.length;ak++){ if(ACTS[ak].es===a.esName){ act=ACTS[ak]; a.ai=ak; break; } } }
+      if(!act && a.esName){
+        for(var ak=0;ak<ACTS.length;ak++){ if(ACTS[ak].es===a.esName && (!a.tipo || ACTS[ak].tipo===a.tipo)){ act=ACTS[ak]; a.ai=ak; break; } }
+        if(!act){ for(var ak2=0;ak2<ACTS.length;ak2++){ if(ACTS[ak2].es===a.esName){ act=ACTS[ak2]; a.ai=ak2; break; } } }
+      }
       if(!act){ acts.push((a.esName||'Act.#'+a.ai)+'(=$'+pay.toFixed(2)+')'); continue; }
       var u=act.hr?(a.ini&&a.fin?a.ini+'→'+a.fin+'('+nh(a.ini,a.fin)+'h)':'sin horario')+'=$'+pay.toFixed(2):act.tipo==='$'?'$'+a.qty:a.qty+' '+act.tipo+'=$'+pay.toFixed(2);
       acts.push(act.es+'('+u+')');
@@ -2364,7 +2372,7 @@ function save(){
       for(var sj=0;sj<workers[si].acts.length;sj++){
         var sa=workers[si].acts[sj];
         var sact=sa.ai>=0&&sa.ai<ACTS.length?ACTS[sa.ai]:null;
-        ws.acts.push({ai:sa.ai,esName:sact?sact.es:'',qty:sa.qty,ini:sa.ini,fin:sa.fin,showTime:sa.showTime,pay:sa.pay,shifts:sa.shifts,finca:sa.finca||''});
+        ws.acts.push({ai:sa.ai,esName:sact?sact.es:'',tipo:sact?sact.tipo:'',qty:sa.qty,ini:sa.ini,fin:sa.fin,showTime:sa.showTime,pay:sa.pay,shifts:sa.shifts,finca:sa.finca||''});
       }
       wSave.push(ws);
     }
@@ -2459,16 +2467,20 @@ function load(){
         var a=workers[i].acts[j];
         var act=null;
         if(a.esName){
+          // Tau: matchear por nombre + tipo para distinguir duplicados
           for(var ak=0;ak<ACTS.length;ak++){
-            if(ACTS[ak].es===a.esName){ a.ai=ak; act=ACTS[ak]; break; }
+            if(ACTS[ak].es===a.esName && (!a.tipo || ACTS[ak].tipo===a.tipo)){ a.ai=ak; act=ACTS[ak]; break; }
           }
+          if(!act){ for(var ak2=0;ak2<ACTS.length;ak2++){
+            if(ACTS[ak2].es===a.esName){ a.ai=ak2; act=ACTS[ak2]; break; }
+          }}
         }
         if(!act && a.ai>=0 && a.ai<ACTS.length){ act=ACTS[a.ai]; }
         if(!act){ a.pay=0; continue; }
         a.esName=act.es;
         if(act.hr){ a.pay=totalShiftHours(a)*getHRate(workers[i],act); }
         else if(act.tipo==='$'){ a.pay=parseFloat(a.qty)||0; }
-        else{ a.pay=(parseFloat(a.qty)||0)*act.p; }  // Daywork, Pieces, Cajas = qty × act.p
+        else{ a.pay=(parseFloat(a.qty)||0)*act.p; }
       }
     }
     var list=gEl('wlist'); list.innerHTML='';
@@ -2617,7 +2629,7 @@ function saveQuiet(){
       for(var sj=0;sj<workers[si].acts.length;sj++){
         var sa=workers[si].acts[sj];
         var sact=sa.ai>=0&&sa.ai<ACTS.length?ACTS[sa.ai]:null;
-        ws.acts.push({ai:sa.ai,esName:sact?sact.es:'',qty:sa.qty,ini:sa.ini,fin:sa.fin,showTime:sa.showTime,pay:sa.pay,shifts:sa.shifts,finca:sa.finca||''});
+        ws.acts.push({ai:sa.ai,esName:sact?sact.es:'',tipo:sact?sact.tipo:'',qty:sa.qty,ini:sa.ini,fin:sa.fin,showTime:sa.showTime,pay:sa.pay,shifts:sa.shifts,finca:sa.finca||''});
       }
       wSave.push(ws);
     }
@@ -2761,7 +2773,10 @@ function loadDay(key){
       for(var j=0;j<workers[i].acts.length;j++){
         var a=workers[i].acts[j];
         var act=(a.ai>=0 && a.ai<ACTS.length) ? ACTS[a.ai] : null;
-        if(!act && a.esName){ for(var ak=0;ak<ACTS.length;ak++){ if(ACTS[ak].es===a.esName){act=ACTS[ak];a.ai=ak;break;} } }
+        if(!act && a.esName){
+          for(var ak=0;ak<ACTS.length;ak++){ if(ACTS[ak].es===a.esName && (!a.tipo || ACTS[ak].tipo===a.tipo)){act=ACTS[ak];a.ai=ak;break;} }
+          if(!act){ for(var ak2=0;ak2<ACTS.length;ak2++){ if(ACTS[ak2].es===a.esName){act=ACTS[ak2];a.ai=ak2;break;} } }
+        }
         if(!act)continue;
         if(act.hr){ a.pay=totalShiftHours(a)*getHRate(workers[i],act); }
         else if(act.tipo==='$'){ a.pay=parseFloat(a.qty)||0; }
@@ -2820,9 +2835,14 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     for(var j_n=0;j_n<wks[i].acts.length;j_n++){
       var an_=wks[i].acts[j_n];
       if(an_.esName){
+        var _found=false;
+        // Tau: matchear por nombre + tipo primero
         for(var akn_=0;akn_<ACTS.length;akn_++){
-          if(ACTS[akn_].es===an_.esName){ an_.ai=akn_; break; }
+          if(ACTS[akn_].es===an_.esName && (!an_.tipo || ACTS[akn_].tipo===an_.tipo)){ an_.ai=akn_; _found=true; break; }
         }
+        if(!_found){ for(var akn2_=0;akn2_<ACTS.length;akn2_++){
+          if(ACTS[akn2_].es===an_.esName){ an_.ai=akn2_; break; }
+        }}
       }
     }
   }
