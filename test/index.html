@@ -1893,7 +1893,8 @@ function addAct(wid_){
   var w=getW(wid_); if(!w)return;
   var ai=w.acts.length;
   var defName=ACTS.length>0?ACTS[0].es:'';
-  w.acts.push({ai:0,esName:defName,qty:'',ini:'',fin:'',showTime:false,pay:0,finca:gVal('finca')});
+  var defTipo=ACTS.length>0?ACTS[0].tipo:'';
+  w.acts.push({ai:0,esName:defName,tipo:defTipo,qty:'',ini:'',fin:'',showTime:false,pay:0,finca:gVal('finca')});
   mkActRow(wid_,ai);
   autoSave();
 }
@@ -2100,8 +2101,9 @@ function togTime(wi,ai){
 function chAct(wi,ai,nai){
   var w=getW(wi); if(!w)return;
   var actName=nai>=0&&nai<ACTS.length?ACTS[nai].es:'';
+  var actTipo=nai>=0&&nai<ACTS.length?ACTS[nai].tipo:'';
   var prevFinca = w.acts[ai].finca || '';
-  w.acts[ai]={ai:nai,esName:actName,qty:'',ini:'',fin:'',showTime:false,pay:0,finca:prevFinca};
+  w.acts[ai]={ai:nai,esName:actName,tipo:actTipo,qty:'',ini:'',fin:'',showTime:false,pay:0,finca:prevFinca};
   var old=gEl('ar'+wi+'_'+ai); if(old)old.parentNode.removeChild(old);
   var cont=gEl('ac'+wi); if(!cont)return;
   cont.innerHTML='';
@@ -2212,7 +2214,7 @@ function saAll(){ var all=true; for(var i=0;i<pcp.sel.length;i++){if(!pcp.sel[i]
 function okCopy(){
   if(!pcp)return; var wi=pcp.wi,w=workers[wi];
   w.acts=[];
-  for(var i=0;i<pcp.pat.length;i++){ if(pcp.sel[i])w.acts.push({ai:pcp.pat[i].ai,qty:'',ini:pcp.pat[i].ini,fin:pcp.pat[i].fin,showTime:pcp.pat[i].showTime,pay:0,finca:pcp.pat[i].finca||gVal('finca')}); }
+  for(var i=0;i<pcp.pat.length;i++){ if(pcp.sel[i]){ var _pa=pcp.pat[i]; var _pact=_pa.ai>=0&&_pa.ai<ACTS.length?ACTS[_pa.ai]:null; w.acts.push({ai:_pa.ai,esName:_pact?_pact.es:'',tipo:_pact?_pact.tipo:'',qty:'',ini:_pa.ini,fin:_pa.fin,showTime:_pa.showTime,pay:0,finca:_pa.finca||gVal('finca')}); }}
   w.open=true;
   var cont=gEl('ac'+w.id); if(cont){ cont.innerHTML=''; for(var i=0;i<w.acts.length;i++) mkActRow(w.id,i); }
   var c=gEl('wc'+w.id); if(c)c.classList.add('op');
@@ -2269,18 +2271,17 @@ function buildSum(){
     var w=workers[i]; var dets=[];
     for(var j=0;j<w.acts.length;j++){
       var a=w.acts[j];
-      // ✅ Fix: buscar act por ai; si no existe, intentar por esName (JSON de otro día)
-      var act=ACTS[a.ai];
-      if(!act && a.esName){
-        // Tau: matchear por nombre + tipo para distinguir duplicados (ej: Operador Daywork vs Hours)
+      // Upsilon: siempre priorizar match por nombre+tipo sobre ai directo
+      var act=null;
+      if(a.esName){
         for(var ak=0;ak<ACTS.length;ak++){
           if(ACTS[ak].es===a.esName && (!a.tipo || ACTS[ak].tipo===a.tipo)){ act=ACTS[ak]; a.ai=ak; break; }
         }
-        // Fallback: si no matchea con tipo, buscar solo por nombre
         if(!act){ for(var ak2=0;ak2<ACTS.length;ak2++){
           if(ACTS[ak2].es===a.esName){ act=ACTS[ak2]; a.ai=ak2; break; }
         }}
       }
+      if(!act && a.ai>=0 && a.ai<ACTS.length){ act=ACTS[a.ai]; }
       if(!act){ dets.push((a.esName||'Act.#'+a.ai)+'($'+(a.pay||0).toFixed(2)+')'); continue; }
       var u=act.hr?(a.ini&&a.fin?a.ini+'→'+a.fin+'('+nh(a.ini,a.fin)+'h)':'sin horario'):act.tipo==='$'?'$'+a.qty:a.qty+' '+act.tipo;
       dets.push(act.es.split(' ').slice(0,2).join(' ')+'('+u+')');
@@ -2299,11 +2300,13 @@ function mkReport(){
     var w=workers[i],tot=0,acts=[];
     for(var j=0;j<w.acts.length;j++){
       var a=w.acts[j],pay=a.pay||0; tot+=pay;
-      var act=ACTS[a.ai];
-      if(!act && a.esName){
+      // Upsilon: priorizar nombre+tipo sobre ai directo
+      var act=null;
+      if(a.esName){
         for(var ak=0;ak<ACTS.length;ak++){ if(ACTS[ak].es===a.esName && (!a.tipo || ACTS[ak].tipo===a.tipo)){ act=ACTS[ak]; a.ai=ak; break; } }
         if(!act){ for(var ak2=0;ak2<ACTS.length;ak2++){ if(ACTS[ak2].es===a.esName){ act=ACTS[ak2]; a.ai=ak2; break; } } }
       }
+      if(!act && a.ai>=0 && a.ai<ACTS.length){ act=ACTS[a.ai]; }
       if(!act){ acts.push((a.esName||'Act.#'+a.ai)+'(=$'+pay.toFixed(2)+')'); continue; }
       var u=act.hr?(a.ini&&a.fin?a.ini+'→'+a.fin+'('+nh(a.ini,a.fin)+'h)':'sin horario')+'=$'+pay.toFixed(2):act.tipo==='$'?'$'+a.qty:a.qty+' '+act.tipo+'=$'+pay.toFixed(2);
       acts.push(act.es+'('+u+')');
@@ -2378,7 +2381,7 @@ function save(){
     }
     localStorage.setItem(getUserKey(),JSON.stringify({v:vals,w:wSave,id:wid,ep:estP,hp:hilP,cp:cajasP,ga:grpActs,aus:ausencias}));
     var dateKey=getUserHistKey(vals.fecha||new Date().toISOString().split('T')[0]);
-    localStorage.setItem(dateKey,JSON.stringify({v:vals,w:workers,id:wid,ep:estP,hp:hilP,cp:cajasP,saved:new Date().toISOString()}));
+    localStorage.setItem(dateKey,JSON.stringify({v:vals,w:wSave,id:wid,ep:estP,hp:hilP,cp:cajasP,saved:new Date().toISOString()}));
     toast('💾 Guardado');
   }catch(e){ toast('Error al guardar: '+e.message); }
 }
@@ -2478,6 +2481,7 @@ function load(){
         if(!act && a.ai>=0 && a.ai<ACTS.length){ act=ACTS[a.ai]; }
         if(!act){ a.pay=0; continue; }
         a.esName=act.es;
+        a.tipo=act.tipo;  // Upsilon: siempre sincronizar tipo en live act
         if(act.hr){ a.pay=totalShiftHours(a)*getHRate(workers[i],act); }
         else if(act.tipo==='$'){ a.pay=parseFloat(a.qty)||0; }
         else{ a.pay=(parseFloat(a.qty)||0)*act.p; }
@@ -2635,7 +2639,7 @@ function saveQuiet(){
     }
     localStorage.setItem(getUserKey(),JSON.stringify({v:vals,w:wSave,id:wid,ep:estP,hp:hilP,cp:cajasP,ga:grpActs,aus:ausencias}));
     var dateKey=getUserHistKey(vals.fecha||new Date().toISOString().split('T')[0]);
-    localStorage.setItem(dateKey,JSON.stringify({v:vals,w:workers,id:wid,ep:estP,hp:hilP,cp:cajasP,saved:new Date().toISOString()}));
+    localStorage.setItem(dateKey,JSON.stringify({v:vals,w:wSave,id:wid,ep:estP,hp:hilP,cp:cajasP,saved:new Date().toISOString()}));
     var p=gEl('savepill'); if(!p)return;
     p.textContent='✓ Guardado'; p.style.color='rgba(255,255,255,.95)';
     if(_asTimer2)clearTimeout(_asTimer2);
@@ -2772,15 +2776,19 @@ function loadDay(key){
     for(var i=0;i<workers.length;i++){
       for(var j=0;j<workers[i].acts.length;j++){
         var a=workers[i].acts[j];
-        var act=(a.ai>=0 && a.ai<ACTS.length) ? ACTS[a.ai] : null;
-        if(!act && a.esName){
+        var act=null;
+        // Upsilon: siempre priorizar match por nombre+tipo sobre ai directo
+        if(a.esName){
           for(var ak=0;ak<ACTS.length;ak++){ if(ACTS[ak].es===a.esName && (!a.tipo || ACTS[ak].tipo===a.tipo)){act=ACTS[ak];a.ai=ak;break;} }
           if(!act){ for(var ak2=0;ak2<ACTS.length;ak2++){ if(ACTS[ak2].es===a.esName){act=ACTS[ak2];a.ai=ak2;break;} } }
         }
+        if(!act && a.ai>=0 && a.ai<ACTS.length){ act=ACTS[a.ai]; }
         if(!act)continue;
+        a.esName=act.es;
+        a.tipo=act.tipo;  // Upsilon: sincronizar tipo en live act
         if(act.hr){ a.pay=totalShiftHours(a)*getHRate(workers[i],act); }
         else if(act.tipo==='$'){ a.pay=parseFloat(a.qty)||0; }
-        else{ a.pay=(parseFloat(a.qty)||0)*(act.p||0); }  // Daywork, Pieces, Cajas = qty × act.p
+        else{ a.pay=(parseFloat(a.qty)||0)*(act.p||0); }
       }
     }
     updParam(); updParts();
@@ -4188,7 +4196,8 @@ function migrateActsToNames(){
       for(var i=0;i<d.w.length;i++){
         for(var j=0;j<d.w[i].acts.length;j++){
           var a=d.w[i].acts[j];
-          if(!a.esName && a.ai>=0 && a.ai<ACTS.length){ a.esName=ACTS[a.ai].es; changed=true; }
+          if(!a.esName && a.ai>=0 && a.ai<ACTS.length){ a.esName=ACTS[a.ai].es; a.tipo=ACTS[a.ai].tipo; changed=true; }
+          if(!a.tipo && a.ai>=0 && a.ai<ACTS.length){ a.tipo=ACTS[a.ai].tipo; changed=true; }
         }
       }
       if(changed) localStorage.setItem(KEYS[ki],JSON.stringify(d));
