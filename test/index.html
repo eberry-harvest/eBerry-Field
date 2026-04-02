@@ -1340,7 +1340,8 @@ function loadSheetsData(){
     if(!err && data && data.success && data.tasks){
       ALL_ACTS = [];
       var tipoMap = {
-        'Hours':'Hora','Daywork':'Hora','Hour':'Hora',
+        'Hours':'Hora','Hour':'Hora',
+        'Daywork':'Ficha',  // Tau: Daywork muestra cajita de cantidad, no shifts
         'Pieces':'Ficha','Piece':'Ficha',
         'Extra':'$','Boxes':'Caja','Box':'Caja'
       };
@@ -1996,6 +1997,8 @@ function recalc(wi,ai){
   if(!act) return;
   if(act.hr){ pay=totalShiftHours(a)*getHRate(w,act); }
   else if(act.tipo==='$'){ pay=parseFloat(a.qty)||0; }
+  // Tau: Daywork usa contractRate si existe (misma lógica que Hours)
+  else if(act.payType==='Daywork'){ pay=(parseFloat(a.qty)||0)*getHRate(w,act); }
   else { pay=(parseFloat(a.qty)||0)*act.p; }
   a.pay=pay;
   var sb=gEl('sb'+wi+'_'+ai);
@@ -2467,6 +2470,7 @@ function load(){
         a.esName=act.es;
         if(act.hr){ a.pay=totalShiftHours(a)*getHRate(workers[i],act); }
         else if(act.tipo==='$'){ a.pay=parseFloat(a.qty)||0; }
+        else if(act.payType==='Daywork'){ a.pay=(parseFloat(a.qty)||0)*getHRate(workers[i],act); }
         else{ a.pay=(parseFloat(a.qty)||0)*act.p; }
       }
     }
@@ -2764,6 +2768,7 @@ function loadDay(key){
         if(!act)continue;
         if(act.hr){ a.pay=totalShiftHours(a)*getHRate(workers[i],act); }
         else if(act.tipo==='$'){ a.pay=parseFloat(a.qty)||0; }
+        else if(act.payType==='Daywork'){ a.pay=(parseFloat(a.qty)||0)*getHRate(workers[i],act); }
         else{ a.pay=(parseFloat(a.qty)||0)*(act.p||0); }
       }
     }
@@ -3460,7 +3465,7 @@ function sendToSheets() {
       if (!act) continue;
       var totalH = act.hr ? totalShiftHours(a) : 0;
       // Tau: para Hours/Daywork, enviar el contractRate real del worker a payroll
-      var uPrice = act.hr ? getHRate(w, act) : act.p;
+      var uPrice = (act.hr || act.payType==='Daywork') ? getHRate(w, act) : act.p;
       wOut.acts.push({
         actEs:      act.es,
         actEn:      act.en || act.es,
