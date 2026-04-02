@@ -1941,41 +1941,20 @@ function mkActRow(wid_,ai,_cont){
   })(wid_, ai);
   fincaRow.appendChild(fincaInp);
   div.appendChild(fincaRow);
-  var usaShifts = act.hr || act.payType==='Daywork';  // Tau: Daywork también tiene turnos
-  if(usaShifts){
-    if(!a.shifts||!a.shifts.length){ a.shifts=[{ini:a.ini||'',fin:a.fin||''}]; }
-    var tog=document.createElement('div');
-    tog.className='ttog'+(a.showTime?' on':''); tog.id='tg'+wid_+'_'+ai;
-    var togLbl = act.hr ? '⏰ Horario (requerido para calcular pago)' : '⏰ Registrar horario (referencia opcional)';
-    tog.innerHTML='<div class="tbox">✓</div><span class="tlbl">'+togLbl+'</span>';
-    (function(wi2,ai2){ tog.addEventListener('click',function(){ togTime(wi2,ai2); }); })(wid_,ai);
-    div.appendChild(tog);
-    var tf=document.createElement('div'); tf.className='tinp'+(a.showTime?' on':''); tf.id='tf'+wid_+'_'+ai;
-    div.appendChild(tf);
-    renderShifts(wid_,ai);
-    var bdg=document.createElement('div');
-    bdg.id='bd'+wid_+'_'+ai; bdg.className=act.hr?'shift-total':'tbadge rf'; bdg.style.display='none';
-    div.appendChild(bdg);
-  } else {
-    var tog=document.createElement('div');
-    tog.className='ttog'+(a.showTime?' on':''); tog.id='tg'+wid_+'_'+ai;
-    tog.innerHTML='<div class="tbox">✓</div><span class="tlbl">⏰ Registrar horario (referencia opcional)</span>';
-    (function(wi2,ai2){ tog.addEventListener('click',function(){ togTime(wi2,ai2); }); })(wid_,ai);
-    div.appendChild(tog);
-    var tf=document.createElement('div'); tf.className='tinp'+(a.showTime?' on':''); tf.id='tf'+wid_+'_'+ai;
-    var id1='ini'+wid_+'_'+ai, id2='fin'+wid_+'_'+ai;
-    tf.innerHTML='<div><label style="margin:0;font-size:10px">🟢 Inicio</label><input type="time" step="1800" id="'+id1+'" value="'+(a.ini||'')+'"></div><div><label style="margin:0;font-size:10px">🏁 Fin</label><input type="time" step="1800" id="'+id2+'" value="'+(a.fin||'')+'"></div>';
-    div.appendChild(tf);
-    var _wi=wid_,_ai=ai;
-    setTimeout(function(){
-      var e1=gEl('ini'+_wi+'_'+_ai), e2=gEl('fin'+_wi+'_'+_ai);
-      if(e1) e1.addEventListener('change',function(){ onIni(_wi,_ai,this.value); });
-      if(e2) e2.addEventListener('change',function(){ onFin(_wi,_ai,this.value); });
-    },0);
-    var bdg=document.createElement('div');
-    bdg.id='bd'+wid_+'_'+ai; bdg.className='tbadge rf'; bdg.style.display='none';
-    div.appendChild(bdg);
-  }
+  // Tau: TODAS las actividades usan sistema de turnos con "Agregar turno"
+  if(!a.shifts||!a.shifts.length){ a.shifts=[{ini:a.ini||'',fin:a.fin||''}]; }
+  var tog=document.createElement('div');
+  tog.className='ttog'+(a.showTime?' on':''); tog.id='tg'+wid_+'_'+ai;
+  var togLbl = act.hr ? '⏰ Horario (requerido para calcular pago)' : '⏰ Registrar horario (referencia)';
+  tog.innerHTML='<div class="tbox">✓</div><span class="tlbl">'+togLbl+'</span>';
+  (function(wi2,ai2){ tog.addEventListener('click',function(){ togTime(wi2,ai2); }); })(wid_,ai);
+  div.appendChild(tog);
+  var tf=document.createElement('div'); tf.className='tinp'+(a.showTime?' on':''); tf.id='tf'+wid_+'_'+ai;
+  div.appendChild(tf);
+  renderShifts(wid_,ai);
+  var bdg=document.createElement('div');
+  bdg.id='bd'+wid_+'_'+ai; bdg.className=act.hr?'shift-total':'tbadge rf'; bdg.style.display='none';
+  div.appendChild(bdg);
   if(!act.hr){
     var qr=document.createElement('div'); qr.className='qr'; qr.id='qr'+wid_+'_'+ai;
     var lbl2=act.tipo==='Caja'?'Cajas':act.tipo==='Ficha'?'Piezas':'Monto $';
@@ -2019,7 +1998,7 @@ function recalc(wi,ai){
   if(row) row.className='ar'+(pay>0?(act.hr?' cb':' ca'):'');
   updTot(wi);
   // Zeta: actualizar badge automáticamente si hay horario involucrado
-  if(act.hr || act.payType==='Daywork' || a.ini || a.fin) updBadge(wi,ai);
+  updBadge(wi,ai);  // Tau: siempre actualizar badge (todas las actividades tienen turnos)
 }
 
 function updBadge(wi,ai){
@@ -2044,8 +2023,8 @@ function updBadge(wi,ai){
       bd.innerHTML='<span>⏱️ '+shiftStr+'</span><b>'+totalH+' H × $'+getHRate(w,act).toFixed(2)+'</b>';
       bd.style.display='flex';
     } else bd.style.display='none';
-  } else if(act.payType==='Daywork'){
-    // Daywork: mostrar turnos como referencia (sin afectar pago)
+  } else {
+    // Tau: TODAS las no-hr muestran turnos como referencia
     var totalH2=totalShiftHours(a);
     if(totalH2>0){
       var shiftStr2='';
@@ -2060,12 +2039,6 @@ function updBadge(wi,ai){
         shiftStr2=(a.ini&&a.fin?a.ini+' → '+a.fin:'');
       }
       bd.innerHTML='<span>⏱️ '+shiftStr2+'</span><b>'+totalH2+' h ref.</b>';
-      bd.style.display='flex';
-    } else bd.style.display='none';
-  } else {
-    if(a.ini&&a.fin){
-      var h=nh(a.ini,a.fin);
-      bd.innerHTML='<span>⏱️ '+a.ini+' → '+a.fin+'</span><b>'+h+' h ref.</b>';
       bd.style.display='flex';
     } else bd.style.display='none';
   }
@@ -2116,16 +2089,11 @@ function togTime(wi,ai){
   var show=!w.acts[ai].showTime; w.acts[ai].showTime=show;
   var tg=gEl('tg'+wi+'_'+ai); if(tg)tg.classList.toggle('on',show);
   var tf=gEl('tf'+wi+'_'+ai); if(tf)tf.classList.toggle('on',show);
-  var usaShifts2 = act && (act.hr || act.payType==='Daywork');
-  if(usaShifts2 && show){
+  // Tau: TODAS las actividades usan renderShifts
+  if(show){
     renderShifts(wi,ai);
     var ex=findTime(w.acts[ai].ai, wi);
     if(ex){ var _wi=wi,_ai=ai,_e=ex; setTimeout(function(){ showTm(_wi,_ai,_e.ini,_e.fin); },50); }
-  } else if(!usaShifts2){
-    if(show){
-      var ex=findTime(w.acts[ai].ai, wi);
-      if(ex){ var _wi=wi,_ai=ai,_e=ex; setTimeout(function(){ showTm(_wi,_ai,_e.ini,_e.fin); },50); }
-    }
   }
 }
 
@@ -2138,11 +2106,10 @@ function chAct(wi,ai,nai){
   var cont=gEl('ac'+wi); if(!cont)return;
   cont.innerHTML='';
   for(var i=0;i<w.acts.length;i++) mkActRow(wi,i);
-  if(ACTS[nai].hr || ACTS[nai].payType==='Daywork'){
-    w.acts[ai].showTime=true;
-    var ex=findTime(nai, wi);
-    if(ex){ var _wi=wi,_ai=ai,_e=ex; setTimeout(function(){ showTm(_wi,_ai,_e.ini,_e.fin); },100); }
-  }
+  // Tau: auto-mostrar horario para TODAS las actividades
+  w.acts[ai].showTime=true;
+  var ex=findTime(nai, wi);
+  if(ex){ var _wi=wi,_ai=ai,_e=ex; setTimeout(function(){ showTm(_wi,_ai,_e.ini,_e.fin); },100); }
 }
 
 function delAct(wi,ai){
@@ -3007,7 +2974,11 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
         var wActName3=wks[i].acts[k3].esName||(ACTS[wks[i].acts[k3].ai]?ACTS[wks[i].acts[k3].ai].es:'');
         if(wActName3===col3Name){found3=wks[i].acts[k3];break;}
       }
-      if(found3){ colTotals[col3.colKey]+=col3.hr?(totalShiftHours(found3)||0):(parseFloat(found3.qty)||0); }
+      if(found3){
+        if(col3.hr) colTotals[col3.colKey]+=totalShiftHours(found3)||0;
+        else if(parseFloat(found3.qty)) colTotals[col3.colKey]+=parseFloat(found3.qty);
+        else colTotals[col3.colKey]+=totalShiftHours(found3)||0;  // Sin qty: sumar horas ref
+      }
     }
   }
 
@@ -3031,7 +3002,20 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
   for(i=0;i<actCols.length;i++){
     var col4=actCols[i];
     var tot=colTotals[col4.colKey]||0;
+    // Tau: si no es hr pero tiene total de horas (sin qty), mostrar "h"
     var totLbl=col4.hr?smartNum(tot)+' h':smartNum(tot);
+    if(!col4.hr && tot>0){
+      // Checar si algún worker tiene qty para esta columna
+      var anyQty=false;
+      for(var wq=0;wq<wks.length;wq++){
+        for(var aq=0;aq<wks[wq].acts.length;aq++){
+          var wqn=wks[wq].acts[aq].esName||(ACTS[wks[wq].acts[aq].ai]?ACTS[wks[wq].acts[aq].ai].es:'');
+          if(wqn===(col4.esName||(ACTS[col4.ai]?ACTS[col4.ai].es:'')) && parseFloat(wks[wq].acts[aq].qty)){ anyQty=true; break; }
+        }
+        if(anyQty) break;
+      }
+      if(!anyQty) totLbl=smartNum(tot)+' h';
+    }
     var unitPr=''; var entLbl=''; var salLbl=''; var laborLbl='';
     for(var w2=0;w2<wks.length;w2++){
       // Para columnas hr individuales, solo leer del worker dueño
@@ -3115,7 +3099,12 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
       if(found2){
         var cv='';
         if(col2.hr){ var h2=totalShiftHours(found2); cv=smartNum(h2)+' h'; }
-        else { cv=found2.qty?smartNum(found2.qty):''; }
+        else if(found2.qty){ cv=smartNum(found2.qty); }
+        else {
+          // Sin qty: mostrar horas de referencia si hay shifts
+          var dh=totalShiftHours(found2);
+          if(dh>0) cv=smartNum(dh)+' h';
+        }
         td+='<td style="text-align:center">'+cv+'</td>';
       } else { td+='<td></td>'; }
     }
@@ -4342,7 +4331,7 @@ function setMotivoClose(idx, motivo){
 // ── LOCAL CACHE (instant load on return visits) ──
 // ✅ v4.2: Cambiamos la key del caché para forzar recarga fresca
 // (borra el caché viejo que no tenía el campo "modo")
-var CACHE_KEY = 'eb_appdata_v2';
+var CACHE_KEY = 'eb_appdata_v3';  // Tau: bump para invalidar cache con tipoMap viejo
 
 function saveCache(workers, acts, lideres){
   try{
