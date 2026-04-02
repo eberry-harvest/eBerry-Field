@@ -4400,11 +4400,13 @@ function refreshDataBackground(){
   fetchFromScript('tasks', function(err, data){
     if(!err && data && data.success && data.tasks){
       ALL_ACTS = [];
-      var tipoMap={'Hours':'Hora','Daywork':'Hora','Hour':'Hora','Pieces':'Ficha','Piece':'Ficha','Extra':'$','Boxes':'Caja','Box':'Caja'};
+      var tipoMap={'Hours':'Hora','Hour':'Hora',
+        'Daywork':'Ficha',  // Tau: Daywork = cajita cantidad, no shifts
+        'Pieces':'Ficha','Piece':'Ficha','Extra':'$','Boxes':'Caja','Box':'Caja'};
       for(var i=0;i<data.tasks.length;i++){
         var t=data.tasks[i]; var tipoNorm=tipoMap[t.tipo]||'Hora';
-        var modo=(t.modo||'Individual').trim(); // ✅ incluir modo
-        ALL_ACTS.push({farm:t.farm,es:t.es,en:t.en||t.es,tipo:tipoNorm,p:t.rate||16.23,hr:tipoNorm==='Hora',modo:modo});
+        var modo=(t.modo||'Individual').trim();
+        ALL_ACTS.push({farm:t.farm,es:t.es,en:t.en||t.es,tipo:tipoNorm,payType:t.tipo||'',p:t.rate||16.23,hr:tipoNorm==='Hora',modo:modo});
       }
       saveCache(ALL_WORKERS, ALL_ACTS, LIDERES);
     }
