@@ -877,14 +877,30 @@ var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwjC6Gjcb3_VRmjnV
 var currentUser = null; // {name, pin, crew, isAdmin}
 
 // ── CONFIG (loaded from Sheets CONFIG tab) ──
-var ADMIN_PIN_HASH = '158a323a7ba44870f23d96f1516dd70aa48e9a72db4ebb026b0a89e212a208ab'; // SHA-256 de PIN default — Sheets lo sobreescribe
+var ADMIN_PIN_HASH = ''; // Se calcula al cargar via hashPin() — Sheets lo sobreescribe
+// Upsilon2: inicializar hash del PIN default (2026) al arranque
+(function(){ hashPin('2026').then(function(h){ if(!ADMIN_PIN_HASH) ADMIN_PIN_HASH = h; }); })();
 
 // ── Hash PIN usando Web Crypto (SHA-256) — retorna Promise ──
 function hashPin(pin){
+  // Upsilon2: fallback for Safari private mode / old iOS where crypto.subtle is unavailable
+  if(!window.crypto || !window.crypto.subtle){
+    // Simple fallback hash — consistent but not cryptographic
+    return Promise.resolve(_fallbackHash(String(pin)));
+  }
   return crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(pin)))
     .then(function(buf){
       return Array.from(new Uint8Array(buf)).map(function(b){return ('0'+b.toString(16)).slice(-2)}).join('');
+    })
+    .catch(function(){
+      return _fallbackHash(String(pin));
     });
+}
+function _fallbackHash(str){
+  // djb2-style hash → hex string (deterministic, used only when crypto.subtle fails)
+  var h=5381;
+  for(var i=0;i<str.length;i++) h=((h<<5)+h)+str.charCodeAt(i);
+  return (h>>>0).toString(16).padStart(8,'0');
 }
 
 // ── DATA (loaded from Sheets) ──
@@ -1079,6 +1095,10 @@ function checkPin(){
     }
   });
 
+  }).catch(function(e){
+    // Upsilon2: si hashPin falla inesperadamente, mostrar error en vez de congelarse
+    console.error('hashPin error:', e);
+    gEl('loginErr').textContent = '⚠️ Error de seguridad. Recarga la app.';
   }); // cierre hashPin().then()
 }
 
