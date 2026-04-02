@@ -2907,45 +2907,12 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     }
     actCols[ci]._ini=firstIni;
   }
-  // Tau: sort custom — Cosechas+Empaque primero, luego horas corridas
-  // 1. Detectar cosechas y empaques por nombre (es) para emparejar por producto
-  // 2. Cosechas ordenadas por hora (temprano primero), cada una seguida de su empaque
-  // 3. Resto = "horas corridas" ordenadas del más tarde al más temprano
-  var _cosechas=[], _empaques=[], _resto=[];
-  for(var sc=0;sc<actCols.length;sc++){
-    var esN=actCols[sc].esName.toLowerCase();
-    if(esN.indexOf('cosecha')>=0) _cosechas.push(actCols[sc]);
-    else if(esN.indexOf('empaque')>=0 || esN.indexOf('packing')>=0) _empaques.push(actCols[sc]);
-    else _resto.push(actCols[sc]);
-  }
-  // Ordenar cosechas por hora de entrada (temprano primero)
-  _cosechas.sort(function(a,b){
+  // Upsilon2: orden simple por tiempo (más temprano primero)
+  actCols.sort(function(a,b){
     var aI=a._ini||'99:99', bI=b._ini||'99:99';
     if(aI!==bI) return aI<bI?-1:1;
     return a.label<b.label?-1:1;
   });
-  // Ordenar resto (horas corridas) del más tarde al más temprano
-  _resto.sort(function(a,b){
-    var aI=a._ini||'00:00', bI=b._ini||'00:00';
-    if(aI!==bI) return aI>bI?-1:1;  // invertido: tarde primero
-    return a.label<b.label?-1:1;
-  });
-  // Construir orden final: cosecha → su empaque → siguiente cosecha → su empaque → resto
-  var _sorted=[];
-  for(var sc2=0;sc2<_cosechas.length;sc2++){
-    _sorted.push(_cosechas[sc2]);
-    // Buscar empaque que matchee el producto (ej: "Cosecha de calabaza" → "Empaque de calabaza")
-    var prod=_cosechas[sc2].esName.toLowerCase().replace(/cosecha\s*(de\s*)?/i,'').trim();
-    for(var se=0;se<_empaques.length;se++){
-      var empProd=_empaques[se].esName.toLowerCase().replace(/empaque\s*(de\s*)?/i,'').replace(/packing\s*(de\s*)?/i,'').trim();
-      if(empProd===prod){ _sorted.push(_empaques[se]); _empaques.splice(se,1); break; }
-    }
-  }
-  // Empaques huérfanos (sin cosecha match) van después de las cosechas
-  for(var se2=0;se2<_empaques.length;se2++) _sorted.push(_empaques[se2]);
-  // Horas corridas al final
-  for(var sr=0;sr<_resto.length;sr++) _sorted.push(_resto[sr]);
-  actCols=_sorted;
 
   // Calcular datos por persona desde TODAS las actividades grupales
   var grpPuertasCols = []; // [{label, ct, perPersona: {wid: valor}, totalVal, np, precio, unitLabel, finca, ini, fin}]
@@ -5080,7 +5047,8 @@ function buildInvoiceAutoData(){
         blockNum: 'Acres'
       });
     } else if(ct === 'cajas'){
-      var totalCajas = parseFloat(v.totalCajas) || 0;
+      // Upsilon2: el campo se llama totalC en vars (no totalCajas)
+      var totalCajas = parseFloat(v.totalC) || parseFloat(v.totalCajas) || 0;
       rows.push({
         product: gact.farm || rancho,
         equipment: gact.es,
