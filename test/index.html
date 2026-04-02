@@ -16,7 +16,7 @@
 <style>
 :root{--g:#1a2b8c;--g2:#2d4eb5;--gp:#eef1ff;--a:#cc2222;--ap:#fff0f0;--b:#2d7a2d;--bp:#edfaed;--r:#d94040;--rp:#ffeaea;--dk:#0f1a3d;--gr:#6b7db3;--lt:#f4f6ff;--bd:#c8d0f0}
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'DM Sans',sans-serif;background:var(--lt);color:var(--dk);padding-bottom:140px}
+body{font-family:'DM Sans',sans-serif;background:var(--lt);color:var(--dk);padding-bottom:140px;-webkit-overflow-scrolling:touch}
 header{background:var(--g);color:#fff;padding:12px 14px 0;position:sticky;top:0;z-index:200;box-shadow:0 2px 16px rgba(0,0,0,.2)}
 .htop{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
 .logo{font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:2px}
@@ -33,7 +33,7 @@ header{background:var(--g);color:#fff;padding:12px 14px 0;position:sticky;top:0;
 .ct{font-family:'Bebas Neue',sans-serif;font-size:15px;color:var(--g);letter-spacing:1px;margin-bottom:11px}
 lbl,label{display:block;font-size:11px;font-weight:700;color:var(--gr);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px;margin-top:10px}
 label:first-child{margin-top:0}
-input,select,textarea{width:100%;padding:11px 12px;border:1.5px solid var(--bd);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:15px;color:var(--dk);background:var(--lt);outline:none;-webkit-appearance:none}
+input,select,textarea{width:100%;padding:11px 12px;border:1.5px solid var(--bd);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:16px;color:var(--dk);background:var(--lt);outline:none;-webkit-appearance:none}
 input:focus,select:focus{border-color:var(--g);background:#fff}
 select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%237a8c7e' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;padding-right:32px}
 .r2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
@@ -90,7 +90,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .ar.ca{border-color:var(--a)}
 .ar.cb{border-color:var(--b)}
 .arh{display:flex;align-items:center;gap:6px;margin-bottom:9px}
-.arh select{flex:1;font-size:13px;padding:8px 9px}
+.arh select{flex:1;font-size:16px;padding:8px 9px}
 .xbtn{background:var(--rp);color:var(--r);border:none;border-radius:5px;padding:8px 10px;font-size:13px;font-weight:700;cursor:pointer;flex-shrink:0}
 .ttog{display:flex;align-items:center;gap:10px;padding:9px 10px;margin-bottom:7px;cursor:pointer;border-radius:7px;background:#fff;border:1.5px solid var(--bd);-webkit-tap-highlight-color:transparent}
 .ttog.on{background:var(--gp);border-color:var(--g)}
@@ -100,17 +100,17 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .ttog.on .tlbl{color:var(--g)}
 .tinp{display:none;margin-bottom:8px}
 .tinp.on{display:grid;grid-template-columns:1fr 1fr;gap:7px}
-.tinp input{font-size:14px;padding:10px 11px}
+.tinp input{font-size:16px;padding:10px 11px}
 .tbadge{border-radius:6px;padding:7px 10px;font-size:12px;font-weight:600;margin-bottom:7px;display:flex;align-items:center;justify-content:space-between}
 .tbadge.hr{background:var(--bp);color:var(--b)}
 .tbadge.rf{background:#eee;color:var(--gr)}
 .tbadge b{font-family:'Bebas Neue',sans-serif;font-size:17px}
 .qr{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-bottom:2px}
-.qr input{font-size:14px;padding:10px 11px}
+.qr input{font-size:16px;padding:10px 11px}
 .qr .ro{background:#f0f0f0;color:var(--g);font-weight:700}
 .sub{background:var(--ap);border-radius:5px;padding:6px 10px;font-size:13px;font-weight:700;color:var(--a);text-align:right;margin-top:6px;display:none}
 .shift-row{display:grid;grid-template-columns:1fr 1fr auto;gap:6px;align-items:end;margin-bottom:6px}
-.shift-row input{font-size:14px;padding:10px 11px}
+.shift-row input{font-size:16px;padding:10px 11px}
 .shift-del{background:var(--rp);color:var(--r);border:none;border-radius:5px;padding:10px 9px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0}
 .shift-add{width:100%;padding:8px;border:2px dashed var(--b);border-radius:7px;background:none;color:var(--b);font-family:"DM Sans",sans-serif;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:6px}
 .shift-total{background:var(--bp);border-radius:6px;padding:6px 10px;font-size:12px;font-weight:600;color:var(--b);margin-bottom:6px;display:flex;justify-content:space-between;align-items:center}
@@ -302,7 +302,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 /* ── INVOICE TAB ── */
 .inv-row{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:10px;background:var(--lt);border:1.5px solid var(--bd);border-radius:8px;margin-bottom:8px;position:relative}
 .inv-row.auto{background:var(--gp);border-color:var(--g)}
-.inv-row input,.inv-row select{font-size:13px;padding:8px 9px}
+.inv-row input,.inv-row select{font-size:16px;padding:8px 9px}
 .inv-row label{font-size:10px;margin-top:4px}
 .inv-row .inv-full{grid-column:1/-1}
 .inv-del{position:absolute;top:6px;right:6px;background:var(--rp);color:var(--r);border:none;border-radius:5px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer}
@@ -442,7 +442,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
       <button class="fidClose" onclick="stopFaceID()">✕ Cerrar</button>
     </div>
     <div class="fidCam" id="fidCam">
-      <video id="fidVideo" autoplay playsinline></video>
+      <video id="fidVideo" autoplay playsinline muted></video>
       <canvas id="fidCanvas"></canvas>
       <div class="fidGuide" id="fidGuide"></div>
     </div>
@@ -476,7 +476,7 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
         <button class="faceCapBack" onclick="backToFaceList()">← Volver a la lista</button>
       </div>
       <div class="faceCamWrap" id="faceCamWrap">
-        <video id="faceCamVideo" autoplay playsinline></video>
+        <video id="faceCamVideo" autoplay playsinline muted></video>
         <canvas id="faceCanvas"></canvas>
         <img id="faceImgPreview" style="display:none">
         <div class="faceGuide" id="faceGuide"></div>
@@ -1456,7 +1456,9 @@ function findInStrArr(arr,name){
 
 function t2m(t){ if(!t||t.indexOf(':')<0)return null; var p=t.split(':'); return parseInt(p[0],10)*60+parseInt(p[1],10); }
 function nh(a,b){
-  var e=t2m(a),s=t2m(b); if(e===null||s===null||s<=e)return 0;
+  var e=t2m(a),s=t2m(b); if(e===null||s===null)return 0;
+  // Cruce de medianoche: si salida <= entrada, sumar 24h (1440 min)
+  if(s<=e) s+=1440;
   var li=t2m(gVal('lIni')),lf=t2m(gVal('lFin')),w=s-e;
   if(li!==null&&lf!==null){ var ov=Math.min(s,lf)-Math.max(e,li); if(ov>0)w-=ov; }
   return Math.round(Math.max(0,w)*10/60)/10;
@@ -1617,6 +1619,28 @@ function stopQR(){
   }
   gEl('qrOv').classList.remove('on');
 }
+
+// ── Pausa QR automática cuando cualquier modal .ov se abre ──
+(function(){
+  var ovs=document.querySelectorAll('.ov');
+  var obs=new MutationObserver(function(muts){
+    if(!qrActive)return;
+    for(var i=0;i<muts.length;i++){
+      var t=muts[i].target;
+      if(t.id==='qrOv')continue; // ignorar el propio overlay del QR
+      if(t.classList.contains('on')){ pauseQR(); return; }
+    }
+    // Si ningún overlay (excepto qrOv) tiene .on, reanudar
+    var anyOpen=false;
+    for(var j=0;j<ovs.length;j++){
+      if(ovs[j].id!=='qrOv'&&ovs[j].classList.contains('on')){anyOpen=true;break;}
+    }
+    if(!anyOpen) resumeQR();
+  });
+  for(var k=0;k<ovs.length;k++){
+    if(ovs[k].id!=='qrOv') obs.observe(ovs[k],{attributes:true,attributeFilter:['class']});
+  }
+})();
 
 function setQRStatus(msg, cls){
   var el = gEl('qrStatus');
@@ -2324,7 +2348,7 @@ function save(){
     var vals=collectSaveFields();
     var wSave=[];
     for(var si=0;si<workers.length;si++){
-      var ws={id:workers[si].id,name:workers[si].name,open:workers[si].open,totalPay:workers[si].totalPay,acts:[]};
+      var ws={id:workers[si].id,name:workers[si].name,empNum:workers[si].empNum||'',open:workers[si].open,totalPay:workers[si].totalPay,acts:[]};
       for(var sj=0;sj<workers[si].acts.length;sj++){
         var sa=workers[si].acts[sj];
         var sact=sa.ai>=0&&sa.ai<ACTS.length?ACTS[sa.ai]:null;
@@ -2405,6 +2429,16 @@ function load(){
     if(d.w)workers=d.w; if(d.id)wid=d.id;
     if(d.ep)estP=d.ep; if(d.hp)hilP=d.hp; if(d.cp)cajasP=d.cp; if(d.ga)grpActs=d.ga;
     if(d.aus)ausencias=d.aus;
+    // Tau: recuperar empNum de ALL_WORKERS si falta (datos legacy sin empNum guardado)
+    for(var ei=0;ei<workers.length;ei++){
+      if(!workers[ei].empNum){
+        for(var ej=0;ej<ALL_WORKERS.length;ej++){
+          if(ALL_WORKERS[ej].name.toLowerCase()===workers[ei].name.toLowerCase()){
+            workers[ei].empNum=ALL_WORKERS[ej].empNum||''; break;
+          }
+        }
+      }
+    }
     updParam(); updParts();
     for(var i=0;i<workers.length;i++){
       for(var j=0;j<workers[i].acts.length;j++){
@@ -2565,7 +2599,7 @@ function saveQuiet(){
     var vals=collectSaveFields();
     var wSave=[];
     for(var si=0;si<workers.length;si++){
-      var ws={id:workers[si].id,name:workers[si].name,open:workers[si].open,totalPay:workers[si].totalPay,acts:[]};
+      var ws={id:workers[si].id,name:workers[si].name,empNum:workers[si].empNum||'',open:workers[si].open,totalPay:workers[si].totalPay,acts:[]};
       for(var sj=0;sj<workers[si].acts.length;sj++){
         var sa=workers[si].acts[sj];
         var sact=sa.ai>=0&&sa.ai<ACTS.length?ACTS[sa.ai]:null;
@@ -2820,37 +2854,58 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     return (ord[a.tipo]||0)-(ord[b.tipo]||0);
   });
 
-  // Calcular puertas por persona desde grpActs_
-  var grpPuertasCols = []; // [{label, puertasXPersona: {wid: puertas}}]
+  // Calcular datos por persona desde TODAS las actividades grupales
+  var grpPuertasCols = []; // [{label, ct, perPersona: {wid: valor}, totalVal, np, precio, unitLabel, finca, ini, fin}]
   for(var gi_=0;gi_<grpActs_.length;gi_++){
     var g_=grpActs_[gi_];
     var gact_=GRUPAL_ACTS[g_.gai]; if(!gact_) continue;
     var ct_=grpCalcType(gact_);
-    if(ct_!=='puertas') continue;
-    var metros_=0;
-    var surcos_=g_.vars.surcos||[];
-    for(var si_=0;si_<surcos_.length;si_++) metros_+=(parseFloat(surcos_[si_].largo)||0)*(parseFloat(surcos_[si_].num)||0);
-    var puertas_=metros_/100;
-    var np_=g_.participantes.length; if(!np_||!puertas_) continue;
-    var ppx_=puertas_/np_;
-    var col_={label:gact_.es, puertasXPersona:{}, totalPuertas:puertas_, np:np_, precio:gact_.p, finca:g_.vars.finca||'', ini:g_.vars.ini||'', fin:g_.vars.fin||''};
-    for(var pi_=0;pi_<g_.participantes.length;pi_++) col_.puertasXPersona[g_.participantes[pi_]]=ppx_;
-    grpPuertasCols.push(col_);
+    var np_=g_.participantes.length; if(!np_) continue;
+    var col_=null;
+    if(ct_==='puertas'){
+      var metros_=0;
+      var surcos_=g_.vars.surcos||[];
+      for(var si_=0;si_<surcos_.length;si_++) metros_+=(parseFloat(surcos_[si_].largo)||0)*(parseFloat(surcos_[si_].num)||0);
+      var puertas_=metros_/100;
+      if(!puertas_) continue;
+      var ppx_=puertas_/np_;
+      col_={label:gact_.es, ct:'puertas', perPersona:{}, totalVal:puertas_, np:np_, precio:gact_.p, unitLabel:'Puertas c/u', finca:g_.vars.finca||'', ini:g_.vars.ini||'', fin:g_.vars.fin||''};
+      for(var pi_=0;pi_<g_.participantes.length;pi_++) col_.perPersona[g_.participantes[pi_]]=ppx_;
+    } else if(ct_==='cajas'){
+      var totalC_=parseFloat(g_.vars.totalC)||0;
+      var precioC_=parseFloat(g_.vars.precioC)||gact_.p||0.80;
+      if(!totalC_) continue;
+      var cpx_=totalC_/np_;
+      col_={label:gact_.es, ct:'cajas', perPersona:{}, totalVal:totalC_, np:np_, precio:precioC_, unitLabel:'Cajas c/u', finca:g_.vars.finca||'', ini:g_.vars.ini||'', fin:g_.vars.fin||''};
+      for(var pi2_=0;pi2_<g_.participantes.length;pi2_++) col_.perPersona[g_.participantes[pi2_]]=cpx_;
+    } else if(ct_==='hora'){
+      var hGrp_=nh(g_.vars.ini||'',g_.vars.fin||'');
+      if(!hGrp_) continue;
+      col_={label:gact_.es, ct:'hora', perPersona:{}, totalVal:hGrp_, np:np_, precio:gact_.p, unitLabel:'Horas', finca:'', ini:g_.vars.ini||'', fin:g_.vars.fin||''};
+      for(var pi3_=0;pi3_<g_.participantes.length;pi3_++) col_.perPersona[g_.participantes[pi3_]]=hGrp_;
+    } else {
+      var totalP_=parseFloat(g_.vars.totalP)||0;
+      if(!totalP_) continue;
+      var qpx_=totalP_/np_;
+      col_={label:gact_.es, ct:'generic', perPersona:{}, totalVal:totalP_, np:np_, precio:gact_.p, unitLabel:gact_.tipo||'Qty c/u', finca:g_.vars.finca||'', ini:g_.vars.ini||'', fin:g_.vars.fin||''};
+      for(var pi4_=0;pi4_<g_.participantes.length;pi4_++) col_.perPersona[g_.participantes[pi4_]]=qpx_;
+    }
+    if(col_) grpPuertasCols.push(col_);
   }
 
   var th='<th style="width:28px;text-align:center">#</th><th style="min-width:130px;text-align:left;border-right:3px solid #1a2b8c">Nombre / Name</th>';
   for(i=0;i<actCols.length;i++){
     var col=actCols[i];
     var unitLbl=col.tipo==='Hora'?'Horas':col.tipo==='Ficha'?'Fichas':col.tipo==='Caja'?'Cajas':'$';
-    th+='<th style="text-align:center;min-width:80px">'+col.label+'<br><span style="font-weight:400;font-size:9px;opacity:.8">'+unitLbl+'</span></th>';
+    th+='<th style="text-align:center;min-width:80px">'+col.label+'<br><span style="font-weight:400;font-size:9px">'+unitLbl+'</span></th>';
   }
-  // ✅ Columnas de actividades grupales tipo puertas
+  // ✅ Columnas de TODAS las actividades grupales
   for(var gi2_=0;gi2_<grpPuertasCols.length;gi2_++){
-    th+='<th style="text-align:center;min-width:80px;background:#e8f4fd">'+grpPuertasCols[gi2_].label+'<br><span style="font-weight:400;font-size:9px;opacity:.8">Puertas c/u</span></th>';
+    th+='<th style="text-align:center;min-width:80px;background:#e8f4fd">'+grpPuertasCols[gi2_].label+'<br><span style="font-weight:400;font-size:9px">'+grpPuertasCols[gi2_].unitLabel+'</span></th>';
   }
-  if(cp&&cp.length&&cajasT) th+='<th style="text-align:center;min-width:80px">Empaque Cajas<br><span style="font-weight:400;font-size:9px;opacity:.8">Cajas c/u</span></th>';
-  if(ep&&ep.length&&estA&&estAn) th+='<th style="text-align:center;min-width:80px">Q. Estaca<br><span style="font-weight:400;font-size:9px;opacity:.8">Puertas c/u</span></th>';
-  if(hp&&hp.length&&hilA&&hilAn) th+='<th style="text-align:center;min-width:80px">Q. Hilo<br><span style="font-weight:400;font-size:9px;opacity:.8">Puertas c/u</span></th>';
+  if(cp&&cp.length&&cajasT) th+='<th style="text-align:center;min-width:80px">Empaque Cajas<br><span style="font-weight:400;font-size:9px">Cajas c/u</span></th>';
+  if(ep&&ep.length&&estA&&estAn) th+='<th style="text-align:center;min-width:80px">Q. Estaca<br><span style="font-weight:400;font-size:9px">Puertas c/u</span></th>';
+  if(hp&&hp.length&&hilA&&hilAn) th+='<th style="text-align:center;min-width:80px">Q. Hilo<br><span style="font-weight:400;font-size:9px">Puertas c/u</span></th>';
 
   // ── Totales por columna — usar colKey para columnas individuales ──
   var colTotals={};
@@ -2876,16 +2931,16 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     +'<td style="text-align:right;padding:5px 7px;border:1px solid #aab;border-top:3px solid #1a2b8c;border-right:3px solid #1a2b8c;color:#1a2b8c;font-size:10px;font-weight:900">TOTAL</td>';
   var trPrice='<tr style="font-size:10px;background:#fff">'
     +'<td style="border:1px solid #ddd"></td>'
-    +'<td style="text-align:right;padding:4px 7px;border:1px solid #ddd;border-right:3px solid #1a2b8c;color:#555;font-weight:600">Pago Unit.</td>';
+    +'<td style="text-align:right;padding:4px 7px;border:1px solid #ddd;border-right:3px solid #1a2b8c;color:#111;font-weight:600">Pago Unit.</td>';
   var trLabor='<tr style="font-size:10px;background:#f5f8ff">'
     +'<td style="border:1px solid #ddd"></td>'
-    +'<td style="text-align:right;padding:4px 7px;border:1px solid #ddd;border-right:3px solid #1a2b8c;color:#555;font-weight:600">Labor</td>';
+    +'<td style="text-align:right;padding:4px 7px;border:1px solid #ddd;border-right:3px solid #1a2b8c;color:#111;font-weight:600">Labor</td>';
   var trEntry='<tr style="font-size:10px;background:#f9f9f9">'
     +'<td style="border:1px solid #ddd"></td>'
-    +'<td style="text-align:right;padding:4px 7px;border:1px solid #ddd;border-right:3px solid #1a2b8c;color:#666">Entrada</td>';
+    +'<td style="text-align:right;padding:4px 7px;border:1px solid #ddd;border-right:3px solid #1a2b8c;color:#111">Entrada</td>';
   var trExit='<tr class="meta-last" style="font-size:10px;background:#f9f9f9">'
     +'<td style="border:1px solid #ddd"></td>'
-    +'<td style="text-align:right;padding:4px 7px;border:1px solid #ddd;border-right:3px solid #1a2b8c;color:#666">Salida</td>';
+    +'<td style="text-align:right;padding:4px 7px;border:1px solid #ddd;border-right:3px solid #1a2b8c;color:#111">Salida</td>';
 
   for(i=0;i<actCols.length;i++){
     var col4=actCols[i];
@@ -2903,40 +2958,49 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
           if(act2.unitPrice) unitPr='$'+parseFloat(act2.unitPrice).toFixed(2);
           else if(ACTS[col4.ai]&&ACTS[col4.ai].p) unitPr='$'+parseFloat(ACTS[col4.ai].p).toFixed(2);
           if(act2.finca) laborLbl=act2.finca;
-          if(col4.hr){
+          // Extraer horario de TODAS las actividades (Hora, Ficha, Caja, $)
+          if(!entLbl){
             if(act2.shifts&&act2.shifts.length>1){
               var eL=[],sL=[];
               for(var si=0;si<act2.shifts.length;si++){ if(act2.shifts[si].ini)eL.push(act2.shifts[si].ini); if(act2.shifts[si].fin)sL.push(act2.shifts[si].fin); }
-              entLbl=eL.join('<br>'); salLbl=sL.join('<br>');
-            } else if(act2.shifts&&act2.shifts.length===1){
+              if(eL.length){ entLbl=eL.join('<br>'); salLbl=sL.join('<br>'); }
+            } else if(act2.shifts&&act2.shifts.length===1&&(act2.shifts[0].ini||act2.shifts[0].fin)){
               entLbl=act2.shifts[0].ini||''; salLbl=act2.shifts[0].fin||'';
             } else if(act2.ini||act2.fin){
               entLbl=act2.ini||''; salLbl=act2.fin||'';
             }
           }
-          break;
+          if(unitPr&&entLbl&&laborLbl) break;
         }
       }
-      if(unitPr) break;
+      if(unitPr && entLbl) break;
     }
     if(!unitPr&&ACTS[col4.ai]&&ACTS[col4.ai].p) unitPr='$'+parseFloat(ACTS[col4.ai].p).toFixed(2);
     trTotal+='<td style="text-align:center;border:1px solid #ccc;border-top:3px solid #1a2b8c;color:#1a2b8c;font-weight:700">'+totLbl+'</td>';
     trPrice+='<td style="text-align:center;border:1px solid #ddd;color:#c0392b;font-weight:700">'+unitPr+'</td>';
     trLabor+='<td style="text-align:center;border:1px solid #ddd;color:#3a7fd4;font-size:9px">'+laborLbl+'</td>';
-    trEntry+='<td style="text-align:center;border:1px solid #ddd;color:#444">'+entLbl+'</td>';
-    trExit +='<td style="text-align:center;border:1px solid #ddd;color:#444">'+salLbl+'</td>';
+    trEntry+='<td style="text-align:center;border:1px solid #ddd;color:#111">'+entLbl+'</td>';
+    trExit +='<td style="text-align:center;border:1px solid #ddd;color:#111">'+salLbl+'</td>';
   }
   if(cp&&cp.length&&cajasT){ trTotal+='<td style="border-top:3px solid #1a2b8c"></td>'; trPrice+='<td></td>'; trLabor+='<td></td>'; trEntry+='<td></td>'; trExit+='<td></td>'; }
   if(ep&&ep.length&&estA&&estAn){ trTotal+='<td style="border-top:3px solid #1a2b8c"></td>'; trPrice+='<td></td>'; trLabor+='<td></td>'; trEntry+='<td></td>'; trExit+='<td></td>'; }
   if(hp&&hp.length&&hilA&&hilAn){ trTotal+='<td style="border-top:3px solid #1a2b8c"></td>'; trPrice+='<td></td>'; trLabor+='<td></td>'; trEntry+='<td></td>'; trExit+='<td></td>'; }
-  // ✅ Totales de puertas grupales
+  // ✅ Totales de TODAS las actividades grupales
   for(var gi4_=0;gi4_<grpPuertasCols.length;gi4_++){
     var gc_=grpPuertasCols[gi4_];
-    // Calcular acres para el total
-    var gcAncho_ = parseFloat(grpActs_[gi4_] ? (grpActs_[gi4_].vars.anchoCama||0) : 0)||0;
-    var gcAcres_ = (gcAncho_>0 && gc_.totalPuertas>0) ? gc_.totalPuertas/gcAncho_ : 0;
-    var totalCell_ = (gcAcres_>0?'<span style="font-size:9px;color:#0f6e56;display:block">'+gcAcres_.toFixed(2)+' acres</span>':'')
-      +'<span style="font-size:11px">'+gc_.totalPuertas.toFixed(2)+' puertas</span>';
+    var totalCell_='';
+    if(gc_.ct==='puertas'){
+      var gcAncho_ = parseFloat(grpActs_[gi4_] ? (grpActs_[gi4_].vars.anchoCama||0) : 0)||0;
+      var gcAcres_ = (gcAncho_>0 && gc_.totalVal>0) ? gc_.totalVal/gcAncho_ : 0;
+      totalCell_ = (gcAcres_>0?'<span style="font-size:9px;color:#0f6e56;display:block">'+gcAcres_.toFixed(2)+' acres</span>':'')
+        +'<span style="font-size:11px">'+gc_.totalVal.toFixed(2)+' puertas</span>';
+    } else if(gc_.ct==='cajas'){
+      totalCell_='<span style="font-size:11px">'+gc_.totalVal.toFixed(0)+' cajas</span>';
+    } else if(gc_.ct==='hora'){
+      totalCell_='<span style="font-size:11px">'+gc_.totalVal.toFixed(1)+' hrs</span>';
+    } else {
+      totalCell_='<span style="font-size:11px">'+gc_.totalVal.toFixed(1)+'</span>';
+    }
     trTotal+='<td style="text-align:center;background:#e8f4fd;font-weight:700;line-height:1.5;border-top:3px solid #1a2b8c">'+totalCell_+'</td>';
     trPrice+='<td style="text-align:center;background:#e8f4fd;color:#c0392b;font-weight:700">$'+gc_.precio.toFixed(2)+'</td>';
     trLabor+='<td style="background:#e8f4fd;text-align:center;border:1px solid #ddd;color:#3a7fd4;font-size:9px">'+gc_.finca+'</td>';
@@ -2950,7 +3014,7 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
   var rows='';
   for(i=0;i<wks.length;i++){
     var w=wks[i];
-    var empLbl = w.empNum ? ' <span style="font-size:8px;color:#888;font-weight:400">#'+esc(w.empNum)+'</span>' : '';
+    var empLbl = w.empNum ? ' <span style="font-size:8px;color:#333;font-weight:400">#'+esc(w.empNum)+'</span>' : '';
     var td='<td class="numcol">'+(i+1)+'</td><td class="namecol" style="border-right:3px solid #1a2b8c">'+esc(w.name)+empLbl+'</td>';
     for(j=0;j<actCols.length;j++){
       var col2=actCols[j];
@@ -2969,9 +3033,9 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
         td+='<td style="text-align:center">'+cv+'</td>';
       } else { td+='<td></td>'; }
     }
-    // ✅ Celdas de actividades grupales tipo puertas
+    // ✅ Celdas de TODAS las actividades grupales
     for(var gi3_=0;gi3_<grpPuertasCols.length;gi3_++){
-      var ppVal=grpPuertasCols[gi3_].puertasXPersona[w.id];
+      var ppVal=grpPuertasCols[gi3_].perPersona[w.id];
       td+='<td style="text-align:center;background:#f0f8ff">'+(ppVal!==undefined?ppVal.toFixed(2):'')+'</td>';
     }
     if(cp&&cp.length&&cajasT) td+='<td style="text-align:center">'+(inA(cp,w.id)?cajasPerPerson.toFixed(1):'')+'</td>';
@@ -2984,7 +3048,7 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     + (cp&&cp.length&&cajasT?1:0)
     + (ep&&ep.length&&estA&&estAn?1:0)
     + (hp&&hp.length&&hilA&&hilAn?1:0);
-  var emptyCount = Math.max(5, 30 - wks.length); // mínimo 5, hasta completar ~30 filas
+  var emptyCount = 1; // solo 1 fila vacía después del último trabajador
   for(i=0;i<emptyCount;i++){
     var etd='<td class="numcol" style="color:#ddd;border:1px solid #ddd">'+(wks.length+i+1)+'</td>';
     etd+='<td style="border:1px solid #ddd;border-right:3px solid #1a2b8c"></td>';
@@ -3001,9 +3065,9 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     +'th{padding:5px 4px;text-align:center;font-size:9px;font-weight:700;border:1px solid #4a5bbc;background:#1a2b8c;color:#fff;line-height:1.3}'
     +'td{padding:4px 5px;border:1px solid #ddd;vertical-align:middle;text-align:center}'
     +'.namecol{text-align:left!important;font-weight:600}'
-    +'.numcol{text-align:center!important;color:#aaa;font-size:9px}'
+    +'.numcol{text-align:center!important;color:#333;font-size:9px}'
     +'.meta-last td{border-bottom:3px solid #1a2b8c!important}'
-    +'.ft{font-size:8px;color:#888;text-align:center;margin-top:6px;border-top:1px solid #ddd;padding-top:5px}'
+    +'.ft{font-size:8px;color:#333;text-align:center;margin-top:6px;border-top:1px solid #ddd;padding-top:5px}'
     +'@media print{.nopr{display:none}thead{display:table-header-group}@page{margin:7mm;size:letter landscape}}'
     +'</style></head><body>'
     +'<div class="hdr">'
@@ -3012,10 +3076,10 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     +'<div>'
     +'<div style="font-size:16px;font-weight:700;color:#1a2b8c;line-height:1.1">eberry harvest company llc</div>'
     +'<div style="font-size:13px;font-weight:900;letter-spacing:.5px">DAILY PAYROLL SHEET</div>'
-    +'<div style="font-size:10px;color:#555;margin-top:2px">Farm: '+vals.rancho+' &nbsp;|&nbsp; Bus #'+vals.numBus+' &nbsp;|&nbsp; '+vals.surquero+' &nbsp;|&nbsp; Lunch: '+lunchMin+' min</div>'
+    +'<div style="font-size:10px;color:#111;margin-top:2px">Farm: '+vals.rancho+' &nbsp;|&nbsp; Bus #'+vals.numBus+' &nbsp;|&nbsp; '+vals.surquero+' &nbsp;|&nbsp; Lunch: '+lunchMin+' min</div>'
     +'</div></div>'
     +'<div style="text-align:right">'
-    +'<div style="font-size:8px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:1px">DATE / FECHA</div>'
+    +'<div style="font-size:8px;font-weight:700;color:#333;text-transform:uppercase;letter-spacing:1px">DATE / FECHA</div>'
     +'<div style="font-size:22px;font-weight:900;color:#1a2b8c;letter-spacing:1px">'+vals.fecha+'</div>'
     +'</div>'
     +'</div>'
@@ -3044,6 +3108,7 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     +'<div class="nopr" style="text-align:center;margin-top:16px"><button onclick="window.print()" style="background:#1a7a4a;color:#fff;border:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-right:10px">🖨️ Imprimir / Guardar PDF</button><button onclick="window.close()" style="background:#eee;color:#555;border:none;padding:12px 20px;border-radius:8px;font-size:14px;cursor:pointer">Cerrar</button></div>'
     +'</body></html>';
   var win=window.open('','_blank','width=1000,height=700');
+  if(!win){ toast('⚠️ Habilita pop-ups para ver el PDF'); return; }
   win.document.write(html); win.document.close(); win.focus();
 }
 
@@ -3540,18 +3605,13 @@ function showGrpPicker(){
 }
 
 function addGrpAct(gai){
-  for(var i=0;i<grpActs.length;i++){
-    if(grpActs[i].gai===gai){ toast('⚠️ Ya está agregada'); gEl('grpPickOv').classList.remove('on'); return; }
-  }
   grpActs.push({gai:gai, participantes:[], vars:{}, open:true});
   gEl('grpPickOv').classList.remove('on');
   renderGrpActs(); autoSave();
 }
 
-function removeGrpAct(gai){
-  for(var i=0;i<grpActs.length;i++){
-    if(grpActs[i].gai===gai){ grpActs.splice(i,1); break; }
-  }
+function removeGrpAct(gi){
+  grpActs.splice(gi,1);
   renderGrpActs(); updParts(); autoSave();
 }
 
@@ -3585,7 +3645,7 @@ function renderGrpActs(){
 
     // ── BODY colapsable ──
     var removeBtn = '<div style="display:flex;justify-content:flex-end;margin-bottom:10px">'
-      +'<button data-gai="'+g.gai+'" onclick="event.stopPropagation();removeGrpAct(parseInt(this.dataset.gai))" style="background:var(--rp);color:var(--r);border:none;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer">✕ Quitar</button>'
+      +'<button data-gi="'+gi+'" onclick="event.stopPropagation();removeGrpAct(parseInt(this.dataset.gi))" style="background:var(--rp);color:var(--r);border:none;border-radius:6px;padding:5px 10px;font-size:12px;font-weight:700;cursor:pointer">✕ Quitar</button>'
       +'</div>';
 
     var varsHtml = '';
@@ -3616,11 +3676,11 @@ function renderGrpActs(){
           +'<div><label style="font-size:10px">Largo surco (pies)</label>'
           +'<input type="text" inputmode="decimal" value="'+(sf.largo||'')+'" placeholder="ej: 709.5"'
           +' data-gi="'+gi+'" data-fi="'+fi+'" data-sv="largo" oninput="setSurcoVarText(this)"'
-          +' style="font-size:14px;padding:9px 10px;width:100%"></div>'
+          +' style="font-size:16px;padding:9px 10px;width:100%"></div>'
           +'<div><label style="font-size:10px">Núm. surcos</label>'
           +'<input type="text" inputmode="decimal" value="'+(sf.num||'')+'" placeholder="ej: 12"'
           +' data-gi="'+gi+'" data-fi="'+fi+'" data-sv="num" oninput="setSurcoVarText(this)"'
-          +' style="font-size:14px;padding:9px 10px;width:100%"></div>'
+          +' style="font-size:16px;padding:9px 10px;width:100%"></div>'
           +'</div>'
           +'</div>';
       }
@@ -3645,20 +3705,20 @@ function renderGrpActs(){
         +'<div><label style="font-size:10px">🟢 Entrada</label>'
         +'<input type="time" step="1800" value="'+(g.vars.ini||'')+'"'
         +' data-gi="'+gi+'" data-v="ini" onchange="setGrpVar(this)"'
-        +' style="font-size:14px;padding:9px 10px;width:100%"></div>'
+        +' style="font-size:16px;padding:9px 10px;width:100%"></div>'
         +'<div><label style="font-size:10px">🏁 Salida</label>'
         +'<input type="time" step="1800" value="'+(g.vars.fin||'')+'"'
         +' data-gi="'+gi+'" data-v="fin" onchange="setGrpVar(this)"'
-        +' style="font-size:14px;padding:9px 10px;width:100%"></div>'
+        +' style="font-size:16px;padding:9px 10px;width:100%"></div>'
         +'</div>'
         +'<div style="margin-bottom:6px"><label style="font-size:10px">🌱 Ancho de cama (para calcular acres)</label>'
         +'<input type="text" inputmode="decimal" value="'+anchoCama+'" placeholder="ej: 5.5"'
         +' data-gi="'+gi+'" data-v="anchoCama" oninput="setGrpVar(this)"'
-        +' style="font-size:14px;padding:9px 10px;width:100%"></div>'
+        +' style="font-size:16px;padding:9px 10px;width:100%"></div>'
         +'<div style="margin-bottom:6px"><label style="font-size:10px">📍 Labor / Finca (aparece en el PDF)</label>'
         +'<input type="text" value="'+(g.vars.finca||'')+'" placeholder="ej: El Columpio, Block 3..."'
         +' data-gi="'+gi+'" data-v="finca" oninput="setGrpVar(this)"'
-        +' style="font-size:14px;padding:9px 10px;width:100%"></div>'
+        +' style="font-size:16px;padding:9px 10px;width:100%"></div>'
         +'<div id="gaAcres'+gi+'" style="background:var(--bp);border-radius:7px;padding:9px 12px;margin-bottom:8px;display:'+(metrosTotal>0&&anchoCama&&parseFloat(anchoCama)>0?'flex':'none')+';justify-content:space-between;align-items:center">'
         +'<span style="font-size:12px;font-weight:600;color:var(--b)">🌿 Acres trabajados</span>'
         +'<b style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:var(--b)" id="gaAcresVal'+gi+'">'+acresCalc.toFixed(3)+'</b></div>';
@@ -3666,22 +3726,50 @@ function renderGrpActs(){
       var totalC = g.vars.totalC||''; var precioC = g.vars.precioC||act.p||0.80;
       varsHtml = '<div class="r2" style="margin-bottom:8px">'
         +'<div><label style="font-size:10px">Total cajas</label>'
-        +'<input type="number" min="0" step="1" value="'+totalC+'" placeholder="0" data-gi="'+gi+'" data-v="totalC" onchange="setGrpVar(this)" style="font-size:14px;padding:10px 11px"></div>'
+        +'<input type="number" min="0" step="1" value="'+totalC+'" placeholder="0" data-gi="'+gi+'" data-v="totalC" onchange="setGrpVar(this)" style="font-size:16px;padding:10px 11px"></div>'
         +'<div><label style="font-size:10px">$/caja</label>'
-        +'<input type="number" min="0" step="0.01" value="'+precioC+'" data-gi="'+gi+'" data-v="precioC" onchange="setGrpVar(this)" style="font-size:14px;padding:10px 11px"></div>'
-        +'</div>';
+        +'<input type="number" min="0" step="0.01" value="'+precioC+'" data-gi="'+gi+'" data-v="precioC" onchange="setGrpVar(this)" style="font-size:16px;padding:10px 11px"></div>'
+        +'</div>'
+        +'<div class="r2" style="margin-bottom:8px">'
+        +'<div><label style="font-size:10px">🟢 Entrada</label>'
+        +'<input type="time" step="1800" value="'+(g.vars.ini||'')+'"'
+        +' data-gi="'+gi+'" data-v="ini" onchange="setGrpVar(this)"'
+        +' style="font-size:16px;padding:9px 10px;width:100%"></div>'
+        +'<div><label style="font-size:10px">🏁 Salida</label>'
+        +'<input type="time" step="1800" value="'+(g.vars.fin||'')+'"'
+        +' data-gi="'+gi+'" data-v="fin" onchange="setGrpVar(this)"'
+        +' style="font-size:16px;padding:9px 10px;width:100%"></div>'
+        +'</div>'
+        +'<div style="margin-bottom:6px"><label style="font-size:10px">📍 Labor / Finca (aparece en el PDF)</label>'
+        +'<input type="text" value="'+(g.vars.finca||'')+'" placeholder="ej: El Columpio, Block 3..."'
+        +' data-gi="'+gi+'" data-v="finca" oninput="setGrpVar(this)"'
+        +' style="font-size:16px;padding:9px 10px;width:100%"></div>';
     } else if(ct === 'hora'){
       var hIni = g.vars.ini||''; var hFin = g.vars.fin||'';
       varsHtml = '<div class="r2" style="margin-bottom:8px">'
         +'<div><label style="font-size:10px">🟢 Inicio</label>'
-        +'<input type="time" value="'+hIni+'" data-gi="'+gi+'" data-v="ini" onchange="setGrpVar(this)" style="font-size:14px;padding:10px 11px"></div>'
+        +'<input type="time" value="'+hIni+'" data-gi="'+gi+'" data-v="ini" onchange="setGrpVar(this)" style="font-size:16px;padding:10px 11px"></div>'
         +'<div><label style="font-size:10px">🏁 Fin</label>'
-        +'<input type="time" value="'+hFin+'" data-gi="'+gi+'" data-v="fin" onchange="setGrpVar(this)" style="font-size:14px;padding:10px 11px"></div>'
+        +'<input type="time" value="'+hFin+'" data-gi="'+gi+'" data-v="fin" onchange="setGrpVar(this)" style="font-size:16px;padding:10px 11px"></div>'
         +'</div>';
     } else {
       var totalP = g.vars.totalP||'';
       varsHtml = '<div style="margin-bottom:8px"><label style="font-size:10px">Cantidad total ('+act.tipo+')</label>'
-        +'<input type="number" min="0" step="1" value="'+totalP+'" placeholder="0" data-gi="'+gi+'" data-v="totalP" onchange="setGrpVar(this)" style="font-size:14px;padding:10px 11px;width:100%"></div>';
+        +'<input type="number" min="0" step="1" value="'+totalP+'" placeholder="0" data-gi="'+gi+'" data-v="totalP" onchange="setGrpVar(this)" style="font-size:16px;padding:10px 11px;width:100%"></div>'
+        +'<div class="r2" style="margin-bottom:8px">'
+        +'<div><label style="font-size:10px">🟢 Entrada</label>'
+        +'<input type="time" step="1800" value="'+(g.vars.ini||'')+'"'
+        +' data-gi="'+gi+'" data-v="ini" onchange="setGrpVar(this)"'
+        +' style="font-size:16px;padding:9px 10px;width:100%"></div>'
+        +'<div><label style="font-size:10px">🏁 Salida</label>'
+        +'<input type="time" step="1800" value="'+(g.vars.fin||'')+'"'
+        +' data-gi="'+gi+'" data-v="fin" onchange="setGrpVar(this)"'
+        +' style="font-size:16px;padding:9px 10px;width:100%"></div>'
+        +'</div>'
+        +'<div style="margin-bottom:6px"><label style="font-size:10px">📍 Labor / Finca (aparece en el PDF)</label>'
+        +'<input type="text" value="'+(g.vars.finca||'')+'" placeholder="ej: El Columpio, Block 3..."'
+        +' data-gi="'+gi+'" data-v="finca" oninput="setGrpVar(this)"'
+        +' style="font-size:16px;padding:9px 10px;width:100%"></div>';
     }
 
     // Participantes
