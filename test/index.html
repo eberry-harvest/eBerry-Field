@@ -887,7 +887,7 @@ function hashPin(pin){
 
 // ── DATA (loaded from Sheets) ──
 var NAMES = []; // workers for current crew
-var ALL_WORKERS = []; // [{name, crew, empNum, ioe}]
+var ALL_WORKERS = []; // [{name, crew, empNum, ioe, contractRate}]
 var CONTRATOS = {}; // {ioeKey: [rancho1, rancho2, ...]}
 var ACTS = [];  // actividades individuales del rancho actual
 var GRUPAL_ACTS = []; // actividades grupales del rancho actual
@@ -1350,7 +1350,7 @@ function loadSheetsData(){
         var modo = (t.modo || 'Individual').trim();
         ALL_ACTS.push({
           farm:t.farm, es:t.es, en:t.en||t.es,
-          tipo:tipoNorm, p:t.rate||16.23, hr:tipoNorm==='Hora',
+          tipo:tipoNorm, payType:t.tipo||'', p:t.rate||16.23, hr:tipoNorm==='Hora',
           modo: modo  // 'Individual' | 'Grupal'
         });
       }
@@ -1821,12 +1821,16 @@ function okUnk(){
 }
 function noUnk(){ pendingUnk=null; gEl('unkOv').classList.remove('on'); if(qrActive) resumeQR(); }
 function doAddConfirmed(name){
-  // Buscar empNum del worker en ALL_WORKERS
-  var _empNum = '';
+  // Buscar empNum y contractRate del worker en ALL_WORKERS
+  var _empNum = '', _cRate = 0;
   for(var _aw=0;_aw<ALL_WORKERS.length;_aw++){
-    if(ALL_WORKERS[_aw].name.toLowerCase()===name.toLowerCase()){ _empNum=ALL_WORKERS[_aw].empNum||''; break; }
+    if(ALL_WORKERS[_aw].name.toLowerCase()===name.toLowerCase()){
+      _empNum=ALL_WORKERS[_aw].empNum||'';
+      _cRate=ALL_WORKERS[_aw].contractRate||0;
+      break;
+    }
   }
-  var w={id:wid++,name:name,empNum:_empNum,open:true,acts:[],totalPay:0};
+  var w={id:wid++,name:name,empNum:_empNum,contractRate:_cRate,open:true,acts:[],totalPay:0};
   workers.push(w);
   gEl('srch').value='';
   var ph=gEl('wph'); if(ph)ph.parentNode.removeChild(ph);
@@ -1979,11 +1983,18 @@ function onQty(wi,ai,v){ var w=getW(wi); if(!w||!w.acts[ai])return; w.acts[ai].q
 function onIni(wi,ai,v){ var w=getW(wi); if(!w||!w.acts[ai])return; w.acts[ai].ini=v; w.acts[ai].showTime=true; recalc(wi,ai); autoSave(); }
 function onFin(wi,ai,v){ var w=getW(wi); if(!w||!w.acts[ai])return; w.acts[ai].fin=v; w.acts[ai].showTime=true; recalc(wi,ai); autoSave(); }
 
+// Tau: obtener rate por hora real del worker — si tiene contractRate individual, usarlo;
+// si no, fallback al precio default de la actividad (act.p)
+function getHRate(w, act){
+  if(w && w.contractRate && w.contractRate > 0) return w.contractRate;
+  return act.p || 0;
+}
+
 function recalc(wi,ai){
   var w=getW(wi); if(!w||!w.acts[ai])return;
   var a=w.acts[ai]; var act=ACTS[a.ai]; var pay=0;
   if(!act) return;
-  if(act.hr){ pay=totalShiftHours(a)*act.p; }
+  if(act.hr){ pay=totalShiftHours(a)*getHRate(w,act); }
   else if(act.tipo==='$'){ pay=parseFloat(a.qty)||0; }
   else { pay=(parseFloat(a.qty)||0)*act.p; }
   a.pay=pay;
@@ -2015,7 +2026,7 @@ function updBadge(wi,ai){
       } else {
         shiftStr=(a.ini&&a.fin?a.ini+' → '+a.fin:'');
       }
-      bd.innerHTML='<span>⏱️ '+shiftStr+'</span><b>'+totalH+' H × $'+act.p.toFixed(2)+'</b>';
+      bd.innerHTML='<span>⏱️ '+shiftStr+'</span><b>'+totalH+' H × $'+getHRate(w,act).toFixed(2)+'</b>';
       bd.style.display='flex';
     } else bd.style.display='none';
   } else {
@@ -2348,7 +2359,7 @@ function save(){
     var vals=collectSaveFields();
     var wSave=[];
     for(var si=0;si<workers.length;si++){
-      var ws={id:workers[si].id,name:workers[si].name,empNum:workers[si].empNum||'',open:workers[si].open,totalPay:workers[si].totalPay,acts:[]};
+      var ws={id:workers[si].id,name:workers[si].name,empNum:workers[si].empNum||'',contractRate:workers[si].contractRate||0,open:workers[si].open,totalPay:workers[si].totalPay,acts:[]};
       for(var sj=0;sj<workers[si].acts.length;sj++){
         var sa=workers[si].acts[sj];
         var sact=sa.ai>=0&&sa.ai<ACTS.length?ACTS[sa.ai]:null;
@@ -2429,12 +2440,14 @@ function load(){
     if(d.w)workers=d.w; if(d.id)wid=d.id;
     if(d.ep)estP=d.ep; if(d.hp)hilP=d.hp; if(d.cp)cajasP=d.cp; if(d.ga)grpActs=d.ga;
     if(d.aus)ausencias=d.aus;
-    // Tau: recuperar empNum de ALL_WORKERS si falta (datos legacy sin empNum guardado)
+    // Tau: recuperar empNum y contractRate de ALL_WORKERS si faltan (datos legacy)
     for(var ei=0;ei<workers.length;ei++){
-      if(!workers[ei].empNum){
+      if(!workers[ei].empNum || !workers[ei].contractRate){
         for(var ej=0;ej<ALL_WORKERS.length;ej++){
           if(ALL_WORKERS[ej].name.toLowerCase()===workers[ei].name.toLowerCase()){
-            workers[ei].empNum=ALL_WORKERS[ej].empNum||''; break;
+            if(!workers[ei].empNum) workers[ei].empNum=ALL_WORKERS[ej].empNum||'';
+            if(!workers[ei].contractRate) workers[ei].contractRate=ALL_WORKERS[ej].contractRate||0;
+            break;
           }
         }
       }
@@ -2452,7 +2465,7 @@ function load(){
         if(!act && a.ai>=0 && a.ai<ACTS.length){ act=ACTS[a.ai]; }
         if(!act){ a.pay=0; continue; }
         a.esName=act.es;
-        if(act.hr){ a.pay=totalShiftHours(a)*(act.p||0); }
+        if(act.hr){ a.pay=totalShiftHours(a)*getHRate(workers[i],act); }
         else if(act.tipo==='$'){ a.pay=parseFloat(a.qty)||0; }
         else{ a.pay=(parseFloat(a.qty)||0)*act.p; }
       }
@@ -2599,7 +2612,7 @@ function saveQuiet(){
     var vals=collectSaveFields();
     var wSave=[];
     for(var si=0;si<workers.length;si++){
-      var ws={id:workers[si].id,name:workers[si].name,empNum:workers[si].empNum||'',open:workers[si].open,totalPay:workers[si].totalPay,acts:[]};
+      var ws={id:workers[si].id,name:workers[si].name,empNum:workers[si].empNum||'',contractRate:workers[si].contractRate||0,open:workers[si].open,totalPay:workers[si].totalPay,acts:[]};
       for(var sj=0;sj<workers[si].acts.length;sj++){
         var sa=workers[si].acts[sj];
         var sact=sa.ai>=0&&sa.ai<ACTS.length?ACTS[sa.ai]:null;
@@ -2733,13 +2746,23 @@ function loadDay(key){
     restoreSaveFields(d.v);
     if(d.w)workers=d.w; if(d.id)wid=d.id;
     if(d.ep)estP=d.ep; if(d.hp)hilP=d.hp; if(d.cp)cajasP=d.cp;
+    // Tau: recuperar contractRate en datos de historial
+    for(var ri=0;ri<workers.length;ri++){
+      if(!workers[ri].contractRate){
+        for(var rj=0;rj<ALL_WORKERS.length;rj++){
+          if(ALL_WORKERS[rj].name.toLowerCase()===workers[ri].name.toLowerCase()){
+            workers[ri].contractRate=ALL_WORKERS[rj].contractRate||0; break;
+          }
+        }
+      }
+    }
     for(var i=0;i<workers.length;i++){
       for(var j=0;j<workers[i].acts.length;j++){
         var a=workers[i].acts[j];
         var act=(a.ai>=0 && a.ai<ACTS.length) ? ACTS[a.ai] : null;
         if(!act && a.esName){ for(var ak=0;ak<ACTS.length;ak++){ if(ACTS[ak].es===a.esName){act=ACTS[ak];a.ai=ak;break;} } }
         if(!act)continue;
-        if(act.hr){ a.pay=totalShiftHours(a)*(act.p||0); }
+        if(act.hr){ a.pay=totalShiftHours(a)*getHRate(workers[i],act); }
         else if(act.tipo==='$'){ a.pay=parseFloat(a.qty)||0; }
         else{ a.pay=(parseFloat(a.qty)||0)*(act.p||0); }
       }
@@ -2785,6 +2808,8 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
   var estPerPerson=estPuertas&&ep&&ep.length?estPuertas/ep.length:0;
   var hilPerPerson=hilPuertas&&hp&&hp.length?hilPuertas/hp.length:0;
   function inA(arr,id){ for(var x=0;x<arr.length;x++) if(arr[x]===id) return true; return false; }
+  // Tau: formato inteligente — entero si .00, sino 2 decimales
+  function smartNum(n){ var v=parseFloat(n)||0; return v%1===0?String(Math.round(v)):v.toFixed(2); }
 
   // Build column list
   var actCols=[]; var i,j;
@@ -2823,7 +2848,7 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
       for(var k=0;k<actCols.length;k++){ if(actCols[k].colKey===colKey){found=true;break;} }
       if(!found) actCols.push({
         ai:ai, colKey:colKey, wid:null,
-        label:actDef.en||actDef.es, tipo:actDef.tipo, hr:actDef.hr,
+        label:actDef.es||actDef.en, tipo:actDef.tipo, payType:actDef.payType||'', hr:actDef.hr,
         esName:actName
       });
     }
@@ -2869,39 +2894,66 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
       var puertas_=metros_/100;
       if(!puertas_) continue;
       var ppx_=puertas_/np_;
-      col_={label:gact_.es, ct:'puertas', perPersona:{}, totalVal:puertas_, np:np_, precio:gact_.p, unitLabel:'Puertas c/u', finca:g_.vars.finca||'', ini:g_.vars.ini||'', fin:g_.vars.fin||''};
+      col_={label:gact_.es, ct:'puertas', perPersona:{}, totalVal:puertas_, np:np_, precio:gact_.p, unitLabel:'Doors p/p', finca:g_.vars.finca||'', ini:g_.vars.ini||'', fin:g_.vars.fin||''};
       for(var pi_=0;pi_<g_.participantes.length;pi_++) col_.perPersona[g_.participantes[pi_]]=ppx_;
     } else if(ct_==='cajas'){
       var totalC_=parseFloat(g_.vars.totalC)||0;
       var precioC_=parseFloat(g_.vars.precioC)||gact_.p||0.80;
       if(!totalC_) continue;
       var cpx_=totalC_/np_;
-      col_={label:gact_.es, ct:'cajas', perPersona:{}, totalVal:totalC_, np:np_, precio:precioC_, unitLabel:'Cajas c/u', finca:g_.vars.finca||'', ini:g_.vars.ini||'', fin:g_.vars.fin||''};
+      col_={label:gact_.es, ct:'cajas', perPersona:{}, totalVal:totalC_, np:np_, precio:precioC_, unitLabel:'Boxes p/p', finca:g_.vars.finca||'', ini:g_.vars.ini||'', fin:g_.vars.fin||''};
       for(var pi2_=0;pi2_<g_.participantes.length;pi2_++) col_.perPersona[g_.participantes[pi2_]]=cpx_;
     } else if(ct_==='hora'){
       var hGrp_=nh(g_.vars.ini||'',g_.vars.fin||'');
       if(!hGrp_) continue;
-      col_={label:gact_.es, ct:'hora', perPersona:{}, totalVal:hGrp_, np:np_, precio:gact_.p, unitLabel:'Horas', finca:'', ini:g_.vars.ini||'', fin:g_.vars.fin||''};
+      col_={label:gact_.es, ct:'hora', perPersona:{}, totalVal:hGrp_, np:np_, precio:gact_.p, unitLabel:'Hours', finca:'', ini:g_.vars.ini||'', fin:g_.vars.fin||''};
       for(var pi3_=0;pi3_<g_.participantes.length;pi3_++) col_.perPersona[g_.participantes[pi3_]]=hGrp_;
     } else {
       var totalP_=parseFloat(g_.vars.totalP)||0;
       if(!totalP_) continue;
       var qpx_=totalP_/np_;
-      col_={label:gact_.es, ct:'generic', perPersona:{}, totalVal:totalP_, np:np_, precio:gact_.p, unitLabel:gact_.tipo||'Qty c/u', finca:g_.vars.finca||'', ini:g_.vars.ini||'', fin:g_.vars.fin||''};
+      col_={label:gact_.es, ct:'generic', perPersona:{}, totalVal:totalP_, np:np_, precio:gact_.p, unitLabel:gact_.payType||'Pieces p/p', finca:g_.vars.finca||'', ini:g_.vars.ini||'', fin:g_.vars.fin||''};
       for(var pi4_=0;pi4_<g_.participantes.length;pi4_++) col_.perPersona[g_.participantes[pi4_]]=qpx_;
     }
     if(col_) grpPuertasCols.push(col_);
   }
 
+  // Tau: Fusionar columnas grupales contiguas (misma actividad + fin===ini)
+  grpPuertasCols.sort(function(a,b){
+    if(a.label!==b.label) return a.label<b.label?-1:1;
+    return (a.ini||'')<(b.ini||'')?-1:1;
+  });
+  var _merged=[];
+  for(var mi_=0;mi_<grpPuertasCols.length;mi_++){
+    var prev_=_merged.length?_merged[_merged.length-1]:null;
+    if(prev_&&prev_.label===grpPuertasCols[mi_].label&&prev_.fin===grpPuertasCols[mi_].ini){
+      prev_.fin=grpPuertasCols[mi_].fin;
+      prev_.totalVal+=grpPuertasCols[mi_].totalVal;
+      for(var pk_ in grpPuertasCols[mi_].perPersona){
+        if(prev_.perPersona[pk_]) prev_.perPersona[pk_]+=grpPuertasCols[mi_].perPersona[pk_];
+        else prev_.perPersona[pk_]=grpPuertasCols[mi_].perPersona[pk_];
+      }
+      var uq_=0; for(var uk_ in prev_.perPersona) uq_++;
+      prev_.np=uq_;
+    } else {
+      var cp_={label:grpPuertasCols[mi_].label,ct:grpPuertasCols[mi_].ct,perPersona:{},totalVal:grpPuertasCols[mi_].totalVal,np:grpPuertasCols[mi_].np,precio:grpPuertasCols[mi_].precio,unitLabel:grpPuertasCols[mi_].unitLabel,finca:grpPuertasCols[mi_].finca,ini:grpPuertasCols[mi_].ini,fin:grpPuertasCols[mi_].fin};
+      for(var pk2_ in grpPuertasCols[mi_].perPersona) cp_.perPersona[pk2_]=grpPuertasCols[mi_].perPersona[pk2_];
+      _merged.push(cp_);
+    }
+  }
+  grpPuertasCols=_merged;
+
   var th='<th style="width:28px;text-align:center">#</th><th style="min-width:130px;text-align:left;border-right:3px solid #1a2b8c">Nombre / Name</th>';
+  // Tau: helper para unit label en inglés (como columna D de Current Contracted)
+  var _ptMap={'Hora':'Hours','Ficha':'Pieces','Caja':'Pieces','$':'Extra'};
   for(i=0;i<actCols.length;i++){
     var col=actCols[i];
-    var unitLbl=col.tipo==='Hora'?'Horas':col.tipo==='Ficha'?'Fichas':col.tipo==='Caja'?'Cajas':'$';
+    var unitLbl=col.payType||_ptMap[col.tipo]||col.tipo;
     th+='<th style="text-align:center;min-width:80px">'+col.label+'<br><span style="font-weight:400;font-size:9px">'+unitLbl+'</span></th>';
   }
-  // ✅ Columnas de TODAS las actividades grupales
+  // ✅ Columnas de TODAS las actividades grupales (mismo estilo azul que las demás)
   for(var gi2_=0;gi2_<grpPuertasCols.length;gi2_++){
-    th+='<th style="text-align:center;min-width:80px;background:#e8f4fd">'+grpPuertasCols[gi2_].label+'<br><span style="font-weight:400;font-size:9px">'+grpPuertasCols[gi2_].unitLabel+'</span></th>';
+    th+='<th style="text-align:center;min-width:80px">'+grpPuertasCols[gi2_].label+'<br><span style="font-weight:400;font-size:9px">'+grpPuertasCols[gi2_].unitLabel+'</span></th>';
   }
   if(cp&&cp.length&&cajasT) th+='<th style="text-align:center;min-width:80px">Empaque Cajas<br><span style="font-weight:400;font-size:9px">Cajas c/u</span></th>';
   if(ep&&ep.length&&estA&&estAn) th+='<th style="text-align:center;min-width:80px">Q. Estaca<br><span style="font-weight:400;font-size:9px">Puertas c/u</span></th>';
@@ -2945,7 +2997,7 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
   for(i=0;i<actCols.length;i++){
     var col4=actCols[i];
     var tot=colTotals[col4.colKey]||0;
-    var totLbl=col4.hr?(tot%1===0?tot+' h':tot.toFixed(1)+' h'):tot.toFixed(1);
+    var totLbl=col4.hr?smartNum(tot)+' h':smartNum(tot);
     var unitPr=''; var entLbl=''; var salLbl=''; var laborLbl='';
     for(var w2=0;w2<wks.length;w2++){
       // Para columnas hr individuales, solo leer del worker dueño
@@ -2992,20 +3044,20 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     if(gc_.ct==='puertas'){
       var gcAncho_ = parseFloat(grpActs_[gi4_] ? (grpActs_[gi4_].vars.anchoCama||0) : 0)||0;
       var gcAcres_ = (gcAncho_>0 && gc_.totalVal>0) ? gc_.totalVal/gcAncho_ : 0;
-      totalCell_ = (gcAcres_>0?'<span style="font-size:9px;color:#0f6e56;display:block">'+gcAcres_.toFixed(2)+' acres</span>':'')
-        +'<span style="font-size:11px">'+gc_.totalVal.toFixed(2)+' puertas</span>';
+      totalCell_ = (gcAcres_>0?'<span style="font-size:9px;color:#0f6e56;display:block">'+smartNum(gcAcres_)+' acres</span>':'')
+        +'<span style="font-size:11px">'+smartNum(gc_.totalVal)+' puertas</span>';
     } else if(gc_.ct==='cajas'){
-      totalCell_='<span style="font-size:11px">'+gc_.totalVal.toFixed(0)+' cajas</span>';
+      totalCell_='<span style="font-size:11px">'+smartNum(gc_.totalVal)+' boxes</span>';
     } else if(gc_.ct==='hora'){
-      totalCell_='<span style="font-size:11px">'+gc_.totalVal.toFixed(1)+' hrs</span>';
+      totalCell_='<span style="font-size:11px">'+smartNum(gc_.totalVal)+' hrs</span>';
     } else {
-      totalCell_='<span style="font-size:11px">'+gc_.totalVal.toFixed(1)+'</span>';
+      totalCell_='<span style="font-size:11px">'+smartNum(gc_.totalVal)+'</span>';
     }
-    trTotal+='<td style="text-align:center;background:#e8f4fd;font-weight:700;line-height:1.5;border-top:3px solid #1a2b8c">'+totalCell_+'</td>';
-    trPrice+='<td style="text-align:center;background:#e8f4fd;color:#c0392b;font-weight:700">$'+gc_.precio.toFixed(2)+'</td>';
-    trLabor+='<td style="background:#e8f4fd;text-align:center;border:1px solid #ddd;color:#3a7fd4;font-size:9px">'+gc_.finca+'</td>';
-    trEntry+='<td style="text-align:center;background:#e8f4fd;border:1px solid #ddd">'+gc_.ini+'</td>';
-    trExit +='<td style="text-align:center;background:#e8f4fd;border:1px solid #ddd">'+gc_.fin+'</td>';
+    trTotal+='<td style="text-align:center;font-weight:700;line-height:1.5;border:1px solid #ccc;border-top:3px solid #1a2b8c;color:#1a2b8c">'+totalCell_+'</td>';
+    trPrice+='<td style="text-align:center;color:#c0392b;font-weight:700;border:1px solid #ddd">$'+gc_.precio.toFixed(2)+'</td>';
+    trLabor+='<td style="text-align:center;border:1px solid #ddd;color:#3a7fd4;font-size:9px">'+gc_.finca+'</td>';
+    trEntry+='<td style="text-align:center;border:1px solid #ddd;color:#111">'+gc_.ini+'</td>';
+    trExit +='<td style="text-align:center;border:1px solid #ddd;color:#111">'+gc_.fin+'</td>';
   }
   trTotal+='</tr>'; trPrice+='</tr>'; trLabor+='</tr>'; trEntry+='</tr>'; trExit+='</tr>';
   var metaRows=trTotal+trPrice+trLabor+trEntry+trExit;
@@ -3014,7 +3066,7 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
   var rows='';
   for(i=0;i<wks.length;i++){
     var w=wks[i];
-    var empLbl = w.empNum ? ' <span style="font-size:8px;color:#333;font-weight:400">#'+esc(w.empNum)+'</span>' : '';
+    var empLbl = w.empNum ? ' <span style="font-size:8px;color:#8b0000;font-weight:400">#'+esc(w.empNum)+'</span>' : '';
     var td='<td class="numcol">'+(i+1)+'</td><td class="namecol" style="border-right:3px solid #1a2b8c">'+esc(w.name)+empLbl+'</td>';
     for(j=0;j<actCols.length;j++){
       var col2=actCols[j];
@@ -3028,15 +3080,15 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
       }
       if(found2){
         var cv='';
-        if(col2.hr){ var h2=totalShiftHours(found2); cv=h2+' h'; }
-        else { cv=found2.qty||''; }
+        if(col2.hr){ var h2=totalShiftHours(found2); cv=smartNum(h2)+' h'; }
+        else { cv=found2.qty?smartNum(found2.qty):''; }
         td+='<td style="text-align:center">'+cv+'</td>';
       } else { td+='<td></td>'; }
     }
     // ✅ Celdas de TODAS las actividades grupales
     for(var gi3_=0;gi3_<grpPuertasCols.length;gi3_++){
       var ppVal=grpPuertasCols[gi3_].perPersona[w.id];
-      td+='<td style="text-align:center;background:#f0f8ff">'+(ppVal!==undefined?ppVal.toFixed(2):'')+'</td>';
+      td+='<td style="text-align:center;background:#f0f8ff">'+(ppVal!==undefined?smartNum(ppVal):'')+'</td>';
     }
     if(cp&&cp.length&&cajasT) td+='<td style="text-align:center">'+(inA(cp,w.id)?cajasPerPerson.toFixed(1):'')+'</td>';
     if(ep&&ep.length&&estA&&estAn) td+='<td style="text-align:center">'+(inA(ep,w.id)?estPerPerson.toFixed(1):'')+'</td>';
@@ -3065,7 +3117,7 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     +'th{padding:5px 4px;text-align:center;font-size:9px;font-weight:700;border:1px solid #4a5bbc;background:#1a2b8c;color:#fff;line-height:1.3}'
     +'td{padding:4px 5px;border:1px solid #ddd;vertical-align:middle;text-align:center}'
     +'.namecol{text-align:left!important;font-weight:600}'
-    +'.numcol{text-align:center!important;color:#333;font-size:9px}'
+    +'.numcol{text-align:center!important;color:#8b0000;font-weight:700;font-size:9px}'
     +'.meta-last td{border-bottom:3px solid #1a2b8c!important}'
     +'.ft{font-size:8px;color:#333;text-align:center;margin-top:6px;border-top:1px solid #ddd;padding-top:5px}'
     +'@media print{.nopr{display:none}thead{display:table-header-group}@page{margin:7mm;size:letter landscape}}'
@@ -3407,11 +3459,13 @@ function sendToSheets() {
       var act = ACTS[a.ai];
       if (!act) continue;
       var totalH = act.hr ? totalShiftHours(a) : 0;
+      // Tau: para Hours/Daywork, enviar el contractRate real del worker a payroll
+      var uPrice = act.hr ? getHRate(w, act) : act.p;
       wOut.acts.push({
         actEs:      act.es,
         actEn:      act.en || act.es,
         tipo:       act.tipo,
-        unitPrice:  act.p,
+        unitPrice:  uPrice,
         qty:        act.tipo === 'Hora' ? '' : (a.qty || ''),
         totalHours: act.tipo === 'Hora' ? totalH : '',
         finca:      a.finca || gVal('finca')
@@ -4380,7 +4434,7 @@ function testFill(){
       if(ACTS[ai].es === tw.actEs){ actIdx = ai; break; }
     }
     var act = ACTS[actIdx];
-    var w = {id:wid++, name:tw.name, open:true, totalPay:0, acts:[]};
+    var w = {id:wid++, name:tw.name, empNum:'', contractRate:0, open:true, totalPay:0, acts:[]};
     var a = {
       ai:actIdx, esName:act?act.es:tw.actEs,
       qty: tw.hr ? '' : (tw.qty||'10'),
@@ -4390,7 +4444,7 @@ function testFill(){
     if(act && act.hr){
       a.showTime = true;
       a.shifts = [{ini:gVal('hEnt')||'05:30', fin:gVal('hSal')||'14:30'}];
-      a.pay = totalShiftHours(a) * (act.p || 16.23);
+      a.pay = totalShiftHours(a) * getHRate(w, act);
     } else {
       a.pay = (parseFloat(a.qty)||0) * (act?act.p:1.50);
     }
