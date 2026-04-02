@@ -1941,18 +1941,20 @@ function mkActRow(wid_,ai,_cont){
   })(wid_, ai);
   fincaRow.appendChild(fincaInp);
   div.appendChild(fincaRow);
-  if(act.hr){
+  var usaShifts = act.hr || act.payType==='Daywork';  // Tau: Daywork también tiene turnos
+  if(usaShifts){
     if(!a.shifts||!a.shifts.length){ a.shifts=[{ini:a.ini||'',fin:a.fin||''}]; }
     var tog=document.createElement('div');
     tog.className='ttog'+(a.showTime?' on':''); tog.id='tg'+wid_+'_'+ai;
-    tog.innerHTML='<div class="tbox">✓</div><span class="tlbl">⏰ Horario (requerido para calcular pago)</span>';
+    var togLbl = act.hr ? '⏰ Horario (requerido para calcular pago)' : '⏰ Registrar horario (referencia opcional)';
+    tog.innerHTML='<div class="tbox">✓</div><span class="tlbl">'+togLbl+'</span>';
     (function(wi2,ai2){ tog.addEventListener('click',function(){ togTime(wi2,ai2); }); })(wid_,ai);
     div.appendChild(tog);
     var tf=document.createElement('div'); tf.className='tinp'+(a.showTime?' on':''); tf.id='tf'+wid_+'_'+ai;
     div.appendChild(tf);
     renderShifts(wid_,ai);
     var bdg=document.createElement('div');
-    bdg.id='bd'+wid_+'_'+ai; bdg.className='shift-total'; bdg.style.display='none';
+    bdg.id='bd'+wid_+'_'+ai; bdg.className=act.hr?'shift-total':'tbadge rf'; bdg.style.display='none';
     div.appendChild(bdg);
   } else {
     var tog=document.createElement('div');
