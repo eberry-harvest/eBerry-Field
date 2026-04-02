@@ -2627,6 +2627,8 @@ function applyAutoFill(){
     }
     // Solo limpiar si no hay surquero seleccionado previamente
     if(inp && !curSurq) inp.value='';
+    // Upsilon2: activar panel de sesión si ya hay surquero seleccionado
+    if(curSurq && typeof adminCheckSession==='function') adminCheckSession(curSurq);
   }
 
   // Auto-fill fecha con hoy si está vacía
@@ -2958,21 +2960,10 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
       // colKey basado en esName (estable) en vez de ai numérico (puede cambiar)
       var actName=actDef.es||actDef.en||(''+ai);
       var colKey;
-      if(actDef.hr){
-        // Upsilon2: normalizar firma de shifts para evitar columnas duplicadas
-        // (antes: shifts=[{ini,fin}] daba "09:30-12:00|" vs ini/fin directo daba "09:30-12:00")
-        var shifts_=a_.shifts||[];
-        var sig_='';
-        if(shifts_.length){
-          var parts_=[];
-          for(var si_k=0;si_k<shifts_.length;si_k++) parts_.push((shifts_[si_k].ini||'').trim()+'-'+(shifts_[si_k].fin||'').trim());
-          sig_=parts_.join('|');
-        }
-        if(!sig_) sig_=(a_.ini||'').trim()+'-'+(a_.fin||'').trim();
-        colKey = actName+'_s'+sig_;
-      } else {
-        colKey = actName;
-      }
+      // Upsilon2: colKey basado SOLO en nombre de actividad para TODOS los tipos.
+      // Antes las tipo Hora incluían shifts en el colKey, causando columnas duplicadas
+      // cuando workers tenían horarios ligeramente diferentes para la misma actividad.
+      colKey = actName;
       var found=false;
       for(var k=0;k<actCols.length;k++){ if(actCols[k].colKey===colKey){found=true;break;} }
       if(!found) actCols.push({
