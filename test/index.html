@@ -173,7 +173,9 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 
 /* ── LOGIN SCREEN ── */
-#loginScreen{position:fixed;top:0;right:0;bottom:0;left:0;background:var(--g);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px}
+#loginScreen{position:fixed;top:0;right:0;bottom:0;left:0;background:var(--g);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;-webkit-overflow-scrolling:touch;overflow:auto}
+body.login-locked{overflow:hidden!important;height:100%!important;touch-action:none}
+html.login-locked{overflow:hidden!important;height:100%!important}
 #loginScreen.hide{display:none}
 .login-logo{font-family:'Bebas Neue',sans-serif;font-size:42px;letter-spacing:3px;color:#fff;margin-bottom:4px}
 .login-logo em{color:var(--a);font-style:normal}
@@ -984,6 +986,8 @@ function logoutUser(){
   gEl('loginErr').textContent = '';
   // Show login screen
   gEl('loginScreen').classList.remove('hide');
+  document.body.classList.add('login-locked');
+  document.documentElement.classList.add('login-locked');
   toast('👋 Sesión cerrada');
 }
 
@@ -1121,6 +1125,9 @@ function proceedLogin(user){
 function loginSuccess(user){
   currentUser = user;
   gEl('loginScreen').classList.add('hide');
+  // Tau: unlock body scroll after login
+  document.body.classList.remove('login-locked');
+  document.documentElement.classList.remove('login-locked');
   var btn = gEl('logoutBtn'); if(btn) btn.style.display = 'block';
   var badge = gEl('adminBadge');
   if(badge) badge.style.display = user.isAdmin ? 'block' : 'none';
@@ -1392,6 +1399,9 @@ function showLogin(){
   // Pre-fill login hint with crew info count
   gEl('loginHint').textContent = 'Ingresa tu PIN de 4 dígitos (' + LIDERES.length + ' surqueros registrados)';
   gEl('loginScreen').classList.remove('hide');
+  // Tau: lock body scroll so content can't be seen behind login on Safari/iOS
+  document.body.classList.add('login-locked');
+  document.documentElement.classList.add('login-locked');
 }
 
 // ── APP STATE (Iota: variables globales organizadas) ──
