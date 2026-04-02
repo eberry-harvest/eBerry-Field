@@ -2007,39 +2007,46 @@ function updBadge(wi,ai){
   var a=w.acts[ai]; var act=ACTS[a.ai];
   if(!act) return;
   var bd=gEl('bd'+wi+'_'+ai); if(!bd)return;
+  // Upsilon2: helper para construir texto de turnos
+  function _shiftTxt(a_){
+    if(a_.shifts&&a_.shifts.length>1){
+      var p=[];
+      for(var s=0;s<a_.shifts.length;s++){
+        var sh=a_.shifts[s];
+        if(sh.ini&&sh.fin) p.push('T'+(s+1)+': '+sh.ini+'→'+sh.fin+' ('+nh(sh.ini,sh.fin)+'h)');
+      }
+      return p.join(' + ');
+    }
+    return (a_.ini&&a_.fin?a_.ini+' → '+a_.fin:'');
+  }
+  var pay=a.pay||0;
   if(act.hr){
     var totalH=totalShiftHours(a);
     if(totalH>0){
-      var shiftStr='';
-      if(a.shifts&&a.shifts.length>1){
-        var parts=[];
-        for(var s=0;s<a.shifts.length;s++){
-          var sh=a.shifts[s];
-          if(sh.ini&&sh.fin) parts.push('T'+(s+1)+': '+sh.ini+'→'+sh.fin+' ('+nh(sh.ini,sh.fin)+'h)');
-        }
-        shiftStr=parts.join(' + ');
-      } else {
-        shiftStr=(a.ini&&a.fin?a.ini+' → '+a.fin:'');
-      }
-      bd.innerHTML='<span>⏱️ '+shiftStr+'</span><b>'+totalH+' H × $'+getHRate(w,act).toFixed(2)+'</b>';
+      var rate=getHRate(w,act);
+      // Upsilon2: mostrar operación completa: horas × precio = total
+      bd.innerHTML='<span>⏱️ '+_shiftTxt(a)+'</span><b>'+totalH+' H × $'+rate.toFixed(2)+' = $'+pay.toFixed(2)+'</b>';
+      bd.style.display='flex';
+    } else bd.style.display='none';
+  } else if(act.tipo==='$'){
+    // Bono: solo mostrar monto
+    if(pay>0){
+      bd.innerHTML='<span>💲 Bono</span><b>= $'+pay.toFixed(2)+'</b>';
       bd.style.display='flex';
     } else bd.style.display='none';
   } else {
-    // Tau: TODAS las no-hr muestran turnos como referencia
+    // Upsilon2: Ficha/Caja/Pieces — siempre mostrar operación qty × precio = total
+    var qty=parseFloat(a.qty)||0;
+    var tipoLbl=act.tipo==='Caja'?'cajas':act.tipo==='Ficha'?'pzas':'uds';
+    var shTxt=_shiftTxt(a);
+    var opLine='';
+    if(qty>0){
+      opLine=qty+' '+tipoLbl+' × $'+act.p.toFixed(2)+' = $'+pay.toFixed(2);
+    }
     var totalH2=totalShiftHours(a);
-    if(totalH2>0){
-      var shiftStr2='';
-      if(a.shifts&&a.shifts.length>1){
-        var parts2=[];
-        for(var s2=0;s2<a.shifts.length;s2++){
-          var sh2=a.shifts[s2];
-          if(sh2.ini&&sh2.fin) parts2.push('T'+(s2+1)+': '+sh2.ini+'→'+sh2.fin+' ('+nh(sh2.ini,sh2.fin)+'h)');
-        }
-        shiftStr2=parts2.join(' + ');
-      } else {
-        shiftStr2=(a.ini&&a.fin?a.ini+' → '+a.fin:'');
-      }
-      bd.innerHTML='<span>⏱️ '+shiftStr2+'</span><b>'+totalH2+' h ref.</b>';
+    if(qty>0 || totalH2>0){
+      var timeRef=totalH2>0?'⏱️ '+shTxt+(totalH2>0?' ('+totalH2+' h ref.)':''):'';
+      bd.innerHTML=(timeRef?'<span>'+timeRef+'</span>':'')+(opLine?'<b>'+opLine+'</b>':'<b>'+totalH2+' h ref.</b>');
       bd.style.display='flex';
     } else bd.style.display='none';
   }
