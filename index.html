@@ -172,6 +172,42 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .toast{position:fixed;bottom:150px;left:50%;transform:translateX(-50%) translateY(10px);background:var(--dk);color:#fff;padding:10px 18px;border-radius:30px;font-size:14px;font-weight:500;opacity:0;transition:.3s;z-index:999;white-space:nowrap;pointer-events:none}
 .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
 
+/* ── ANÁLISIS TAB ── */
+.an-banner{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:11px}
+.an-box{background:#fff;border-radius:8px;padding:11px 5px;text-align:center;border:1.5px solid var(--bd)}
+.an-box.gain{border-color:var(--b);background:var(--bp)}
+.an-box.loss{border-color:var(--r);background:var(--rp)}
+.an-val{font-family:'Bebas Neue',sans-serif;font-size:22px;line-height:1}
+.an-val.green{color:var(--b)}
+.an-val.red{color:var(--r)}
+.an-lbl{font-size:9px;color:var(--gr);font-weight:700;text-transform:uppercase;letter-spacing:.4px;margin-top:2px}
+.an-worker{background:#fff;border:1.5px solid var(--bd);border-radius:12px;margin-bottom:10px;overflow:hidden}
+.an-worker.gain{border-color:var(--b)}
+.an-worker.loss{border-color:var(--r)}
+.an-whead{display:flex;align-items:center;justify-content:space-between;padding:12px 13px;cursor:pointer}
+.an-wname{font-weight:600;font-size:14px}
+.an-wrate{font-size:11px;color:var(--gr)}
+.an-wdiff{font-family:'Bebas Neue',sans-serif;font-size:17px}
+.an-wdiff.green{color:var(--b)}
+.an-wdiff.red{color:var(--r)}
+.an-wbody{display:none;padding:0 13px 13px;border-top:1px solid var(--bd)}
+.an-worker.op .an-wbody{display:block}
+.an-act{background:var(--lt);border:1.5px solid var(--bd);border-radius:8px;padding:10px;margin-top:8px}
+.an-act.gain{border-color:var(--b);background:rgba(45,122,45,.05)}
+.an-act.loss{border-color:var(--r);background:rgba(217,64,64,.05)}
+.an-step{font-size:12px;color:var(--gr);line-height:1.7;margin:4px 0}
+.an-step b{color:var(--dk)}
+.an-result{font-size:13px;font-weight:700;padding:6px 10px;border-radius:6px;margin-top:6px;text-align:center}
+.an-result.gain{background:var(--bp);color:var(--b)}
+.an-result.loss{background:var(--rp);color:var(--r)}
+.an-bar{height:8px;border-radius:4px;background:var(--bd);margin-top:6px;overflow:hidden}
+.an-bar-fill{height:100%;border-radius:4px;transition:width .3s}
+.an-bar-fill.green{background:var(--b)}
+.an-bar-fill.red{background:var(--r)}
+.an-nodata{text-align:center;padding:30px 15px;color:var(--gr);font-size:13px}
+.an-grp{background:var(--ap);border:1.5px solid var(--a);border-radius:12px;margin-bottom:11px;padding:13px}
+.an-grp-title{font-weight:700;font-size:14px;color:var(--a);margin-bottom:8px}
+
 /* ── LOGIN SCREEN ── */
 #loginScreen{position:fixed;top:0;right:0;bottom:0;left:0;background:var(--g);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;-webkit-overflow-scrolling:touch;overflow:auto}
 body.login-locked{overflow:hidden!important;height:100%!important;touch-action:none}
@@ -337,6 +373,7 @@ html.login-locked{overflow:hidden!important;height:100%!important}
     <button class="tab" onclick="go(3)">④ Resumen</button>
     <button class="tab" onclick="go(4)">⑤ Ausencias</button>
     <button class="tab" onclick="go(5)">⑥ Invoice</button>
+    <button class="tab" onclick="go(6)">⑦ Análisis</button>
   </div>
 </header>
 <!-- ── LOGIN SCREEN ── -->
@@ -847,6 +884,23 @@ html.login-locked{overflow:hidden!important;height:100%!important}
 
   <!-- PDF button -->
   <button class="btn pdf" onclick="generateInvoicePDF()" style="margin-top:12px"><span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#1a7a4a;color:#fff;font-weight:900;font-size:12px;margin-right:6px">2</span>📄 Generar Invoice PDF</button>
+</div>
+
+<!-- PAGE 6 — ANÁLISIS -->
+<div class="pg" id="p6">
+  <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px;margin-bottom:3px">📊 Análisis de Rendimiento</div>
+  <div style="font-size:13px;color:var(--gr);margin-bottom:11px">Productividad por trabajador — Pérdidas y Ganancias</div>
+  <div class="an-banner" id="anBanner"></div>
+  <div class="card">
+    <div class="ct">📐 FÓRMULA</div>
+    <div style="font-size:12px;color:var(--gr);line-height:1.8">
+      <b style="color:var(--dk)">Tarifa/Hora</b> ÷ <b style="color:var(--dk)">Precio/Pieza</b> = Piezas mínimas por hora<br>
+      Pzas/h × <b style="color:var(--dk)">Horas trabajadas</b> = Mínimo esperado<br>
+      Si <b style="color:var(--r)">real &lt; mínimo</b> = 🔻 Pérdida para la empresa
+    </div>
+  </div>
+  <div id="anWorkers"></div>
+  <div id="anGrp"></div>
 </div>
 
 <!-- QR SCANNER OVERLAY -->
@@ -2433,6 +2487,216 @@ function buildSum(){
   gEl('sw').innerHTML=h||'<div style="color:var(--gr);font-size:13px;text-align:center;padding:10px">Sin datos</div>';
 }
 
+// ── OMEGA: ANÁLISIS DE RENDIMIENTO ──
+// Fórmula: (tarifaHora ÷ preciopieza) = pzas/h mínimas
+// pzas/h × horasTrabajadas = piezas mínimas esperadas
+// Comparar real vs mínimo → ganancia o pérdida
+
+function getGlobalHours(){
+  // Usa horas globales de entrada/salida menos lonche como fallback
+  var hE=gVal('hEnt'), hS=gVal('hSal');
+  if(!hE||!hS) return 0;
+  return nh(hE,hS);
+}
+
+function buildAnalisis(){
+  var totalEsperado=0, totalReal=0;
+  var wHTML='';
+  var actSummary={}; // por nombre de actividad
+
+  for(var i=0;i<workers.length;i++){
+    var w=workers[i];
+    var wEsperado=0, wReal=0;
+    var wDetails='';
+    var hasAnalysis=false;
+
+    // Tarifa hora del trabajador
+    var baseRate=w.contractRate||0;
+
+    for(var j=0;j<w.acts.length;j++){
+      var a=w.acts[j];
+      var act=null;
+      // Upsilon: priorizar nombre+tipo sobre ai directo
+      if(a.esName){
+        for(var ak=0;ak<ACTS.length;ak++){
+          if(ACTS[ak].es===a.esName && (!a.tipo || ACTS[ak].tipo===a.tipo)){ act=ACTS[ak]; break; }
+        }
+        if(!act){ for(var ak2=0;ak2<ACTS.length;ak2++){
+          if(ACTS[ak2].es===a.esName){ act=ACTS[ak2]; break; }
+        }}
+      }
+      if(!act && a.ai>=0 && a.ai<ACTS.length){ act=ACTS[a.ai]; }
+      if(!act) continue;
+
+      // Solo analizar actividades de pieza (Ficha, Caja) — no Hora ni $
+      if(act.hr || act.tipo==='$' || act.tipo==='Hora') continue;
+
+      var piecePrice=act.p;
+      if(!piecePrice || piecePrice<=0) continue;
+
+      // Tarifa hora: contractRate del worker > act default si es hourly
+      var hourlyRate=baseRate;
+      if(!hourlyRate||hourlyRate<=0){
+        // Buscar la primera actividad hourly del worker para sacar su rate
+        for(var rk=0;rk<w.acts.length;rk++){
+          var rAct=null;
+          if(w.acts[rk].esName){ for(var rk2=0;rk2<ACTS.length;rk2++){ if(ACTS[rk2].es===w.acts[rk].esName){rAct=ACTS[rk2];break;} } }
+          if(!rAct && w.acts[rk].ai>=0 && w.acts[rk].ai<ACTS.length) rAct=ACTS[w.acts[rk].ai];
+          if(rAct && rAct.hr){ hourlyRate=rAct.p; break; }
+        }
+      }
+      if(!hourlyRate||hourlyRate<=0) continue; // no podemos analizar sin tarifa
+
+      // Horas trabajadas: del turno de esta actividad o global
+      var horas=totalShiftHours(a);
+      if(!horas||horas<=0) horas=getGlobalHours();
+      if(!horas||horas<=0) continue; // sin horas no hay análisis
+
+      var pzasHora=hourlyRate/piecePrice; // piezas mínimas por hora
+      var pzasEsperadas=pzasHora*horas;   // piezas mínimas totales
+      var pzasReales=parseFloat(a.qty)||0;
+
+      var esperado=pzasEsperadas*piecePrice; // = hourlyRate * horas
+      var real=pzasReales*piecePrice;
+      var diff=real-esperado;
+
+      wEsperado+=esperado;
+      wReal+=real;
+      hasAnalysis=true;
+
+      // Acumular por actividad para el resumen grupal
+      var actKey=act.es+'|'+piecePrice;
+      if(!actSummary[actKey]) actSummary[actKey]={name:act.es,tipo:act.tipo,price:piecePrice,esperado:0,real:0,workers:0,horas:0};
+      actSummary[actKey].esperado+=esperado;
+      actSummary[actKey].real+=real;
+      actSummary[actKey].workers++;
+      actSummary[actKey].horas+=horas;
+
+      var pct=pzasEsperadas>0?Math.min((pzasReales/pzasEsperadas)*100,150):0;
+      var isLoss=diff<0;
+      var tipoLbl=act.tipo==='Caja'?'cajas':'pzas';
+
+      if(isLoss){
+        // Pérdida real de la empresa — mostrar desglose completo
+        wDetails+='<div class="an-act loss">'
+          +'<div style="font-weight:700;font-size:13px;margin-bottom:4px">'+esc(act.es)+' — $'+piecePrice.toFixed(2)+'/'+tipoLbl+'</div>'
+          +'<div class="an-step">① $<b>'+hourlyRate.toFixed(2)+'</b>/h ÷ $<b>'+piecePrice.toFixed(2)+'</b>/'+tipoLbl+' = <b>'+pzasHora.toFixed(2)+'</b> '+tipoLbl+'/h</div>'
+          +'<div class="an-step">② '+pzasHora.toFixed(2)+' × <b>'+horas.toFixed(1)+'</b> hrs = <b>'+pzasEsperadas.toFixed(1)+'</b> '+tipoLbl+' mínimo</div>'
+          +'<div class="an-step">③ Real: <b>'+pzasReales+'</b> '+tipoLbl+' × $'+piecePrice.toFixed(2)+' = <b>$'+real.toFixed(2)+'</b></div>'
+          +'<div class="an-step">④ Mínimo: '+pzasEsperadas.toFixed(1)+' '+tipoLbl+' × $'+piecePrice.toFixed(2)+' = <b>$'+esperado.toFixed(2)+'</b></div>'
+          +'<div class="an-bar"><div class="an-bar-fill red" style="width:'+Math.min(pct,100)+'%"></div></div>'
+          +'<div class="an-result loss">'
+            +'🔻 PÉRDIDA: -$'+Math.abs(diff).toFixed(2)
+            +' (hizo '+pzasReales+' de '+pzasEsperadas.toFixed(0)+' '+tipoLbl+')'
+          +'</div>'
+        +'</div>';
+      } else {
+        // Sin pérdida — el trabajador cumplió o superó el mínimo
+        wDetails+='<div class="an-act gain">'
+          +'<div style="font-weight:700;font-size:13px;margin-bottom:4px">'+esc(act.es)+' — $'+piecePrice.toFixed(2)+'/'+tipoLbl+'</div>'
+          +'<div class="an-result gain">✅ OK — '+pzasReales+' de '+pzasEsperadas.toFixed(0)+' '+tipoLbl+' mínimo</div>'
+        +'</div>';
+      }
+    }
+
+    // Incluir también el análisis de actividades grupales del worker
+    var grpD=grpPayDetail(w.id);
+    if(grpD.pay>0){
+      wDetails+='<div class="an-act" style="border-color:var(--a);background:rgba(204,34,34,.03)">'
+        +'<div style="font-weight:700;font-size:13px;margin-bottom:4px;color:var(--a)">Act. Grupal</div>'
+        +'<div class="an-step">Pago grupal: <b>$'+grpD.pay.toFixed(2)+'</b> ('+grpD.label+')</div>'
+        +'<div class="an-result" style="background:var(--ap);color:var(--a)">+$'+grpD.pay.toFixed(2)+' grupal</div>'
+      +'</div>';
+      wReal+=grpD.pay;
+    }
+
+    if(!hasAnalysis && grpD.pay<=0) continue; // worker sin actividades analizables
+
+    totalEsperado+=wEsperado;
+    totalReal+=wReal;
+
+    var wDiff=wReal-wEsperado;
+    var wIsLoss=wDiff<0;
+    wHTML+='<div class="an-worker '+(wIsLoss?'loss':'gain')+'" onclick="this.classList.toggle(\'op\')">'
+      +'<div class="an-whead">'
+        +'<div><span class="an-wname">'+(i+1)+'. '+esc(w.name)+'</span>'
+          +'<div class="an-wrate">Tarifa: $'+(baseRate>0?baseRate.toFixed(2):'—')+'/h</div>'
+        +'</div>'
+        +'<span class="an-wdiff '+(wIsLoss?'red':'green')+'">'
+          +(wIsLoss?'🔻 -$'+Math.abs(wDiff).toFixed(2):'✅ OK')
+        +'</span>'
+      +'</div>'
+      +'<div class="an-wbody">'+wDetails+'</div>'
+    +'</div>';
+  }
+
+  // Banner — solo pérdidas importan (lo positivo es dinero del trabajador)
+  var totalPerdida=0;
+  // Calcular pérdida real: solo sumar los workers que están en negativo
+  for(var bi=0;bi<workers.length;bi++){
+    var bw=workers[bi], bEsp=0, bReal=0, bBaseRate=bw.contractRate||0;
+    for(var bj=0;bj<bw.acts.length;bj++){
+      var ba=bw.acts[bj]; var bact=null;
+      if(ba.esName){ for(var bk=0;bk<ACTS.length;bk++){ if(ACTS[bk].es===ba.esName && (!ba.tipo||ACTS[bk].tipo===ba.tipo)){bact=ACTS[bk];break;} } }
+      if(!bact && ba.ai>=0 && ba.ai<ACTS.length) bact=ACTS[ba.ai];
+      if(!bact||bact.hr||bact.tipo==='$'||bact.tipo==='Hora') continue;
+      var bPP=bact.p; if(!bPP) continue;
+      var bHR=bBaseRate; if(!bHR){ for(var brk=0;brk<bw.acts.length;brk++){ var brA=null; if(bw.acts[brk].esName){for(var brk2=0;brk2<ACTS.length;brk2++){if(ACTS[brk2].es===bw.acts[brk].esName){brA=ACTS[brk2];break;}}} if(brA&&brA.hr){bHR=brA.p;break;} } }
+      if(!bHR) continue;
+      var bH=totalShiftHours(ba); if(!bH) bH=getGlobalHours(); if(!bH) continue;
+      bEsp+=bHR*bH; bReal+=(parseFloat(ba.qty)||0)*bPP;
+    }
+    var bDiff=bReal-bEsp;
+    if(bDiff<0) totalPerdida+=Math.abs(bDiff);
+  }
+  var wConPerdida=0;
+  for(var ci=0;ci<workers.length;ci++){
+    // contar cuántos tienen pérdida (simplificado)
+    var cw=workers[ci], cEsp=0, cReal=0, cBR=cw.contractRate||0;
+    for(var cj=0;cj<cw.acts.length;cj++){
+      var ca=cw.acts[cj]; var cact=null;
+      if(ca.esName){ for(var ck=0;ck<ACTS.length;ck++){ if(ACTS[ck].es===ca.esName && (!ca.tipo||ACTS[ck].tipo===ca.tipo)){cact=ACTS[ck];break;} } }
+      if(!cact && ca.ai>=0 && ca.ai<ACTS.length) cact=ACTS[ca.ai];
+      if(!cact||cact.hr||cact.tipo==='$'||cact.tipo==='Hora') continue;
+      var cPP=cact.p; if(!cPP) continue;
+      var cHR=cBR; if(!cHR){ for(var crk=0;crk<cw.acts.length;crk++){ var crA=null; if(cw.acts[crk].esName){for(var crk2=0;crk2<ACTS.length;crk2++){if(ACTS[crk2].es===cw.acts[crk].esName){crA=ACTS[crk2];break;}}} if(crA&&crA.hr){cHR=crA.p;break;} } }
+      if(!cHR) continue;
+      var cH=totalShiftHours(ca); if(!cH) cH=getGlobalHours(); if(!cH) continue;
+      cEsp+=cHR*cH; cReal+=(parseFloat(ca.qty)||0)*cPP;
+    }
+    if(cReal-cEsp<0) wConPerdida++;
+  }
+  gEl('anBanner').innerHTML=
+    '<div class="an-box"><div class="an-val" style="color:var(--g)">'+workers.length+'</div><div class="an-lbl">Trabajadores</div></div>'
+    +'<div class="an-box '+(wConPerdida>0?'loss':'')+'"><div class="an-val '+(wConPerdida>0?'red':'green')+'">'+wConPerdida+'</div><div class="an-lbl">'+(wConPerdida>0?'Con Pérdida':'Sin Pérdidas')+'</div></div>'
+    +'<div class="an-box '+(totalPerdida>0?'loss':'gain')+'"><div class="an-val '+(totalPerdida>0?'red':'green')+'">'+(totalPerdida>0?'-$'+totalPerdida.toFixed(0):'$0')+'</div><div class="an-lbl">Pérdida Empresa</div></div>';
+
+  // Workers
+  gEl('anWorkers').innerHTML=wHTML||'<div class="an-nodata">Sin actividades de pieza para analizar.<br>Este análisis aplica solo cuando hay actividades tipo Ficha o Caja con horas registradas.</div>';
+
+  // Resumen por actividad (grupal)
+  var actKeys=Object.keys(actSummary);
+  if(actKeys.length>0){
+    var gHTML='<div class="card"><div class="ct">📋 RESUMEN POR ACTIVIDAD</div>';
+    for(var ak=0;ak<actKeys.length;ak++){
+      var s=actSummary[actKeys[ak]];
+      var sDiff=s.real-s.esperado;
+      var sIsLoss=sDiff<0;
+      gHTML+='<div style="padding:8px 0;border-bottom:1px solid var(--bd)">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center">'
+          +'<span style="font-weight:600;font-size:13px">'+esc(s.name)+' ($'+s.price.toFixed(2)+'/'+s.tipo+')</span>'
+          +'<span style="font-family:\'Bebas Neue\',sans-serif;font-size:17px;color:'+(sIsLoss?'var(--r)':'var(--b)')+'">'+(sIsLoss?'🔻 -$'+Math.abs(sDiff).toFixed(2):'✅ OK')+'</span>'
+        +'</div>'
+        +'<div style="font-size:11px;color:var(--gr)">'+s.workers+' trabajadores · '+s.horas.toFixed(1)+' hrs totales'+(sIsLoss?' · Pérdida: $'+Math.abs(sDiff).toFixed(2):'')+'</div>'
+      +'</div>';
+    }
+    gHTML+='</div>';
+    gEl('anGrp').innerHTML=gHTML;
+  } else {
+    gEl('anGrp').innerHTML='';
+  }
+}
+
 function mkReport(){
   var grand=0;
   var lines=['🌿 *HOJA DE CAMPO — '+gVal('rancho')+'*','📅 '+gVal('fecha')+' | Bus: '+gVal('numBus'),'👷 Surquero: '+gVal('surquero'),'🌾 Finca: '+gVal('finca'),'⏰ '+gVal('hEnt')+'→'+gVal('hSal')+' | Lonche: '+gVal('lIni')+'–'+gVal('lFin'),'','*TRABAJADORES ('+workers.length+'):*'];
@@ -2745,18 +3009,21 @@ function go(n){
     }
   }
   if(n===5) refreshInvoiceAuto();
+  if(n===6) buildAnalisis();
   var pgs=document.querySelectorAll('.pg'); for(var i=0;i<pgs.length;i++) pgs[i].classList.toggle('on',i===n);
   var tabs=document.querySelectorAll('.tab'); for(var i=0;i<tabs.length;i++){ tabs[i].classList.remove('act','done'); if(i===n)tabs[i].classList.add('act'); else if(i<n)tabs[i].classList.add('done'); }
   gEl('addbar').classList.toggle('on',n===1);
   var ausBar=gEl('ausBar'); if(ausBar) ausBar.style.display=(n===4?'block':'none');
   pg=n; updNav(); window.scrollTo(0,0);
 }
-function next(){ if(pg<5)go(pg+1); }
+function next(){ if(pg<6)go(pg+1); }
 function prev(){ if(pg>0)go(pg-1); }
 function updNav(){
   gEl('np').style.display=pg===0?'none':'';
-  var nn=gEl('nn'); nn.textContent=pg===4?'💾 Guardar':'Siguiente →';
-  nn.onclick=pg===4?save:next;
+  var nn=gEl('nn');
+  if(pg===4){ nn.textContent='💾 Guardar'; nn.onclick=save; }
+  else if(pg===6){ nn.textContent='💾 Guardar'; nn.onclick=save; }
+  else { nn.textContent='Siguiente →'; nn.onclick=next; }
 }
 function toast(msg){ var t=gEl('toast'); t.textContent=msg; t.classList.add('on'); setTimeout(function(){ t.classList.remove('on'); },2500); }
 // Psi: toast with face photo thumbnail
@@ -4654,11 +4921,14 @@ function testFill(){
   if(!gVal('surquero')){ toast('⚠️ Primero selecciona un surquero'); return; }
 
   // ── 1. Trabajadores individuales con actividades ──
+  // Omega: incluye contractRate + shifts en piezas para que Análisis funcione
+  var defaultHE = gVal('hEnt')||'05:30';
+  var defaultHS = gVal('hSal')||'14:30';
   var testWorkers = [
-    {name:'Test Worker Uno',   actEs:'Deshierbe',   hr:true},
-    {name:'Test Worker Dos',   actEs:'Pizca de Fresa', hr:false, qty:'25'},
-    {name:'Test Worker Tres',  actEs:'Plantación',  hr:true},
-    {name:'Test Worker Cuatro',actEs:'Deshierbe',   hr:true}
+    {name:'Test Worker Uno',   actEs:'Deshierbe',   hr:true,  cRate:16.23},
+    {name:'Test Worker Dos',   actEs:'Pizca de Fresa', hr:false, qty:'250', cRate:16.23},  // supera mínimo → ✅ OK
+    {name:'Test Worker Tres',  actEs:'Pizca de Fresa', hr:false, qty:'120', cRate:16.23},  // bajo mínimo → 🔻 Pérdida
+    {name:'Test Worker Cuatro',actEs:'Deshierbe',   hr:true,  cRate:16.23}
   ];
 
   var addedWids = []; // para participantes grupales
@@ -4669,18 +4939,22 @@ function testFill(){
       if(ACTS[ai].es === tw.actEs){ actIdx = ai; break; }
     }
     var act = ACTS[actIdx];
-    var w = {id:wid++, name:tw.name, empNum:'', contractRate:0, open:true, totalPay:0, acts:[]};
+    var w = {id:wid++, name:tw.name, empNum:'', contractRate:tw.cRate||0, open:true, totalPay:0, acts:[]};
     var a = {
       ai:actIdx, esName:act?act.es:tw.actEs,
+      tipo:act?act.tipo:'',
       qty: tw.hr ? '' : (tw.qty||'10'),
       ini:'', fin:'', showTime:false,
       pay:0, shifts:[], finca:gVal('finca')||''
     };
     if(act && act.hr){
       a.showTime = true;
-      a.shifts = [{ini:gVal('hEnt')||'05:30', fin:gVal('hSal')||'14:30'}];
+      a.shifts = [{ini:defaultHE, fin:defaultHS}];
       a.pay = totalShiftHours(a) * getHRate(w, act);
     } else {
+      // Omega: agregar shifts a actividades de pieza para el Análisis
+      a.showTime = true;
+      a.shifts = [{ini:defaultHE, fin:defaultHS}];
       a.pay = (parseFloat(a.qty)||0) * (act?act.p:1.50);
     }
     w.acts.push(a);
