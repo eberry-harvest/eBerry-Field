@@ -3062,7 +3062,7 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
   }
   grpPuertasCols=_merged;
 
-  var th='<th style="width:28px;text-align:center">#</th><th style="min-width:130px;text-align:left;border-right:3px solid #1a2b8c">Nombre / Name</th>';
+  var th='<th style="width:28px;text-align:center">#</th><th style="width:62px;text-align:center;font-size:8px">Emp #</th><th style="min-width:130px;text-align:left;border-right:3px solid #1a2b8c">Nombre / Name</th>';
   // Tau: helper para unit label en inglés (como columna D de Current Contracted)
   var _ptMap={'Hora':'Hours','Ficha':'Pieces','Caja':'Pieces','$':'Extra'};
   for(i=0;i<actCols.length;i++){
@@ -3103,17 +3103,22 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
   // ── Filas de cabecera: TOTAL / Pago Unit. / Labor / Entrada / Salida ──
   var trTotal='<tr style="background:#d0d8ff;font-weight:700;font-size:10px">'
     +'<td style="border:1px solid #aab;border-top:3px solid #1a2b8c"></td>'
+    +'<td style="border:1px solid #aab;border-top:3px solid #1a2b8c"></td>'
     +'<td style="text-align:right;padding:5px 7px;border:1px solid #aab;border-top:3px solid #1a2b8c;border-right:3px solid #1a2b8c;color:#1a2b8c;font-size:10px;font-weight:900">TOTAL</td>';
   var trPrice='<tr style="font-size:10px;background:#fff">'
+    +'<td style="border:1px solid #ddd"></td>'
     +'<td style="border:1px solid #ddd"></td>'
     +'<td style="text-align:right;padding:4px 7px;border:1px solid #ddd;border-right:3px solid #1a2b8c;color:#111;font-weight:600">Pago Unit.</td>';
   var trLabor='<tr style="font-size:10px;background:#f5f8ff">'
     +'<td style="border:1px solid #ddd"></td>'
+    +'<td style="border:1px solid #ddd"></td>'
     +'<td style="text-align:right;padding:4px 7px;border:1px solid #ddd;border-right:3px solid #1a2b8c;color:#111;font-weight:600">Labor</td>';
   var trEntry='<tr style="font-size:10px;background:#f9f9f9">'
     +'<td style="border:1px solid #ddd"></td>'
+    +'<td style="border:1px solid #ddd"></td>'
     +'<td style="text-align:right;padding:4px 7px;border:1px solid #ddd;border-right:3px solid #1a2b8c;color:#111">Entrada</td>';
   var trExit='<tr class="meta-last" style="font-size:10px;background:#f9f9f9">'
+    +'<td style="border:1px solid #ddd"></td>'
     +'<td style="border:1px solid #ddd"></td>'
     +'<td style="text-align:right;padding:4px 7px;border:1px solid #ddd;border-right:3px solid #1a2b8c;color:#111">Salida</td>';
 
@@ -3223,8 +3228,8 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
   var rows='';
   for(i=0;i<sortedWks.length;i++){
     var w=sortedWks[i];
-    var empLbl = w.empNum ? '<br><span style="font-size:7px;color:#666;font-weight:400;letter-spacing:0.3px">#'+esc(w.empNum)+'</span>' : '';
-    var td='<td class="numcol">'+(i+1)+'</td><td class="namecol" style="border-right:3px solid #1a2b8c;line-height:1.1;padding:2px 4px">'+esc(w.name)+empLbl+'</td>';
+    var empCell = '<td style="text-align:center;font-size:8px;color:#444">'+(w.empNum?esc(w.empNum):'')+'</td>';
+    var td='<td class="numcol">'+(i+1)+'</td>'+empCell+'<td class="namecol" style="border-right:3px solid #1a2b8c;line-height:1.1;padding:2px 4px">'+esc(w.name)+'</td>';
     for(j=0;j<actCols.length;j++){
       var col2=actCols[j];
       // Para columnas hr individuales, celda vacía si no es el worker dueño
@@ -3258,15 +3263,16 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     rows+='<tr'+(i%2===1?' style="background:#f9f9f9"':'')+'>'+td+'</tr>';
   }
   // Filas vacías para completar la tabla — suficientes para llenar la página
-  var totalCols = 2 + actCols.length + grpPuertasCols.length
+  var totalCols = 3 + actCols.length + grpPuertasCols.length
     + (cp&&cp.length&&cajasT?1:0)
     + (ep&&ep.length&&estA&&estAn?1:0)
     + (hp&&hp.length&&hilA&&hilAn?1:0);
   var emptyCount = 1; // solo 1 fila vacía después del último trabajador
   for(i=0;i<emptyCount;i++){
     var etd='<td class="numcol" style="color:#ddd;border:1px solid #ddd">'+(sortedWks.length+i+1)+'</td>';
+    etd+='<td style="border:1px solid #ddd"></td>'; // Emp # vacío
     etd+='<td style="border:1px solid #ddd;border-right:3px solid #1a2b8c"></td>';
-    for(j=0;j<totalCols-2;j++) etd+='<td style="border:1px solid #ddd"></td>';
+    for(j=0;j<totalCols-3;j++) etd+='<td style="border:1px solid #ddd"></td>';
     rows+='<tr style="height:22px">'+etd+'</tr>';
   }
 
