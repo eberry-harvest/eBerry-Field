@@ -410,6 +410,9 @@ html.login-locked{overflow:hidden!important;height:100%!important}
   <div class="md">
     <div class="mt">⚠️ Persona no registrada</div>
     <div class="ms" id="unkS"></div>
+    <div id="unkThumbWrap" style="display:none;text-align:center;margin:8px 0">
+      <img id="unkThumb" style="width:80px;height:80px;border-radius:50%;border:3px solid var(--a);object-fit:cover" src="" alt="">
+    </div>
     <div class="mbox" style="background:#fff8ec;border:1.5px solid var(--a)">
       <div class="ml" style="color:var(--a)">Esta persona no está en el grupo habitual</div>
       <div class="mv" id="unkN" style="color:var(--a)">—</div>
@@ -1825,6 +1828,7 @@ function onQRSuccess(decoded){
     gEl('unkS').textContent='📷 QR: '+qrName+' (#'+qrEmpNum+') no está en la base de datos. ¿Deseas agregarlo de todas formas?';
   }
   gEl('unkN').textContent=officialName;
+  showUnkThumb(officialName);
   gEl('unkOv').classList.add('on');
 }
 
@@ -1905,7 +1909,25 @@ function doAdd(name){
     gEl('unkS').textContent='Esta persona no está en la base de datos de la empresa. Revisa el nombre. ¿Deseas agregarlo de todas formas?';
   }
   gEl('unkN').textContent=officialName;
+  showUnkThumb(officialName);
   gEl('unkOv').classList.add('on');
+}
+// Psi: Show face thumbnail in unkOv modal if available
+function showUnkThumb(name){
+  var wrap = gEl('unkThumbWrap');
+  var img = gEl('unkThumb');
+  // Find empNum for this name
+  var empNum = '';
+  for(var i=0;i<ALL_WORKERS.length;i++){
+    if(ALL_WORKERS[i].name.toLowerCase()===name.toLowerCase()){ empNum=ALL_WORKERS[i].empNum||''; break; }
+  }
+  if(empNum && faceThumbnailMap[empNum]){
+    img.src = 'data:image/jpeg;base64,' + faceThumbnailMap[empNum];
+    wrap.style.display = '';
+  } else {
+    wrap.style.display = 'none';
+    img.src = '';
+  }
 }
 function okUnk(){
   if(pendingUnk){
@@ -1935,7 +1957,13 @@ function doAddConfirmed(name){
   var ph=gEl('wph'); if(ph)ph.parentNode.removeChild(ph);
   gEl('wlist').appendChild(mkCard(w,workers.length-1));
   updParts();
-  toast('✓ '+name+' agregado'); autoSave();
+  // Psi: toast with face thumbnail if available
+  if(_empNum && faceThumbnailMap[_empNum]){
+    toastWithPhoto('✓ '+name+' agregado', faceThumbnailMap[_empNum]);
+  } else {
+    toast('✓ '+name+' agregado');
+  }
+  autoSave();
   setTimeout(function(){ window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'}); },80);
   if(workers.length>=2){
     var pat=detPat();
@@ -2714,6 +2742,15 @@ function updNav(){
   nn.onclick=pg===4?save:next;
 }
 function toast(msg){ var t=gEl('toast'); t.textContent=msg; t.classList.add('on'); setTimeout(function(){ t.classList.remove('on'); },2500); }
+// Psi: toast with face photo thumbnail
+function toastWithPhoto(msg, thumbB64){
+  var t=gEl('toast');
+  t.innerHTML='<div style="display:flex;align-items:center;gap:10px;justify-content:center">'
+    +'<img src="data:image/jpeg;base64,'+thumbB64+'" style="width:44px;height:44px;border-radius:50%;border:2px solid #fff;object-fit:cover">'
+    +'<span>'+msg+'</span></div>';
+  t.classList.add('on');
+  setTimeout(function(){ t.classList.remove('on'); },3000);
+}
 
 var _asTimer=null, _asTimer2=null;
 function autoSave(){
@@ -4731,6 +4768,22 @@ var faceCamStream = null;
 var faceCurrentWorker = null; // {name, empNum}
 var faceCurrentDescriptor = null; // Float32Array(128)
 var faceRegisteredMap = {}; // empNum → true (loaded from Sheets)
+var faceThumbnailMap = {};  // empNum → base64 JPEG thumbnail (Psi)
+
+// ── Psi: Generate 80×80 thumbnail from image element ──
+function generateFaceThumbnail(imgEl){
+  var c = document.createElement('canvas');
+  c.width = 80; c.height = 80;
+  var ctx = c.getContext('2d');
+  // Crop center square from image
+  var sw = imgEl.naturalWidth || imgEl.width;
+  var sh = imgEl.naturalHeight || imgEl.height;
+  var size = Math.min(sw, sh);
+  var sx = (sw - size) / 2;
+  var sy = (sh - size) / 2;
+  ctx.drawImage(imgEl, sx, sy, size, size, 0, 0, 80, 80);
+  return c.toDataURL('image/jpeg', 0.6).split(',')[1]; // solo base64, sin prefijo
+}
 
 // ── Load face-api models ──
 function loadFaceModels(cb){
@@ -4790,8 +4843,10 @@ function loadRegisteredFaces(cb){
       var resp = JSON.parse(x.responseText);
       if(resp.success && resp.faces){
         faceRegisteredMap = {};
+        faceThumbnailMap = {};
         for(var i=0; i<resp.faces.length; i++){
           faceRegisteredMap[resp.faces[i].empNum] = true;
+          if(resp.faces[i].thumbnail) faceThumbnailMap[resp.faces[i].empNum] = resp.faces[i].thumbnail;
         }
       }
     } catch(e){ console.log('loadRegisteredFaces parse error', e); }
@@ -4816,8 +4871,11 @@ function renderFaceList(filter){
     var isReg = !!faceRegisteredMap[w.empNum];
     if(isReg) totalRegistered++;
     if(f && w.name.toLowerCase().indexOf(f) === -1 && w.empNum.toLowerCase().indexOf(f) === -1) continue;
+    var thumbHtml = faceThumbnailMap[w.empNum]
+      ? '<img src="data:image/jpeg;base64,'+faceThumbnailMap[w.empNum]+'" style="width:36px;height:36px;border-radius:50%;object-fit:cover;border:2px solid '+(isReg?'#2ecc71':'#ddd')+'">'
+      : '<div class="fi-status ' + (isReg ? 'done' : 'pending') + '">' + (isReg ? '✅' : '⬤') + '</div>';
     html += '<div class="faceItem" onclick="selectFaceWorker(\'' + w.name.replace(/'/g,"\\'") + '\',\'' + w.empNum + '\')">'
-      + '<div class="fi-status ' + (isReg ? 'done' : 'pending') + '">' + (isReg ? '✅' : '⬤') + '</div>'
+      + thumbHtml
       + '<div class="fi-info"><div class="fi-name">' + w.name + '</div><div class="fi-emp">#' + w.empNum + '</div></div>'
       + '<div class="fi-arrow">›</div></div>';
   }
@@ -4979,11 +5037,19 @@ function saveFaceDescriptor(){
     descArray.push(Math.round(faceCurrentDescriptor[i]*1000000)/1000000); // 6 decimals
   }
 
+  // Psi: Generate thumbnail from the preview image
+  var thumbB64 = '';
+  var previewImg = gEl('faceImgPreview');
+  if(previewImg && previewImg.src) {
+    try { thumbB64 = generateFaceThumbnail(previewImg); } catch(e){ console.log('thumb err',e); }
+  }
+
   var payload = JSON.stringify({
     action: 'saveFace',
     name: faceCurrentWorker.name,
     empNum: faceCurrentWorker.empNum,
-    descriptor: descArray
+    descriptor: descArray,
+    thumbnail: thumbB64
   });
 
   var x = new XMLHttpRequest();
@@ -4994,6 +5060,7 @@ function saveFaceDescriptor(){
       var resp = JSON.parse(x.responseText);
       if(resp.success){
         faceRegisteredMap[faceCurrentWorker.empNum] = true;
+        if(thumbB64) faceThumbnailMap[faceCurrentWorker.empNum] = thumbB64;
         setFaceStatus('ok', '✅ ¡Rostro de ' + faceCurrentWorker.name + ' registrado!');
         // Auto-advance to next unregistered worker after 1.5s
         setTimeout(function(){
@@ -5361,6 +5428,7 @@ function loadFaceDescriptors(){
       if(resp.success && resp.faces){
         FACE_DESCRIPTORS = [];
         faceRegisteredMap = {};
+        faceThumbnailMap = {};
         var skipped = 0;
         for(var i=0; i<resp.faces.length; i++){
           var f = resp.faces[i];
@@ -5373,6 +5441,7 @@ function loadFaceDescriptors(){
               descriptor: new Float32Array(descArr)
             });
             faceRegisteredMap[f.empNum] = true;
+            if(f.thumbnail) faceThumbnailMap[f.empNum] = f.thumbnail;
           } catch(pe){ skipped++; continue; }
         }
         faceDataLoaded = true;
@@ -5605,6 +5674,7 @@ function handleFaceIDMatch(matched, needsConfirm){
     gEl('unkS').textContent = '👤 Facial: Coincidencia encontrada. ¿Agregar a ' + officialName + '?';
   }
   gEl('unkN').textContent = officialName;
+  showUnkThumb(officialName);
   gEl('unkOv').classList.add('on');
 }
 
