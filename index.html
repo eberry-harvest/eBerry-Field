@@ -428,6 +428,9 @@ html.login-locked{overflow:hidden!important;height:100%!important}
 <div class="ov" id="ioeOv">
   <div class="md">
     <div class="mt" style="color:var(--r)">🚫 Contrato no autorizado</div>
+    <div id="ioeThumbWrap" style="display:none;text-align:center;margin:8px 0">
+      <img id="ioeThumb" style="width:80px;height:80px;border-radius:50%;border:3px solid var(--r);object-fit:cover" src="" alt="">
+    </div>
     <div class="ms" id="ioeMsg" style="line-height:1.6"></div>
     <div style="background:var(--rp);border-radius:8px;padding:12px;margin:10px 0;text-align:center">
       <div style="font-size:12px;font-weight:700;color:var(--r)">Comunícate a las oficinas de eBerry</div>
@@ -1871,6 +1874,20 @@ function showIoeBlock(info, name){
   }
   gEl('ioeMsg').textContent = msg;
   gEl('ioeMsg').style.whiteSpace = 'pre-line';
+  // Psi: show thumbnail in IOE block modal
+  var ioeWrap = gEl('ioeThumbWrap');
+  var ioeImg = gEl('ioeThumb');
+  var empN = '';
+  for(var j=0;j<ALL_WORKERS.length;j++){
+    if(ALL_WORKERS[j].name.toLowerCase()===name.toLowerCase()){ empN=ALL_WORKERS[j].empNum||''; break; }
+  }
+  if(empN && faceThumbnailMap[empN]){
+    ioeImg.src = 'data:image/jpeg;base64,' + faceThumbnailMap[empN];
+    ioeWrap.style.display = '';
+  } else {
+    ioeWrap.style.display = 'none';
+    ioeImg.src = '';
+  }
   gEl('ioeOv').classList.add('on');
   gEl('srch').value='';
 }
