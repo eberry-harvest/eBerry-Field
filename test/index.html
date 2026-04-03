@@ -4921,11 +4921,14 @@ function testFill(){
   if(!gVal('surquero')){ toast('⚠️ Primero selecciona un surquero'); return; }
 
   // ── 1. Trabajadores individuales con actividades ──
+  // Omega: incluye contractRate + shifts en piezas para que Análisis funcione
+  var defaultHE = gVal('hEnt')||'05:30';
+  var defaultHS = gVal('hSal')||'14:30';
   var testWorkers = [
-    {name:'Test Worker Uno',   actEs:'Deshierbe',   hr:true},
-    {name:'Test Worker Dos',   actEs:'Pizca de Fresa', hr:false, qty:'25'},
-    {name:'Test Worker Tres',  actEs:'Plantación',  hr:true},
-    {name:'Test Worker Cuatro',actEs:'Deshierbe',   hr:true}
+    {name:'Test Worker Uno',   actEs:'Deshierbe',   hr:true,  cRate:16.23},
+    {name:'Test Worker Dos',   actEs:'Pizca de Fresa', hr:false, qty:'250', cRate:16.23},  // supera mínimo → ✅ OK
+    {name:'Test Worker Tres',  actEs:'Pizca de Fresa', hr:false, qty:'120', cRate:16.23},  // bajo mínimo → 🔻 Pérdida
+    {name:'Test Worker Cuatro',actEs:'Deshierbe',   hr:true,  cRate:16.23}
   ];
 
   var addedWids = []; // para participantes grupales
@@ -4936,18 +4939,22 @@ function testFill(){
       if(ACTS[ai].es === tw.actEs){ actIdx = ai; break; }
     }
     var act = ACTS[actIdx];
-    var w = {id:wid++, name:tw.name, empNum:'', contractRate:0, open:true, totalPay:0, acts:[]};
+    var w = {id:wid++, name:tw.name, empNum:'', contractRate:tw.cRate||0, open:true, totalPay:0, acts:[]};
     var a = {
       ai:actIdx, esName:act?act.es:tw.actEs,
+      tipo:act?act.tipo:'',
       qty: tw.hr ? '' : (tw.qty||'10'),
       ini:'', fin:'', showTime:false,
       pay:0, shifts:[], finca:gVal('finca')||''
     };
     if(act && act.hr){
       a.showTime = true;
-      a.shifts = [{ini:gVal('hEnt')||'05:30', fin:gVal('hSal')||'14:30'}];
+      a.shifts = [{ini:defaultHE, fin:defaultHS}];
       a.pay = totalShiftHours(a) * getHRate(w, act);
     } else {
+      // Omega: agregar shifts a actividades de pieza para el Análisis
+      a.showTime = true;
+      a.shifts = [{ini:defaultHE, fin:defaultHS}];
       a.pay = (parseFloat(a.qty)||0) * (act?act.p:1.50);
     }
     w.acts.push(a);
