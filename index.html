@@ -1585,7 +1585,8 @@ function adminCheckSession(name){
   if(!panel||!status||!btn) return;
   // Alpha2-fix3: si es el mismo surquero, no re-consultar (debounce 10s)
   if(name && name === _adminSessTarget && _adminSessTimer) return;
-  if(!name){ panel.style.display='none'; return; }
+  // V6-C1: limpiar estado completo al des-seleccionar
+  if(!name){ if(panel) panel.style.display='none'; _adminSessTarget=''; if(_adminSessTimer){clearTimeout(_adminSessTimer);_adminSessTimer=null;} return; }
   _adminSessTarget = name;
   // Alpha2-fix3: cooldown de 10s para no bombardear el servidor
   if(_adminSessTimer) clearTimeout(_adminSessTimer);
@@ -2981,6 +2982,7 @@ function getGlobalHours(){
 
 function buildAnalisis(){
   var totalEsperado=0, totalReal=0;
+  var totalPerdida=0, wConPerdida=0; // V6-C4: movidos aquí (antes eran loops separados)
   var wHTML='';
   var actSummary={}; // por nombre de actividad
 
@@ -3086,6 +3088,9 @@ function buildAnalisis(){
 
     totalEsperado+=wEsperado;
     totalReal+=wReal;
+    // V6-C4: acumular pérdida aquí mismo (antes eran 2 loops extra)
+    var wDiff_=wReal-wEsperado;
+    if(wDiff_<0){ totalPerdida+=Math.abs(wDiff_); wConPerdida++; }
 
     var wDiff=wReal-wEsperado;
     var wIsLoss=wDiff<0;
@@ -3102,46 +3107,7 @@ function buildAnalisis(){
     +'</div>';
   }
 
-  // Banner — solo pérdidas importan (lo positivo es dinero del trabajador)
-  var totalPerdida=0;
-  // Calcular pérdida real: solo sumar los workers que están en negativo
-  for(var bi=0;bi<workers.length;bi++){
-    var bw=workers[bi], bEsp=0, bReal=0, bBaseRate=bw.contractRate||0;
-    for(var bj=0;bj<bw.acts.length;bj++){
-      var ba=bw.acts[bj]; var bact=null;
-      if(ba.esName){ for(var bk=0;bk<ACTS.length;bk++){ if(ACTS[bk].es===ba.esName && (!ba.tipo||ACTS[bk].tipo===ba.tipo)){bact=ACTS[bk];break;} } }
-      if(!bact && ba.ai>=0 && ba.ai<ACTS.length) bact=ACTS[ba.ai];
-      if(!bact||bact.hr||bact.tipo==='$'||bact.tipo==='Hora') continue;
-      if(bact.payType==='Daywork') continue;
-      if((bact.modo||'Individual').toLowerCase()==='grupal') continue;
-      var bPP=bact.p; if(!bPP) continue;
-      var bHR=bBaseRate; if(!bHR){ for(var brk=0;brk<bw.acts.length;brk++){ var brA=null; if(bw.acts[brk].esName){for(var brk2=0;brk2<ACTS.length;brk2++){if(ACTS[brk2].es===bw.acts[brk].esName){brA=ACTS[brk2];break;}}} if(brA&&brA.hr){bHR=brA.p;break;} } }
-      if(!bHR) continue;
-      var bH=totalShiftHours(ba); if(!bH) bH=getGlobalHours(); if(!bH) continue;
-      bEsp+=bHR*bH; bReal+=(parseFloat(ba.qty)||0)*bPP;
-    }
-    var bDiff=bReal-bEsp;
-    if(bDiff<0) totalPerdida+=Math.abs(bDiff);
-  }
-  var wConPerdida=0;
-  for(var ci=0;ci<workers.length;ci++){
-    // contar cuántos tienen pérdida (simplificado)
-    var cw=workers[ci], cEsp=0, cReal=0, cBR=cw.contractRate||0;
-    for(var cj=0;cj<cw.acts.length;cj++){
-      var ca=cw.acts[cj]; var cact=null;
-      if(ca.esName){ for(var ck=0;ck<ACTS.length;ck++){ if(ACTS[ck].es===ca.esName && (!ca.tipo||ACTS[ck].tipo===ca.tipo)){cact=ACTS[ck];break;} } }
-      if(!cact && ca.ai>=0 && ca.ai<ACTS.length) cact=ACTS[ca.ai];
-      if(!cact||cact.hr||cact.tipo==='$'||cact.tipo==='Hora') continue;
-      if(cact.payType==='Daywork') continue;
-      if((cact.modo||'Individual').toLowerCase()==='grupal') continue;
-      var cPP=cact.p; if(!cPP) continue;
-      var cHR=cBR; if(!cHR){ for(var crk=0;crk<cw.acts.length;crk++){ var crA=null; if(cw.acts[crk].esName){for(var crk2=0;crk2<ACTS.length;crk2++){if(ACTS[crk2].es===cw.acts[crk].esName){crA=ACTS[crk2];break;}}} if(crA&&crA.hr){cHR=crA.p;break;} } }
-      if(!cHR) continue;
-      var cH=totalShiftHours(ca); if(!cH) cH=getGlobalHours(); if(!cH) continue;
-      cEsp+=cHR*cH; cReal+=(parseFloat(ca.qty)||0)*cPP;
-    }
-    if(cReal-cEsp<0) wConPerdida++;
-  }
+  // V6-C4: loops bi y ci eliminados — totalPerdida y wConPerdida ya se calcularon en el loop principal
   gEl('anBanner').innerHTML=
     '<div class="an-box"><div class="an-val" style="color:var(--g)">'+workers.length+'</div><div class="an-lbl">Trabajadores</div></div>'
     +'<div class="an-box '+(wConPerdida>0?'loss':'')+'"><div class="an-val '+(wConPerdida>0?'red':'green')+'">'+wConPerdida+'</div><div class="an-lbl">'+(wConPerdida>0?'Con Pérdida':'Sin Pérdidas')+'</div></div>'
@@ -3518,10 +3484,19 @@ function toast(msg){ var t=gEl('toast'); t.textContent=msg; t.classList.add('on'
 function escH(s){ var d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
 // Psi: toast with face photo thumbnail
 function toastWithPhoto(msg, thumbB64){
+  // V6-C2: usar DOM en vez de innerHTML para evitar XSS via thumbB64
   var t=gEl('toast');
-  t.innerHTML='<div style="display:flex;align-items:center;gap:10px;justify-content:center">'
-    +'<img src="data:image/jpeg;base64,'+thumbB64+'" style="width:44px;height:44px;border-radius:50%;border:2px solid #fff;object-fit:cover">'
-    +'<span>'+escH(msg)+'</span></div>';
+  t.innerHTML='';
+  var wrap=document.createElement('div');
+  wrap.style.cssText='display:flex;align-items:center;gap:10px;justify-content:center';
+  var img=document.createElement('img');
+  img.src='data:image/jpeg;base64,'+thumbB64; // asignado como propiedad, no HTML
+  img.style.cssText='width:44px;height:44px;border-radius:50%;border:2px solid #fff;object-fit:cover';
+  var sp=document.createElement('span');
+  sp.textContent=msg; // textContent escapa automáticamente
+  wrap.appendChild(img);
+  wrap.appendChild(sp);
+  t.appendChild(wrap);
   t.classList.add('on');
   setTimeout(function(){ t.classList.remove('on'); },3000);
 }
@@ -4613,9 +4588,12 @@ function isActPuertas(act){
   if(act.calc==='puertas') return true;
   var es = (act.es||'').toLowerCase();
   var en = (act.en||'').toLowerCase();
-  // Excluir cosechas/pizcas — "Cosecha de tomate" NO es puertas, "Amarre de tomate" SÍ
-  if(es.indexOf('cosecha')>=0||es.indexOf('pizca')>=0||en.indexOf('harvest')>=0||en.indexOf('pick')>=0) return false;
-  return es.indexOf('estaca')>=0||es.indexOf('hilo')>=0||es.indexOf('amarre')>=0||es.indexOf('plástico')>=0||es.indexOf('plastico')>=0||es.indexOf('tomate')>=0
+  // V6-C7: excluir cosechas, pizcas Y podas — "Poda de tomate" NO es puertas
+  if(es.indexOf('cosecha')>=0||es.indexOf('pizca')>=0||es.indexOf('poda')>=0||en.indexOf('harvest')>=0||en.indexOf('pick')>=0||en.indexOf('prun')>=0) return false;
+  // "tomate" solo si va con amarre/hilo (no suelto) — keywords más específicos
+  return es.indexOf('estaca')>=0||es.indexOf('hilo')>=0||es.indexOf('amarre')>=0||es.indexOf('plástico')>=0||es.indexOf('plastico')>=0
+    ||es.indexOf('colocación')>=0||es.indexOf('colocacion')>=0
+    ||(es.indexOf('tomate')>=0&&(es.indexOf('amarre')>=0||es.indexOf('hilo')>=0))
     ||en.indexOf('stake')>=0||en.indexOf('staking')>=0||en.indexOf('wire')>=0||en.indexOf('drip')>=0||en.indexOf('plastic')>=0||en.indexOf('tying')>=0;
 }
 
@@ -4625,9 +4603,12 @@ function grpCalcType(act){
   if(!act) return 'pieza';
   var es = (act.es||'').toLowerCase();
   if(act.calc) return act.calc; // si viene de fallback con calc explícito
-  // Excluir cosechas/pizcas primero
-  if(es.indexOf('cosecha')>=0||es.indexOf('pizca')>=0) return 'pieza';
-  if(es.indexOf('estaca')>=0||es.indexOf('hilo')>=0||es.indexOf('amarre')>=0||es.indexOf('plástico')>=0||es.indexOf('plastico')>=0||es.indexOf('tomate')>=0||es.indexOf('drip')>=0||es.indexOf('wire')>=0||es.indexOf('plastic')>=0||es.indexOf('tying')>=0||es.indexOf('staking')>=0) return 'puertas';
+  // V6-C7: excluir cosechas, pizcas Y podas
+  if(es.indexOf('cosecha')>=0||es.indexOf('pizca')>=0||es.indexOf('poda')>=0) return 'pieza';
+  if(es.indexOf('estaca')>=0||es.indexOf('hilo')>=0||es.indexOf('amarre')>=0||es.indexOf('plástico')>=0||es.indexOf('plastico')>=0
+    ||es.indexOf('colocación')>=0||es.indexOf('colocacion')>=0
+    ||(es.indexOf('tomate')>=0&&(es.indexOf('amarre')>=0||es.indexOf('hilo')>=0))
+    ||es.indexOf('drip')>=0||es.indexOf('wire')>=0||es.indexOf('plastic')>=0||es.indexOf('tying')>=0||es.indexOf('staking')>=0) return 'puertas';
   if(es.indexOf('caja')>=0||es.indexOf('box')>=0||es.indexOf('empaque')>=0) return 'cajas';
   if(act.hr) return 'hora';
   return 'pieza';
@@ -4958,7 +4939,7 @@ function onSurcoSmart(inp){
   var fi = parseInt(inp.dataset.fi);
   var sf = inp.dataset.sf; // 'largo','num','totalPies','totalAcres'
   if(!grpActs[gi]) return;
-  if(!grpActs[gi].vars.surcos) grpActs[gi].vars.surcos=[{largo:'',num:'',totalPies:'',totalAcres:'',mode:''}];
+  if(!grpActs[gi].vars.surcos) grpActs[gi].vars.surcos=[{largo:'',num:'',totalPies:'',totalAcres:'',mode:'',lbl:''}]; // V6-C6: schema completo
   var row = grpActs[gi].vars.surcos[fi];
   if(!row) return;
   var val = inp.value.trim();
@@ -5001,7 +4982,7 @@ function onSurcoSmart(inp){
   // Re-render para actualizar disabled states — restaurar foco después
   var _gi=gi, _fi=fi, _sf=sf, _cursorPos=inp.selectionStart;
   renderGrpActs();
-  calcGrpAct(_gi);
+  // V6-C5: calcGrpAct(_gi) eliminado — renderGrpActs() ya lo llama internamente
   autoSave();
   // Restaurar foco en el input que estaba editando
   setTimeout(function(){
@@ -5017,8 +4998,9 @@ function setSurcoVar(inp){
   var fi = parseInt(inp.dataset.fi);
   var sv = inp.dataset.sv;
   if(!grpActs[gi]) return;
-  if(!grpActs[gi].vars.surcos) grpActs[gi].vars.surcos=[{largo:'',num:''}];
-  if(!grpActs[gi].vars.surcos[fi]) grpActs[gi].vars.surcos[fi]={largo:'',num:''};
+  // V6-C6: schema completo para evitar undefined/NaN en cálculos
+  if(!grpActs[gi].vars.surcos) grpActs[gi].vars.surcos=[{largo:'',num:'',totalPies:'',totalAcres:'',mode:'',lbl:''}];
+  if(!grpActs[gi].vars.surcos[fi]) grpActs[gi].vars.surcos[fi]={largo:'',num:'',totalPies:'',totalAcres:'',mode:'',lbl:''};
   grpActs[gi].vars.surcos[fi][sv] = inp.value;
   // Solo recalcular si el campo afecta los totales (largo/num), no para label
   if(sv==='largo'||sv==='num') calcGrpAct(gi);
@@ -5972,7 +5954,8 @@ function saveFaceDescriptor(){
   // Psi: Generate thumbnail from the preview image
   var thumbB64 = '';
   var previewImg = gEl('faceImgPreview');
-  if(previewImg && previewImg.src) {
+  // V6-C3: checar .complete y .naturalWidth para asegurar que la imagen cargó
+  if(previewImg && previewImg.complete && previewImg.naturalWidth > 0) {
     try { thumbB64 = generateFaceThumbnail(previewImg) || ''; } catch(e){ console.log('thumb err',e); }
   }
 
