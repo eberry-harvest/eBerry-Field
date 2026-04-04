@@ -1283,17 +1283,23 @@ function onAdminSurqueroChange(name){
 
 // ═══ Upsilon2: Admin Session Panel ═══
 var _adminSessTarget = ''; // surquero currently being checked
+var _adminSessTimer = null; // Alpha2-fix3: debounce timer
 
 function adminCheckSession(name){
   var panel = gEl('adminSessPanel');
   var status = gEl('adminSessStatus');
   var btn = gEl('adminSessCloseBtn');
   if(!panel||!status||!btn) return;
+  // Alpha2-fix3: si es el mismo surquero, no re-consultar (debounce 10s)
+  if(name && name === _adminSessTarget && _adminSessTimer) return;
   if(!name){ panel.style.display='none'; return; }
   _adminSessTarget = name;
+  // Alpha2-fix3: cooldown de 10s para no bombardear el servidor
+  if(_adminSessTimer) clearTimeout(_adminSessTimer);
+  _adminSessTimer = setTimeout(function(){ _adminSessTimer=null; }, 10000);
   panel.style.display='block';
   btn.style.display='none';
-  status.innerHTML='🔍 Consultando sesión de <b>'+name.split(' ')[0]+'</b>...';
+  status.innerHTML='🔍 Consultando sesión de <b>'+escH(name.split(' ')[0])+'</b>...'; // Alpha2-fix2: escapar nombre
   sessionCall({cmd:'check', surquero:name}, function(err, data){
     if(_adminSessTarget !== name) return; // user changed selection
     if(err || !data){
@@ -3215,12 +3221,14 @@ function updNav(){
   else { nn.textContent='Siguiente →'; nn.onclick=next; }
 }
 function toast(msg){ var t=gEl('toast'); t.textContent=msg; t.classList.add('on'); setTimeout(function(){ t.classList.remove('on'); },2500); }
+// Alpha2-fix2: helper para escapar HTML y evitar romper DOM con nombres raros
+function escH(s){ var d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
 // Psi: toast with face photo thumbnail
 function toastWithPhoto(msg, thumbB64){
   var t=gEl('toast');
   t.innerHTML='<div style="display:flex;align-items:center;gap:10px;justify-content:center">'
     +'<img src="data:image/jpeg;base64,'+thumbB64+'" style="width:44px;height:44px;border-radius:50%;border:2px solid #fff;object-fit:cover">'
-    +'<span>'+msg+'</span></div>';
+    +'<span>'+escH(msg)+'</span></div>';
   t.classList.add('on');
   setTimeout(function(){ t.classList.remove('on'); },3000);
 }
@@ -3492,11 +3500,10 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     for(var wi2=0;wi2<wks.length;wi2++){
       for(var ai2b=0;ai2b<wks[wi2].acts.length;ai2b++){
         var act_=wks[wi2].acts[ai2b];
-        // Para columnas de tipo Hora individuales, solo buscar en el worker dueño
-        var matchW = actCols[ci].wid===null || actCols[ci].wid===wks[wi2].id;
+        // Alpha2-fix5: eliminado matchW dead code (wid siempre es null)
         var actName_ci=actCols[ci].esName||(ACTS[actCols[ci].ai]?ACTS[actCols[ci].ai].es:'');
         var actName_w=(act_.esName||(ACTS[act_.ai]?ACTS[act_.ai].es:''));
-        if(actName_w===actName_ci && matchW){
+        if(actName_w===actName_ci){
           var ini_=act_.ini||((act_.shifts&&act_.shifts.length)?act_.shifts[0].ini:'');
           if(ini_&&ini_<firstIni) firstIni=ini_;
         }
@@ -3602,8 +3609,7 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
   for(i=0;i<wks.length;i++){
     for(j=0;j<actCols.length;j++){
       var col3=actCols[j];
-      // Para columnas hr individuales, solo sumar del worker dueño
-      if(col3.wid!==null && col3.wid!==wks[i].id) continue;
+      // Alpha2-fix5: eliminado dead code (wid siempre es null)
       var found3=null;
       var col3Name=col3.esName||(ACTS[col3.ai]?ACTS[col3.ai].es:'');
       for(var k3=0;k3<wks[i].acts.length;k3++){
@@ -3659,8 +3665,7 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     }
     var unitPr=''; var entLbl=''; var salLbl=''; var laborLbl='';
     for(var w2=0;w2<wks.length;w2++){
-      // Para columnas hr individuales, solo leer del worker dueño
-      if(col4.wid!==null && col4.wid!==wks[w2].id) continue;
+      // Alpha2-fix5: eliminado dead code (wid siempre es null)
       var col4Name=col4.esName||(ACTS[col4.ai]?ACTS[col4.ai].es:'');
       for(var a2=0;a2<wks[w2].acts.length;a2++){
         var wActName4=wks[w2].acts[a2].esName||(ACTS[wks[w2].acts[a2].ai]?ACTS[wks[w2].acts[a2].ai].es:'');
@@ -3750,8 +3755,7 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     var td='<td class="numcol">'+(i+1)+'</td>'+empCell+'<td class="namecol" style="border-right:3px solid #1a2b8c;line-height:1.1;padding:2px 4px">'+esc(w.name)+'</td>';
     for(j=0;j<actCols.length;j++){
       var col2=actCols[j];
-      // Para columnas hr individuales, celda vacía si no es el worker dueño
-      if(col2.wid!==null && col2.wid!==w.id){ td+='<td></td>'; continue; }
+      // Alpha2-fix5: eliminado dead code (wid siempre es null)
       var found2=null;
       var col2Name=col2.esName||(ACTS[col2.ai]?ACTS[col2.ai].es:'');
       for(var k2=0;k2<w.acts.length;k2++){
@@ -5402,17 +5406,22 @@ var faceThumbnailMap = {};  // empNum → base64 JPEG thumbnail (Psi)
 
 // ── Psi: Generate 80×80 thumbnail from image element ──
 function generateFaceThumbnail(imgEl){
+  // Alpha2-fix1: guardia — si la imagen no decodificó, retornar null en vez de imagen negra
+  var sw = imgEl.naturalWidth || imgEl.width;
+  var sh = imgEl.naturalHeight || imgEl.height;
+  if(!sw || !sh) return null;
   var c = document.createElement('canvas');
   c.width = 80; c.height = 80;
   var ctx = c.getContext('2d');
   // Crop center square from image
-  var sw = imgEl.naturalWidth || imgEl.width;
-  var sh = imgEl.naturalHeight || imgEl.height;
   var size = Math.min(sw, sh);
   var sx = (sw - size) / 2;
   var sy = (sh - size) / 2;
   ctx.drawImage(imgEl, sx, sy, size, size, 0, 0, 80, 80);
-  return c.toDataURL('image/jpeg', 0.6).split(',')[1]; // solo base64, sin prefijo
+  // Alpha2-fix1: verificar que no sea canvas vacío/negro
+  var data = c.toDataURL('image/jpeg', 0.6);
+  if(data.length < 200) return null; // demasiado pequeño = imagen negra
+  return data.split(',')[1]; // solo base64, sin prefijo
 }
 
 // ── Load face-api models ──
@@ -5671,7 +5680,7 @@ function saveFaceDescriptor(){
   var thumbB64 = '';
   var previewImg = gEl('faceImgPreview');
   if(previewImg && previewImg.src) {
-    try { thumbB64 = generateFaceThumbnail(previewImg); } catch(e){ console.log('thumb err',e); }
+    try { thumbB64 = generateFaceThumbnail(previewImg) || ''; } catch(e){ console.log('thumb err',e); }
   }
 
   var payload = JSON.stringify({
@@ -6197,9 +6206,8 @@ function snapFaceID(){
   var ctx = canvas.getContext('2d');
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-  // Pause video, show canvas
-  var video = gEl('fidVideo');
-  if(video) video.pause();
+  // Pause video, show canvas — Alpha2-fix4: eliminado var video duplicado
+  video.pause();
   video.style.display = 'none';
   canvas.classList.add('vis');
   gEl('fidGuide').style.display = 'none';
