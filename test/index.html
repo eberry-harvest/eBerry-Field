@@ -2225,16 +2225,24 @@ function renderIndSurcos(wi,ai){
     gP+=parseFloat(a.surcos[fi2].totalPies)||0;
     gA+=parseFloat(a.surcos[fi2].totalAcres)||0;
   }
-  var puertas=gP/100;
+  // Omega: puertas = acres × anchoCama cuando hay ambos, fallback pies/100
+  var indAC=parseFloat(a.anchoCama)||0;
+  var puertas=(gA>0&&indAC>0)?gA*indAC:gP/100;
+  var puertasF=(gA>0&&indAC>0)?'(acres\u00d7ancho)':'(\u00f7100)';
+  // Campo de anchoCama para individual
+  var acHtml='<div style="margin-bottom:8px"><label style="font-size:10px">\ud83c\udf3e ANCHO DE CAMA (para pago \u2014 ej: 5.67 DeWitt, 83 Mecca)</label>'
+    +'<input type="text" inputmode="decimal" id="indAC_'+wi+'_'+ai+'" value="'+(a.anchoCama||'')+'" placeholder="83"'
+    +' data-wi="'+wi+'" data-ai="'+ai+'" oninput="setIndAnchoCama(this)"'
+    +' style="font-size:16px;padding:9px 10px;width:100%;margin-top:3px"></div>';
   cont.innerHTML='<div style="font-size:11px;font-weight:700;color:var(--gr);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">\ud83d\udccf Bloques / Surcos (individual)</div>'
-    +filasHtml
+    +acHtml+filasHtml
     +'<button data-wi="'+wi+'" data-ai="'+ai+'" onclick="addIndSurcoFila(this.dataset.wi,this.dataset.ai)"'
     +' style="width:100%;padding:8px;border:2px dashed var(--g2);border-radius:7px;background:none;color:var(--g);font-family:\'DM Sans\',sans-serif;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:10px">\uff0b Agregar m\u00e1s bloques</button>'
     +(gP>0?'<div style="background:var(--gp);border-radius:7px;padding:9px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'
     +'<span style="font-size:12px;font-weight:600;color:var(--g)">\ud83d\udcd0 Pies lineales</span>'
     +'<b style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:var(--g)">'+gP.toFixed(1)+' ft</b></div>':'')
-    +(gP>0?'<div style="background:var(--dk);border-radius:7px;padding:9px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'
-    +'<span style="font-size:12px;font-weight:600;color:#fff">\ud83d\udeaa Puertas</span>'
+    +(puertas>0?'<div style="background:var(--dk);border-radius:7px;padding:9px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'
+    +'<span style="font-size:12px;font-weight:600;color:#fff">\ud83d\udeaa Puertas '+puertasF+'</span>'
     +'<b style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:#fff">'+puertas.toFixed(2)+'</b></div>':'')
     +(gA>0?'<div style="background:var(--bp);border-radius:7px;padding:9px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'
     +'<span style="font-size:12px;font-weight:600;color:var(--b)">\ud83c\udf3e Acres</span>'
@@ -2286,6 +2294,20 @@ function onIndSurcoSmart(inp){
   setTimeout(function(){
     var el=document.querySelector('[data-wi="'+_wi+'"][data-ai="'+_ai+'"][data-fi="'+_fi+'"][data-sf="'+_sf+'"]');
     if(el){ el.focus(); if(typeof _cursorPos==='number') try{el.setSelectionRange(_cursorPos,_cursorPos);}catch(e){} }
+  },0);
+}
+
+function setIndAnchoCama(inp){
+  var wi=inp.dataset.wi, ai=parseInt(inp.dataset.ai);
+  var w=getW(wi); if(!w||!w.acts[ai]) return;
+  w.acts[ai].anchoCama=inp.value.trim();
+  var _cp=inp.selectionStart;
+  // Recalcular puertas y pago con nuevo anchoCama
+  renderIndSurcos(wi,ai);
+  autoSave();
+  setTimeout(function(){
+    var el=gEl('indAC_'+wi+'_'+ai);
+    if(el){ el.focus(); if(typeof _cp==='number') try{el.setSelectionRange(_cp,_cp);}catch(e){} }
   },0);
 }
 
@@ -3043,10 +3065,15 @@ function load(){
         a.esName=act.es;
         a.tipo=act.tipo;  // Upsilon: siempre sincronizar tipo en live act
         // Omega: si tiene surcos individuales, recalcular qty como puertas
+        // Puertas = acres × anchoCama cuando hay ambos, fallback pies/100
         if(a.surcos&&a.surcos.length&&isActPuertas(act)){
-          var _tpInd=0;
-          for(var si2=0;si2<a.surcos.length;si2++) _tpInd+=parseFloat(a.surcos[si2].totalPies)||0;
-          a.qty=_tpInd/100;
+          var _tpInd=0, _taInd=0;
+          for(var si2=0;si2<a.surcos.length;si2++){
+            _tpInd+=parseFloat(a.surcos[si2].totalPies)||0;
+            _taInd+=parseFloat(a.surcos[si2].totalAcres)||0;
+          }
+          var _acInd=parseFloat(a.anchoCama)||0;
+          a.qty=(_taInd>0&&_acInd>0)?_taInd*_acInd:_tpInd/100;
         }
         if(act.hr){ a.pay=totalShiftHours(a)*getHRate(workers[i],act); }
         else if(act.tipo==='$'){ a.pay=parseFloat(a.qty)||0; }
@@ -3493,10 +3520,15 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     var np_=g_.participantes.length; if(!np_) continue;
     var col_=null;
     if(ct_==='puertas'){
-      var metros_=0;
+      // Omega: sumar totalPies y totalAcres; puertas = acres×anchoCama o pies/100
+      var grandPies_=0, grandAcres_=0;
       var surcos_=g_.vars.surcos||[];
-      for(var si_=0;si_<surcos_.length;si_++) metros_+=(parseFloat(surcos_[si_].largo)||0)*(parseFloat(surcos_[si_].num)||0);
-      var puertas_=metros_/100;
+      for(var si_=0;si_<surcos_.length;si_++){
+        grandPies_+=parseFloat(surcos_[si_].totalPies)||0;
+        grandAcres_+=parseFloat(surcos_[si_].totalAcres)||0;
+      }
+      var anchoCama_=parseFloat(g_.vars.anchoCama)||0;
+      var puertas_=(grandAcres_>0&&anchoCama_>0)?grandAcres_*anchoCama_:grandPies_/100;
       if(!puertas_) continue;
       var ppx_=puertas_/np_;
       col_={label:gact_.es, ct:'puertas', perPersona:{}, totalVal:puertas_, np:np_, precio:gact_.p, unitLabel:'Doors p/p', finca:g_.vars.finca||'', ini:g_.vars.ini||'', fin:g_.vars.fin||''};
@@ -4434,7 +4466,10 @@ function renderGrpActs(){
         grandPies  += parseFloat(g.vars.surcos[fi2].totalPies)||0;
         grandAcres += parseFloat(g.vars.surcos[fi2].totalAcres)||0;
       }
-      var puertasTot = grandPies/100;
+      // Omega: puertas = acres × anchoCama cuando hay ambos, fallback pies/100
+      var anchoCamaTot=parseFloat(g.vars.anchoCama)||0;
+      var puertasTot=(grandAcres>0&&anchoCamaTot>0)?grandAcres*anchoCamaTot:grandPies/100;
+      var puertasFormula=(grandAcres>0&&anchoCamaTot>0)?'(acres×ancho)':'(÷100)';
 
       varsHtml = '<div style="font-size:11px;font-weight:700;color:var(--gr);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">📏 Bloques / Surcos</div>'
         + filasHtml
@@ -4444,8 +4479,8 @@ function renderGrpActs(){
         +'<div id="gaMetros'+gi+'" style="background:var(--gp);border-radius:7px;padding:9px 12px;margin-bottom:8px;display:'+(grandPies>0?'flex':'none')+';justify-content:space-between;align-items:center">'
         +'<span style="font-size:12px;font-weight:600;color:var(--g)">📐 Pies lineales totales</span>'
         +'<b style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:var(--g)" id="gaMetrosVal'+gi+'">'+grandPies.toFixed(1)+' ft</b></div>'
-        +'<div id="gaPuertas'+gi+'" style="background:var(--dk);border-radius:7px;padding:9px 12px;margin-bottom:8px;display:'+(grandPies>0?'flex':'none')+';justify-content:space-between;align-items:center">'
-        +'<span style="font-size:12px;font-weight:600;color:rgba(255,255,255,.7)">🚪 Puertas totales (÷100)</span>'
+        +'<div id="gaPuertas'+gi+'" style="background:var(--dk);border-radius:7px;padding:9px 12px;margin-bottom:8px;display:'+(puertasTot>0?'flex':'none')+';justify-content:space-between;align-items:center">'
+        +'<span style="font-size:12px;font-weight:600;color:rgba(255,255,255,.7)">🚪 Puertas totales '+puertasFormula+'</span>'
         +'<b style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:var(--a)" id="gaPuertasVal'+gi+'">'+puertasTot.toFixed(2)+'</b></div>'
         +'<div id="gaAcres'+gi+'" style="background:var(--bp);border-radius:7px;padding:9px 12px;margin-bottom:8px;display:'+(grandAcres>0?'flex':'none')+';justify-content:space-between;align-items:center">'
         +'<span style="font-size:12px;font-weight:600;color:var(--b)">🌿 Acres totales</span>'
@@ -4556,10 +4591,14 @@ function updGrpPreview(gi){
   // Calcular datos del resumen
   var ppp=0, qtyLabel='';
   if(ct==='puertas'){
-    // Omega: sumar totalPies de todas las filas
-    var grandPies=0; var surcos=g.vars.surcos||[];
-    for(var si=0;si<surcos.length;si++) grandPies+=parseFloat(surcos[si].totalPies)||0;
-    var puertas=grandPies/100;
+    // Omega: puertas = acres × anchoCama (exacto), fallback pies/100
+    var grandPies=0, grandAcres=0; var surcos=g.vars.surcos||[];
+    for(var si=0;si<surcos.length;si++){
+      grandPies+=parseFloat(surcos[si].totalPies)||0;
+      grandAcres+=parseFloat(surcos[si].totalAcres)||0;
+    }
+    var anchoCama=parseFloat(g.vars.anchoCama)||0;
+    var puertas=(grandAcres>0&&anchoCama>0)?grandAcres*anchoCama:grandPies/100;
     if(puertas&&np){
       var ppx=puertas/np;
       ppp=ppx*act.p;
@@ -4753,18 +4792,30 @@ function calcGrpAct(gi){
   var ppp = 0; // pago por persona
 
   if(ct==='puertas'){
-    // Omega: sumar totalPies de todas las filas (funciona para todos los modos)
-    var grandPies=0; var surcos=g.vars.surcos||[];
-    for(var si=0;si<surcos.length;si++) grandPies+=parseFloat(surcos[si].totalPies)||0;
-    var puertas=grandPies/100;
+    // Omega: sumar totalPies y totalAcres de todas las filas
+    var grandPies=0, grandAcres=0; var surcos=g.vars.surcos||[];
+    for(var si=0;si<surcos.length;si++){
+      grandPies+=parseFloat(surcos[si].totalPies)||0;
+      grandAcres+=parseFloat(surcos[si].totalAcres)||0;
+    }
+    // Omega: puertas SIEMPRE se calcula como acres × anchoCama cuando hay ambos
+    // Esto da el resultado exacto que esperan los ranchos (10 acres × 83 = 830 ptas)
+    // Solo usar pies/100 como fallback cuando no hay anchoCama
+    var anchoCama=parseFloat(g.vars.anchoCama)||0;
+    var puertas=0;
+    var formulaStr='';
+    if(grandAcres>0 && anchoCama>0){
+      puertas=grandAcres*anchoCama;
+      formulaStr=grandAcres.toFixed(3)+' acres × '+anchoCama+' = <strong>'+puertas.toFixed(2)+' puertas</strong>';
+    } else {
+      puertas=grandPies/100;
+      var acresStr=grandAcres>0?' ('+grandAcres.toFixed(3)+' acres)':'';
+      formulaStr=grandPies.toFixed(0)+' ft'+acresStr+' ÷ 100 = <strong>'+puertas.toFixed(2)+' puertas</strong>';
+    }
     if(!puertas||!np){ res.style.display='none'; updGrpPreview(gi); return; }
     var puertasPorPersona=puertas/np;
     ppp=puertasPorPersona*act.p;
-    // Mostrar acres si hay
-    var grandAcres=0;
-    for(var si2=0;si2<surcos.length;si2++) grandAcres+=parseFloat(surcos[si2].totalAcres)||0;
-    var acresStr=grandAcres>0?' ('+grandAcres.toFixed(3)+' acres)':'';
-    res.innerHTML=grandPies.toFixed(0)+' ft'+acresStr+' ÷ 100 = <strong>'+puertas.toFixed(2)+' puertas</strong>'
+    res.innerHTML=formulaStr
       +' ÷ '+np+' = <strong style="color:var(--g)">'+puertasPorPersona.toFixed(2)+' ptas c/u</strong>'
       +' × $'+act.p+' = <strong style="color:var(--a)">$'+ppp.toFixed(2)+' c/u</strong>';
   } else if(ct==='cajas'){
@@ -4806,10 +4857,14 @@ function grpPayDetail(wid_){
     var ct  = grpCalcType(act);
     var np  = g.participantes.length; if(!np) continue;
     if(ct==='puertas'){
-      // Omega: sumar totalPies de todas las filas
-      var grandPies=0; var surcos=g.vars.surcos||[];
-      for(var si=0;si<surcos.length;si++) grandPies+=parseFloat(surcos[si].totalPies)||0;
-      var puertas=grandPies/100;
+      // Omega: puertas = acres × anchoCama (exacto), fallback pies/100
+      var grandPies=0, grandAcres=0; var surcos=g.vars.surcos||[];
+      for(var si=0;si<surcos.length;si++){
+        grandPies+=parseFloat(surcos[si].totalPies)||0;
+        grandAcres+=parseFloat(surcos[si].totalAcres)||0;
+      }
+      var anchoCama=parseFloat(g.vars.anchoCama)||0;
+      var puertas=(grandAcres>0&&anchoCama>0)?grandAcres*anchoCama:grandPies/100;
       if(puertas){
         var ppx=puertas/np;
         var pago=ppx*act.p;
