@@ -4316,6 +4316,8 @@ function isActPuertas(act){
   if(act.calc==='puertas') return true;
   var es = (act.es||'').toLowerCase();
   var en = (act.en||'').toLowerCase();
+  // Excluir cosechas/pizcas — "Cosecha de tomate" NO es puertas, "Amarre de tomate" SÍ
+  if(es.indexOf('cosecha')>=0||es.indexOf('pizca')>=0||en.indexOf('harvest')>=0||en.indexOf('pick')>=0) return false;
   return es.indexOf('estaca')>=0||es.indexOf('hilo')>=0||es.indexOf('amarre')>=0||es.indexOf('plástico')>=0||es.indexOf('plastico')>=0||es.indexOf('tomate')>=0
     ||en.indexOf('stake')>=0||en.indexOf('staking')>=0||en.indexOf('wire')>=0||en.indexOf('drip')>=0||en.indexOf('plastic')>=0||en.indexOf('tying')>=0;
 }
@@ -4326,6 +4328,8 @@ function grpCalcType(act){
   if(!act) return 'pieza';
   var es = (act.es||'').toLowerCase();
   if(act.calc) return act.calc; // si viene de fallback con calc explícito
+  // Excluir cosechas/pizcas primero
+  if(es.indexOf('cosecha')>=0||es.indexOf('pizca')>=0) return 'pieza';
   if(es.indexOf('estaca')>=0||es.indexOf('hilo')>=0||es.indexOf('amarre')>=0||es.indexOf('plástico')>=0||es.indexOf('plastico')>=0||es.indexOf('tomate')>=0||es.indexOf('drip')>=0||es.indexOf('wire')>=0||es.indexOf('plastic')>=0||es.indexOf('tying')>=0||es.indexOf('staking')>=0) return 'puertas';
   if(es.indexOf('caja')>=0||es.indexOf('box')>=0||es.indexOf('empaque')>=0) return 'cajas';
   if(act.hr) return 'hora';
