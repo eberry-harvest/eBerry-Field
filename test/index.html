@@ -2279,8 +2279,14 @@ function onIndSurcoSmart(inp){
       row.totalPies=pCalc>0?pCalc.toFixed(1):'';
     } else { row.mode=''; row.largo=''; row.num=''; row.totalPies=''; }
   }
-  renderIndSurcos(wi,ai);
+  // Restaurar foco después del re-render
+  var _wi=wi, _ai=ai, _fi=fi, _sf=sf, _cursorPos=inp.selectionStart;
+  renderIndSurcos(_wi,_ai);
   autoSave();
+  setTimeout(function(){
+    var el=document.querySelector('[data-wi="'+_wi+'"][data-ai="'+_ai+'"][data-fi="'+_fi+'"][data-sf="'+_sf+'"]');
+    if(el){ el.focus(); if(typeof _cursorPos==='number') try{el.setSelectionRange(_cursorPos,_cursorPos);}catch(e){} }
+  },0);
 }
 
 function setIndSurcoVar(inp){
@@ -4652,10 +4658,16 @@ function onSurcoSmart(inp){
       row.mode=''; row.largo=''; row.num=''; row.totalPies='';
     }
   }
-  // Re-render para actualizar disabled states
+  // Re-render para actualizar disabled states — restaurar foco después
+  var _gi=gi, _fi=fi, _sf=sf, _cursorPos=inp.selectionStart;
   renderGrpActs();
-  calcGrpAct(gi);
+  calcGrpAct(_gi);
   autoSave();
+  // Restaurar foco en el input que estaba editando
+  setTimeout(function(){
+    var el=document.querySelector('[data-gi="'+_gi+'"][data-fi="'+_fi+'"][data-sf="'+_sf+'"]');
+    if(el){ el.focus(); if(typeof _cursorPos==='number') try{el.setSelectionRange(_cursorPos,_cursorPos);}catch(e){} }
+  },0);
 }
 
 // ── Funciones de filas de surcos (tipo 'puertas') ──
