@@ -1320,16 +1320,27 @@ function loginSuccess(user){
   // 👤 Mostrar botón registro facial si es admin
   showFaceRegBtn();
 
-  // 👤 Cargar descriptores faciales en background (no bloquea)
-  if(!faceDataLoaded) loadFaceDescriptors();
-
   updParam();
   load();
 
-  // Alpha2: Mostrar modal de bienvenida con resumen de contrato
+  // V5: Cargar faces y LUEGO mostrar welcome (para que salga la foto)
   if(!user.isAdmin){
-    showWelcomeModal(user, surqIOE, crewBase);
+    if(faceDataLoaded){
+      // Ya cargadas (cache) → mostrar de una vez
+      showWelcomeModal(user, surqIOE, crewBase);
+    } else {
+      // Cargar y esperar (máx 2s) para que la foto aparezca
+      var _welcomeShown = false;
+      var _welcomeTimeout = setTimeout(function(){
+        if(!_welcomeShown){ _welcomeShown=true; showWelcomeModal(user, surqIOE, crewBase); }
+      }, 2000);
+      loadFaceDescriptors(function(){
+        clearTimeout(_welcomeTimeout);
+        if(!_welcomeShown){ _welcomeShown=true; showWelcomeModal(user, surqIOE, crewBase); }
+      });
+    }
   } else {
+    if(!faceDataLoaded) loadFaceDescriptors();
     toast('✅ Bienvenido, Administrador!');
   }
 }
@@ -6339,7 +6350,7 @@ var fidActive = false;
 var fidSessionCount = 0;
 
 // ── Load face descriptors from Sheets (background, non-blocking) ──
-function loadFaceDescriptors(){
+function loadFaceDescriptors(cb){ // V5: callback opcional para esperar carga
   var url = SHEETS_URL + '?action=faceData';
   var x = new XMLHttpRequest();
   x.open('GET', url, true);
@@ -6372,10 +6383,12 @@ function loadFaceDescriptors(){
       console.log('loadFaceDescriptors error:', e);
       toast('⚠️ Error cargando datos faciales');
     }
+    if(cb) cb(); // V5: notificar que terminó
   };
   x.onerror = function(){
     console.log('loadFaceDescriptors: no connection');
     toast('⚠️ Sin conexión para datos faciales');
+    if(cb) cb(); // V5: notificar incluso en error
   };
   x.send();
 }
