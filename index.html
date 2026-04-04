@@ -415,6 +415,67 @@ html.login-locked{overflow:hidden!important;height:100%!important}
 
 <div class="toast" id="toast"></div>
 
+<!-- Alpha2: WELCOME / CONTRACT SUMMARY MODAL -->
+<div class="ov" id="welcomeOv">
+  <div class="md" style="max-width:420px">
+    <!-- V2: Foto del surquero -->
+    <div id="welcomePhotoWrap" style="display:none;text-align:center;margin-bottom:10px">
+      <img id="welcomePhoto" style="width:90px;height:90px;border-radius:50%;border:3px solid var(--g);object-fit:cover" src="" alt="">
+    </div>
+    <div class="mt" id="welcomeTitle">👋 Bienvenido</div>
+    <div class="ms" id="welcomeSub" style="margin-bottom:8px"></div>
+    <div id="welcomeContract" style="background:var(--gp);border-radius:8px;padding:10px 12px;margin-bottom:10px;text-align:center">
+      <div style="font-size:11px;font-weight:700;color:var(--gr);text-transform:uppercase;letter-spacing:.5px">Contrato</div>
+      <div id="welcomeIoe" style="font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--g);letter-spacing:1px">—</div>
+    </div>
+    <!-- V2: Bloqueo sin IOE -->
+    <div id="welcomeNoIoe" style="display:none">
+      <div style="background:var(--rp);border:2px solid var(--r);border-radius:10px;padding:14px;margin-bottom:10px;text-align:center">
+        <div style="font-size:28px;margin-bottom:6px">🚫</div>
+        <div style="font-weight:700;font-size:15px;color:var(--r);margin-bottom:6px">No estás capacitado para trabajar en ningún rancho</div>
+        <div style="font-size:13px;color:var(--dk);margin-bottom:12px;line-height:1.5">Favor de comunicarse a la oficina lo más pronto posible</div>
+        <a href="tel:+18636754289" style="font-family:'Bebas Neue',sans-serif;font-size:32px;color:var(--r);text-decoration:none;display:block;background:#fff;border-radius:8px;padding:10px;border:2px solid var(--r)">📞 +1 863 675 4289</a>
+      </div>
+    </div>
+    <!-- Sección normal (cuando SÍ tiene IOE) -->
+    <div id="welcomeNormal">
+      <div id="welcomeRancho" style="background:var(--bp);border:1.5px solid var(--b);border-radius:8px;padding:10px 12px;margin-bottom:10px;display:flex;align-items:center;gap:8px">
+        <span style="font-size:20px">✅</span>
+        <div style="flex:1">
+          <div style="font-size:11px;font-weight:700;color:var(--b);text-transform:uppercase">Rancho autorizado</div>
+          <div id="welcomeRanchoName" style="font-weight:700;font-size:15px;color:var(--dk)">—</div>
+        </div>
+      </div>
+      <div id="welcomeAccepted" style="background:var(--bp);border-radius:8px;padding:8px 12px;margin-bottom:6px;display:none">
+        <span style="font-size:14px;font-weight:700;color:var(--b)">✓ <span id="welcomeAccNum">0</span> trabajadores aceptados</span>
+      </div>
+      <div id="welcomeRejected" style="background:var(--rp);border-radius:8px;padding:8px 12px;margin-bottom:10px;display:none;cursor:pointer" onclick="showRejectedDetail()">
+        <span style="font-size:14px;font-weight:700;color:var(--r)">✗ <span id="welcomeRejNum">0</span> trabajadores NO aceptados</span>
+        <span style="font-size:11px;color:var(--r);display:block;margin-top:2px">Toca para ver detalle →</span>
+      </div>
+    </div>
+    <div class="mbs">
+      <button class="mok" id="welcomeBtn" onclick="closeWelcome()">✓ Aceptar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Alpha2: REJECTED WORKERS DETAIL MODAL -->
+<div class="ov" id="rejDetailOv">
+  <div class="md" style="max-width:420px">
+    <div class="mt" style="color:var(--r)">🚫 Trabajadores NO autorizados</div>
+    <div class="ms">Los siguientes trabajadores no tienen contrato válido para este rancho:</div>
+    <div id="rejDetailList" style="background:var(--lt);border-radius:8px;padding:8px;margin-bottom:10px;max-height:300px;overflow-y:auto"></div>
+    <div style="background:var(--rp);border-radius:8px;padding:12px;margin-bottom:12px;text-align:center">
+      <div style="font-size:12px;font-weight:700;color:var(--r)">Comunícate a las oficinas de eBerry</div>
+      <a href="tel:+18636754289" style="font-family:'Bebas Neue',sans-serif;font-size:24px;color:var(--r);text-decoration:none">863 675 4289</a>
+    </div>
+    <div class="mbs">
+      <button class="mca" onclick="gEl('rejDetailOv').classList.remove('on')">Aceptar</button>
+    </div>
+  </div>
+</div>
+
 <!-- TIME MODAL -->
 <div class="ov" id="tmOv">
   <div class="md">
@@ -471,7 +532,7 @@ html.login-locked{overflow:hidden!important;height:100%!important}
     <div class="ms" id="ioeMsg" style="line-height:1.6"></div>
     <div style="background:var(--rp);border-radius:8px;padding:12px;margin:10px 0;text-align:center">
       <div style="font-size:12px;font-weight:700;color:var(--r)">Comunícate a las oficinas de eBerry</div>
-      <a href="tel:8636754289" style="font-family:'Bebas Neue',sans-serif;font-size:24px;color:var(--r);text-decoration:none">863 675 4289</a>
+      <a href="tel:+18636754289" style="font-family:'Bebas Neue',sans-serif;font-size:24px;color:var(--r);text-decoration:none">863 675 4289</a>
     </div>
     <div class="mbs">
       <button class="mca" onclick="gEl('ioeOv').classList.remove('on'); if(qrActive) resumeQR();">Entendido</button>
@@ -708,7 +769,9 @@ html.login-locked{overflow:hidden!important;height:100%!important}
   <div class="card">
     <div class="ct">📋 Operación</div>
     <label>Rancho</label>
-    <input type="text" id="rancho" data-save placeholder="Ej: Pennrose">
+    <select id="rancho" data-save onchange="onRanchoChange()">
+      <option value="">— Selecciona un rancho —</option>
+    </select>
     <div class="r2">
       <div><label>Fecha</label><input type="date" id="fecha" data-save onchange="updDate()"></div>
       <div><label># Bus</label><input type="text" id="numBus" data-save placeholder="951"></div>
@@ -1239,6 +1302,17 @@ function loginSuccess(user){
     if(!GRUPAL_ACTS.length) GRUPAL_ACTS = FALLBACK_GRUPAL_ACTS;
   }
 
+  // Alpha2: Llenar dropdown de ranchos basado en contrato IOE del surquero
+  var surqIOE = '';
+  var surqName = user.isAdmin ? '' : user.name;
+  if(surqName){
+    for(var si=0;si<ALL_WORKERS.length;si++){
+      if(ALL_WORKERS[si].name.toLowerCase()===surqName.toLowerCase()){ surqIOE=ALL_WORKERS[si].ioe||''; break; }
+    }
+  }
+  var crewBase = user.crew ? user.crew.replace(/\s*\d+$/,'').trim() : '';
+  populateRanchoDropdown(surqIOE, crewBase, user.isAdmin);
+
   // 🧪 Mostrar/ocultar card de pruebas
   var testCard = gEl('testCard');
   if(testCard) testCard.style.display = user.isAdmin ? 'block' : 'none';
@@ -1250,8 +1324,210 @@ function loginSuccess(user){
   if(!faceDataLoaded) loadFaceDescriptors();
 
   updParam();
-  toast('✅ Bienvenido, ' + (user.isAdmin ? 'Administrador' : user.name.split(' ')[0]) + '!');
   load();
+
+  // Alpha2: Mostrar modal de bienvenida con resumen de contrato
+  if(!user.isAdmin){
+    showWelcomeModal(user, surqIOE, crewBase);
+  } else {
+    toast('✅ Bienvenido, Administrador!');
+  }
+}
+
+// ═══ Alpha2: Ranch Dropdown + Welcome Modal + Contract Validation ═══
+var _rejectedWorkers = []; // cache para detalle de no aceptados
+
+function populateRanchoDropdown(ioe, defaultRancho, isAdmin){
+  var sel = gEl('rancho');
+  if(!sel) return;
+  // Limpiar opciones anteriores
+  sel.innerHTML = '<option value="">— Selecciona un rancho —</option>';
+
+  var ranchos = [];
+  if(isAdmin){
+    // Admin: mostrar TODOS los ranchos únicos de TODOS los contratos
+    var seen = {};
+    for(var k in CONTRATOS){
+      if(!CONTRATOS.hasOwnProperty(k)) continue;
+      for(var ri=0;ri<CONTRATOS[k].length;ri++){
+        var rn = CONTRATOS[k][ri];
+        if(!seen[rn.toLowerCase()]){ seen[rn.toLowerCase()]=true; ranchos.push(rn); }
+      }
+    }
+    ranchos.sort();
+  } else if(ioe && CONTRATOS[ioe]){
+    // Surquero: solo ranchos de SU contrato
+    ranchos = CONTRATOS[ioe].slice();
+  } else {
+    // Sin IOE o sin datos de contrato: extraer ranchos únicos de ALL_ACTS como fallback
+    var seen2 = {};
+    for(var ai=0;ai<ALL_ACTS.length;ai++){
+      var fn = ALL_ACTS[ai].farm || '';
+      if(fn && !seen2[fn.toLowerCase()]){ seen2[fn.toLowerCase()]=true; ranchos.push(fn); }
+    }
+    ranchos.sort();
+  }
+
+  // Agregar opciones al select
+  for(var i=0;i<ranchos.length;i++){
+    var opt = document.createElement('option');
+    opt.value = ranchos[i];
+    opt.textContent = ranchos[i];
+    sel.appendChild(opt);
+  }
+
+  // Pre-seleccionar rancho por defecto (crew base)
+  if(defaultRancho){
+    var found = false;
+    for(var j=0;j<sel.options.length;j++){
+      if(sel.options[j].value.toLowerCase() === defaultRancho.toLowerCase()){
+        sel.selectedIndex = j; found = true; break;
+      }
+    }
+    // Si no encontró match exacto, buscar partial match
+    if(!found){
+      for(var j2=0;j2<sel.options.length;j2++){
+        if(sel.options[j2].value.toLowerCase().indexOf(defaultRancho.toLowerCase())===0){
+          sel.selectedIndex = j2; break;
+        }
+      }
+    }
+  }
+  // Disparar filtrado de actividades
+  onRanchoChange();
+}
+
+function onRanchoChange(){
+  var rancho = gVal('rancho');
+  if(!rancho) return;
+
+  // Re-filtrar actividades para el rancho seleccionado
+  ACTS = [];
+  GRUPAL_ACTS = [];
+  for(var i=0;i<ALL_ACTS.length;i++){
+    var farm = (ALL_ACTS[i].farm||'').toLowerCase();
+    if(farm === rancho.toLowerCase()){
+      if((ALL_ACTS[i].modo||'Individual').toLowerCase() === 'grupal'){
+        GRUPAL_ACTS.push(ALL_ACTS[i]);
+      } else {
+        ACTS.push(ALL_ACTS[i]);
+      }
+    }
+  }
+  if(!ACTS.length) ACTS = FALLBACK_ACTS.filter(function(a){ return a.modo !== 'Grupal'; });
+  if(!GRUPAL_ACTS.length) GRUPAL_ACTS = FALLBACK_GRUPAL_ACTS;
+
+  autoSave();
+}
+
+var _welcomeBlocked = false; // V2: true si el surquero no tiene IOE → logout al cerrar
+
+function showWelcomeModal(user, ioe, defaultRancho){
+  var rancho = gVal('rancho') || defaultRancho || '';
+  _welcomeBlocked = false;
+
+  // V2: Mostrar foto del surquero si tiene thumbnail
+  var photoWrap = gEl('welcomePhotoWrap');
+  var photoImg = gEl('welcomePhoto');
+  var surqEmpNum = '';
+  for(var si=0;si<ALL_WORKERS.length;si++){
+    if(ALL_WORKERS[si].name.toLowerCase()===user.name.toLowerCase()){ surqEmpNum=ALL_WORKERS[si].empNum||''; break; }
+  }
+  if(surqEmpNum && faceThumbnailMap[surqEmpNum]){
+    photoImg.src = 'data:image/jpeg;base64,' + faceThumbnailMap[surqEmpNum];
+    photoWrap.style.display = 'block';
+  } else {
+    photoWrap.style.display = 'none';
+  }
+
+  // Título
+  gEl('welcomeTitle').textContent = '👋 Bienvenido, ' + user.name.split(' ')[0] + '!';
+
+  // V2: Si no tiene IOE → BLOQUEAR completamente
+  if(!ioe){
+    gEl('welcomeSub').textContent = '';
+    gEl('welcomeContract').style.background = 'var(--rp)';
+    gEl('welcomeIoe').textContent = 'SIN CONTRATO';
+    gEl('welcomeIoe').style.color = 'var(--r)';
+    gEl('welcomeNoIoe').style.display = 'block';
+    gEl('welcomeNormal').style.display = 'none';
+    gEl('welcomeBtn').textContent = 'Cerrar sesión';
+    gEl('welcomeBtn').style.background = 'var(--r)';
+    _welcomeBlocked = true;
+    gEl('welcomeOv').classList.add('on');
+    return;
+  }
+
+  // ── Flujo normal (tiene IOE) ──
+  gEl('welcomeSub').textContent = 'Resumen de tu contrato para hoy:';
+  gEl('welcomeIoe').textContent = ioe;
+  gEl('welcomeIoe').style.color = 'var(--g)';
+  gEl('welcomeContract').style.background = 'var(--gp)';
+  gEl('welcomeNoIoe').style.display = 'none';
+  gEl('welcomeNormal').style.display = 'block';
+  gEl('welcomeBtn').textContent = '✓ Aceptar';
+  gEl('welcomeBtn').style.background = 'var(--g)';
+
+  // Rancho
+  gEl('welcomeRanchoName').textContent = rancho || '—';
+
+  // Contar workers aceptados vs no aceptados
+  var accepted = 0, rejected = 0;
+  _rejectedWorkers = [];
+  for(var i=0;i<NAMES.length;i++){
+    var wk = null;
+    for(var j=0;j<ALL_WORKERS.length;j++){
+      if(ALL_WORKERS[j].name.toLowerCase()===NAMES[i].toLowerCase()){ wk=ALL_WORKERS[j]; break; }
+    }
+    if(!wk) { accepted++; continue; }
+    if(!wk.ioe){ _rejectedWorkers.push({name:wk.name,empNum:wk.empNum,reason:'Sin contrato IOE'}); rejected++; continue; }
+    var allowed = CONTRATOS[wk.ioe];
+    if(!allowed || !allowed.length){ accepted++; continue; }
+    var ok = false;
+    for(var k=0;k<allowed.length;k++){
+      if(allowed[k].toLowerCase()===rancho.toLowerCase()){ ok=true; break; }
+    }
+    if(ok){ accepted++; }
+    else { _rejectedWorkers.push({name:wk.name,empNum:wk.empNum,reason:'Contrato '+wk.ioe+' no incluye '+rancho}); rejected++; }
+  }
+
+  // Mostrar conteos
+  var accEl = gEl('welcomeAccepted');
+  var rejEl = gEl('welcomeRejected');
+  if(accepted > 0){ gEl('welcomeAccNum').textContent = accepted; accEl.style.display = 'block'; }
+  else accEl.style.display = 'none';
+  if(rejected > 0){ gEl('welcomeRejNum').textContent = rejected; rejEl.style.display = 'block'; }
+  else rejEl.style.display = 'none';
+
+  if(!rancho){ accEl.style.display='none'; rejEl.style.display='none'; }
+
+  gEl('welcomeOv').classList.add('on');
+}
+
+function closeWelcome(){
+  gEl('welcomeOv').classList.remove('on');
+  // V2: Si estaba bloqueado por sin-IOE → cerrar sesión automáticamente
+  if(_welcomeBlocked){
+    _welcomeBlocked = false;
+    logoutUser();
+  }
+}
+
+function showRejectedDetail(){
+  var list = gEl('rejDetailList');
+  list.innerHTML = '';
+  for(var i=0;i<_rejectedWorkers.length;i++){
+    var w = _rejectedWorkers[i];
+    var item = '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:#fff;border-radius:8px;margin-bottom:6px;border:1.5px solid var(--r)">'
+      +'<span style="font-size:18px;color:var(--r)">✗</span>'
+      +'<div style="flex:1">'
+        +'<div style="font-weight:700;font-size:14px">'+escH(w.name)+'</div>'
+        +'<div style="font-size:11px;color:var(--gr)">Emp# '+escH(w.empNum)+'</div>'
+        +'<div style="font-size:11px;color:var(--r);margin-top:2px">'+escH(w.reason)+'</div>'
+      +'</div></div>';
+    list.innerHTML += item;
+  }
+  gEl('rejDetailOv').classList.add('on');
 }
 
 function onAdminSurqueroChange(name){
@@ -1269,9 +1545,15 @@ function onAdminSurqueroChange(name){
   if(lider && lider.crew){
     filterDataForCrew(lider.crew);
     var crewBase = lider.crew.replace(/\s*\d+$/,'').trim();
-    var rEl=gEl('rancho'); if(rEl&&crewBase) rEl.value=crewBase;
+    // Alpha2: Buscar IOE del lider para llenar dropdown
+    var liderIOE = '';
+    for(var li=0;li<ALL_WORKERS.length;li++){
+      if(ALL_WORKERS[li].name.toLowerCase()===name.toLowerCase()){ liderIOE=ALL_WORKERS[li].ioe||''; break; }
+    }
+    populateRanchoDropdown(liderIOE, crewBase, false);
   } else {
     NAMES=ALL_WORKERS.map(function(w){return w.name;}); ACTS=ALL_ACTS.slice();
+    populateRanchoDropdown('', '', true); // sin lider: mostrar todos los ranchos
   }
   // ✅ Cargar datos guardados del surquero seleccionado
   // getUserKey() ya apunta a la key correcta porque inp.value fue actualizado arriba
