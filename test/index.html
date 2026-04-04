@@ -900,7 +900,6 @@ html.login-locked{overflow:hidden!important;height:100%!important}
     </div>
   </div>
   <div id="anWorkers"></div>
-  <div id="anGrp"></div>
 </div>
 
 <!-- QR SCANNER OVERLAY -->
@@ -2144,20 +2143,174 @@ function mkActRow(wid_,ai,_cont){
   bdg.id='bd'+wid_+'_'+ai; bdg.className=act.hr?'shift-total':'tbadge rf'; bdg.style.display='none';
   div.appendChild(bdg);
   if(!act.hr){
-    var qr=document.createElement('div'); qr.className='qr'; qr.id='qr'+wid_+'_'+ai;
-    var lbl2=act.tipo==='Caja'?'Cajas':act.tipo==='Ficha'?'Piezas':'Monto $';
-    qr.innerHTML='<div><label style="margin:0;font-size:10px">'+lbl2+'</label><input type="number" id="qty'+wid_+'_'+ai+'" min="0" step="'+(act.tipo==='$'?'0.5':'1')+'" value="'+(a.qty||'')+'" placeholder="0"></div>'+(act.tipo!=='$'?'<div><label style="margin:0;font-size:10px">$/'+act.tipo+'</label><input type="number" value="'+act.p+'" readonly class="ro"></div>':'');
-    div.appendChild(qr);
-    var _wi=wid_,_ai=ai;
-    setTimeout(function(){
-      var q=gEl('qty'+_wi+'_'+_ai);
-      if(q) q.addEventListener('input',function(){ onQty(_wi,_ai,this.value); });
-    },0);
+    // Omega: actividades individuales tipo puertas → sistema de surcos
+    if(isActPuertas(act) && isMeccaRanch()){
+      var surcoDiv=document.createElement('div'); surcoDiv.id='indSurco_'+wid_+'_'+ai;
+      surcoDiv.className='qr';
+      if(!a.surcos||!a.surcos.length) a.surcos=[{lbl:'',largo:'',num:'',totalPies:'',totalAcres:'',mode:''}];
+      div.appendChild(surcoDiv);
+      renderIndSurcos(wid_,ai);
+    } else {
+      var qr=document.createElement('div'); qr.className='qr'; qr.id='qr'+wid_+'_'+ai;
+      var lbl2=act.tipo==='Caja'?'Cajas':act.tipo==='Ficha'?'Piezas':'Monto $';
+      qr.innerHTML='<div><label style="margin:0;font-size:10px">'+lbl2+'</label><input type="number" id="qty'+wid_+'_'+ai+'" min="0" step="'+(act.tipo==='$'?'0.5':'1')+'" value="'+(a.qty||'')+'" placeholder="0"></div>'+(act.tipo!=='$'?'<div><label style="margin:0;font-size:10px">$/'+act.tipo+'</label><input type="number" value="'+act.p+'" readonly class="ro"></div>':'');
+      div.appendChild(qr);
+      var _wi=wid_,_ai=ai;
+      setTimeout(function(){
+        var q=gEl('qty'+_wi+'_'+_ai);
+        if(q) q.addEventListener('input',function(){ onQty(_wi,_ai,this.value); });
+      },0);
+    }
   }
   var sb=document.createElement('div'); sb.className='sub'; sb.id='sb'+wid_+'_'+ai; sb.style.display='none';
   div.appendChild(sb);
   cont.appendChild(div);
   if(a.qty||(a.ini&&a.fin)) recalc(wid_,ai);
+}
+
+// ── Omega: Sistema de surcos INDIVIDUAL (misma UI que grupal, sin dividir) ──
+function renderIndSurcos(wi,ai){
+  var w=getW(wi); if(!w||!w.acts[ai]) return;
+  var a=w.acts[ai]; var act=ACTS[a.ai]; if(!act) return;
+  var cont=gEl('indSurco_'+wi+'_'+ai); if(!cont) return;
+  if(!a.surcos||!a.surcos.length) a.surcos=[{lbl:'',largo:'',num:'',totalPies:'',totalAcres:'',mode:''}];
+  var anchoCama = a.anchoCama||'';
+  var filasHtml='';
+  for(var fi=0;fi<a.surcos.length;fi++){
+    var sf=a.surcos[fi];
+    var lbl=(sf.lbl||'').replace(/"/g,'&quot;');
+    var fm=sf.mode||'';
+    if(!fm && (sf.largo||sf.num) && !sf.totalPies && !sf.totalAcres) fm='surco';
+    var disL=(fm==='pies'||fm==='acres'), disN=(fm==='pies'||fm==='acres');
+    var disP=(fm==='surco'||fm==='acres'), disA=(fm==='surco'||fm==='pies');
+    var ds='background:#e8e8e8;color:var(--gr);';
+    filasHtml+='<div style="background:var(--lt);border:1.5px solid var(--bd);border-radius:8px;padding:9px 10px;margin-bottom:8px">'
+      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px">'
+      +'<div style="display:flex;align-items:center;gap:6px">'
+      +'<span style="font-size:10px;font-weight:700;color:var(--gr);text-transform:uppercase">Bloque</span>'
+      +'<input type="text" maxlength="5" value="'+lbl+'" placeholder="A1"'
+      +' data-wi="'+wi+'" data-ai="'+ai+'" data-fi="'+fi+'" data-sv="lbl" oninput="setIndSurcoVar(this)"'
+      +' style="width:52px;font-size:13px;font-weight:700;padding:4px 7px;text-transform:uppercase;text-align:center;border:1.5px solid var(--bd);border-radius:6px;background:#fff;font-family:\'DM Sans\',sans-serif">'
+      +'</div>'
+      +(a.surcos.length>1
+        ?'<button data-wi="'+wi+'" data-ai="'+ai+'" data-fi="'+fi+'" onclick="askDelIndSurcoFila(this.dataset.wi,this.dataset.ai,parseInt(this.dataset.fi))"'
+        +' style="background:var(--rp);color:var(--r);border:none;border-radius:5px;padding:5px 9px;font-size:11px;font-weight:700;cursor:pointer">\u2715 Borrar</button>'
+        :'<span></span>')
+      +'</div>'
+      +'<div style="display:grid;grid-template-columns:1fr auto 1fr;gap:4px;align-items:end;margin-bottom:6px">'
+      +'<div><label style="font-size:9px">Largo surco</label>'
+      +'<input type="text" inputmode="decimal" value="'+(sf.largo||'')+'" placeholder="pies"'
+      +' data-wi="'+wi+'" data-ai="'+ai+'" data-fi="'+fi+'" data-sf="largo" oninput="onIndSurcoSmart(this)"'
+      +(disL?' disabled style="font-size:15px;padding:8px;width:100%;'+ds+'"':' style="font-size:15px;padding:8px;width:100%"')+'></div>'
+      +'<span style="font-size:14px;font-weight:700;color:var(--gr);padding-bottom:10px">\u00d7</span>'
+      +'<div><label style="font-size:9px">Cant. surcos</label>'
+      +'<input type="text" inputmode="decimal" value="'+(sf.num||'')+'" placeholder="#"'
+      +' data-wi="'+wi+'" data-ai="'+ai+'" data-fi="'+fi+'" data-sf="num" oninput="onIndSurcoSmart(this)"'
+      +(disN?' disabled style="font-size:15px;padding:8px;width:100%;'+ds+'"':' style="font-size:15px;padding:8px;width:100%"')+'></div>'
+      +'</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">'
+      +'<div><label style="font-size:9px">Total Pies</label>'
+      +'<input type="text" inputmode="decimal" value="'+(sf.totalPies||'')+'" placeholder="pies lineales"'
+      +' data-wi="'+wi+'" data-ai="'+ai+'" data-fi="'+fi+'" data-sf="totalPies" oninput="onIndSurcoSmart(this)"'
+      +(disP?' disabled style="font-size:15px;padding:8px;width:100%;font-weight:700;color:var(--g);'+ds+'"':' style="font-size:15px;padding:8px;width:100%;font-weight:700;color:var(--g)"')+'></div>'
+      +'<div><label style="font-size:9px">Total Acres</label>'
+      +'<input type="text" inputmode="decimal" value="'+(sf.totalAcres||'')+'" placeholder="acres"'
+      +' data-wi="'+wi+'" data-ai="'+ai+'" data-fi="'+fi+'" data-sf="totalAcres" oninput="onIndSurcoSmart(this)"'
+      +(disA?' disabled style="font-size:15px;padding:8px;width:100%;font-weight:700;color:var(--b);'+ds+'"':' style="font-size:15px;padding:8px;width:100%;font-weight:700;color:var(--b)"')+'></div>'
+      +'</div></div>';
+  }
+  // Totales
+  var gP=0, gA=0;
+  for(var fi2=0;fi2<a.surcos.length;fi2++){
+    gP+=parseFloat(a.surcos[fi2].totalPies)||0;
+    gA+=parseFloat(a.surcos[fi2].totalAcres)||0;
+  }
+  var puertas=gP/100;
+  cont.innerHTML='<div style="font-size:11px;font-weight:700;color:var(--gr);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">\ud83d\udccf Bloques / Surcos (individual)</div>'
+    +filasHtml
+    +'<button data-wi="'+wi+'" data-ai="'+ai+'" onclick="addIndSurcoFila(this.dataset.wi,this.dataset.ai)"'
+    +' style="width:100%;padding:8px;border:2px dashed var(--g2);border-radius:7px;background:none;color:var(--g);font-family:\'DM Sans\',sans-serif;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:10px">\uff0b Agregar m\u00e1s bloques</button>'
+    +(gP>0?'<div style="background:var(--gp);border-radius:7px;padding:9px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'
+    +'<span style="font-size:12px;font-weight:600;color:var(--g)">\ud83d\udcd0 Pies lineales</span>'
+    +'<b style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:var(--g)">'+gP.toFixed(1)+' ft</b></div>':'')
+    +(gP>0?'<div style="background:var(--dk);border-radius:7px;padding:9px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'
+    +'<span style="font-size:12px;font-weight:600;color:#fff">\ud83d\udeaa Puertas</span>'
+    +'<b style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:#fff">'+puertas.toFixed(2)+'</b></div>':'')
+    +(gA>0?'<div style="background:var(--bp);border-radius:7px;padding:9px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'
+    +'<span style="font-size:12px;font-weight:600;color:var(--b)">\ud83c\udf3e Acres</span>'
+    +'<b style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:var(--b)">'+gA.toFixed(4)+'</b></div>':'')
+    +(puertas>0?'<div style="background:var(--a);border-radius:7px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center">'
+    +'<span style="font-size:12px;font-weight:700;color:#fff">\ud83d\udcb0 '+puertas.toFixed(2)+' ptas \u00d7 $'+act.p+'</span>'
+    +'<b style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;color:#fff">$'+(puertas*act.p).toFixed(2)+'</b></div>':'');
+  // Actualizar qty para recalc
+  a.qty=puertas;
+  recalc(wi,ai);
+}
+
+function onIndSurcoSmart(inp){
+  var wi=inp.dataset.wi, ai=parseInt(inp.dataset.ai), fi=parseInt(inp.dataset.fi);
+  var sf=inp.dataset.sf;
+  var w=getW(wi); if(!w||!w.acts[ai]) return;
+  var a=w.acts[ai];
+  if(!a.surcos) a.surcos=[{lbl:'',largo:'',num:'',totalPies:'',totalAcres:'',mode:''}];
+  var row=a.surcos[fi]; if(!row) return;
+  var val=inp.value.trim();
+  row[sf]=val;
+  var anchoCama=a.anchoCama||'';
+  if(sf==='largo'||sf==='num'){
+    var l=parseFloat(row.largo)||0, n=parseFloat(row.num)||0;
+    if(l>0||n>0){
+      row.mode='surco';
+      var pies=l*n;
+      row.totalPies=pies>0?pies.toFixed(1):'';
+      row.totalAcres=pies>0?piesToAcresWithAC(pies,anchoCama).toFixed(4):'';
+    } else { row.mode=''; row.totalPies=''; row.totalAcres=''; }
+  } else if(sf==='totalPies'){
+    var p=parseFloat(val)||0;
+    if(p>0){
+      row.mode='pies'; row.largo=''; row.num='';
+      row.totalAcres=piesToAcresWithAC(p,anchoCama).toFixed(4);
+    } else { row.mode=''; row.largo=''; row.num=''; row.totalAcres=''; }
+  } else if(sf==='totalAcres'){
+    var ac=parseFloat(val)||0;
+    if(ac>0){
+      row.mode='acres'; row.largo=''; row.num='';
+      var pCalc=acresToPiesWithAC(ac,anchoCama);
+      row.totalPies=pCalc>0?pCalc.toFixed(1):'';
+    } else { row.mode=''; row.largo=''; row.num=''; row.totalPies=''; }
+  }
+  renderIndSurcos(wi,ai);
+  autoSave();
+}
+
+function setIndSurcoVar(inp){
+  var wi=inp.dataset.wi, ai=parseInt(inp.dataset.ai), fi=parseInt(inp.dataset.fi);
+  var w=getW(wi); if(!w||!w.acts[ai]) return;
+  if(!w.acts[ai].surcos) return;
+  if(w.acts[ai].surcos[fi]) w.acts[ai].surcos[fi].lbl=inp.value;
+  autoSave();
+}
+
+function addIndSurcoFila(wi,ai){
+  ai=parseInt(ai);
+  var w=getW(wi); if(!w||!w.acts[ai]) return;
+  if(!w.acts[ai].surcos) w.acts[ai].surcos=[];
+  w.acts[ai].surcos.push({lbl:'',largo:'',num:'',totalPies:'',totalAcres:'',mode:''});
+  renderIndSurcos(wi,ai);
+  autoSave();
+}
+
+function askDelIndSurcoFila(wi,ai,fi){
+  ai=parseInt(ai);
+  var w=getW(wi); if(!w||!w.acts[ai]) return;
+  var sf=w.acts[ai].surcos[fi];
+  var name=sf&&sf.lbl?'"'+sf.lbl+'"':'#'+(fi+1);
+  if(confirm('\u00bfEliminar bloque '+name+'?')){
+    w.acts[ai].surcos.splice(fi,1);
+    if(!w.acts[ai].surcos.length) w.acts[ai].surcos=[{lbl:'',largo:'',num:'',totalPies:'',totalAcres:'',mode:''}];
+    renderIndSurcos(wi,ai);
+    autoSave();
+  }
 }
 
 function onQty(wi,ai,v){ var w=getW(wi); if(!w||!w.acts[ai])return; w.acts[ai].qty=v; recalc(wi,ai); autoSave(); }
@@ -2528,8 +2681,11 @@ function buildAnalisis(){
       if(!act && a.ai>=0 && a.ai<ACTS.length){ act=ACTS[a.ai]; }
       if(!act) continue;
 
-      // Solo analizar actividades de pieza (Ficha, Caja) — no Hora ni $
+      // Solo analizar actividades individuales de pieza (Ficha, Caja)
+      // Excluir: Hora, $, Daywork (payType==='Daywork'), y grupales
       if(act.hr || act.tipo==='$' || act.tipo==='Hora') continue;
+      if(act.payType==='Daywork') continue;
+      if((act.modo||'Individual').toLowerCase()==='grupal') continue;
 
       var piecePrice=act.p;
       if(!piecePrice || piecePrice<=0) continue;
@@ -2599,18 +2755,7 @@ function buildAnalisis(){
       }
     }
 
-    // Incluir también el análisis de actividades grupales del worker
-    var grpD=grpPayDetail(w.id);
-    if(grpD.pay>0){
-      wDetails+='<div class="an-act" style="border-color:var(--a);background:rgba(204,34,34,.03)">'
-        +'<div style="font-weight:700;font-size:13px;margin-bottom:4px;color:var(--a)">Act. Grupal</div>'
-        +'<div class="an-step">Pago grupal: <b>$'+grpD.pay.toFixed(2)+'</b> ('+grpD.label+')</div>'
-        +'<div class="an-result" style="background:var(--ap);color:var(--a)">+$'+grpD.pay.toFixed(2)+' grupal</div>'
-      +'</div>';
-      wReal+=grpD.pay;
-    }
-
-    if(!hasAnalysis && grpD.pay<=0) continue; // worker sin actividades analizables
+    if(!hasAnalysis) continue; // worker sin actividades individuales de pieza
 
     totalEsperado+=wEsperado;
     totalReal+=wReal;
@@ -2640,6 +2785,8 @@ function buildAnalisis(){
       if(ba.esName){ for(var bk=0;bk<ACTS.length;bk++){ if(ACTS[bk].es===ba.esName && (!ba.tipo||ACTS[bk].tipo===ba.tipo)){bact=ACTS[bk];break;} } }
       if(!bact && ba.ai>=0 && ba.ai<ACTS.length) bact=ACTS[ba.ai];
       if(!bact||bact.hr||bact.tipo==='$'||bact.tipo==='Hora') continue;
+      if(bact.payType==='Daywork') continue;
+      if((bact.modo||'Individual').toLowerCase()==='grupal') continue;
       var bPP=bact.p; if(!bPP) continue;
       var bHR=bBaseRate; if(!bHR){ for(var brk=0;brk<bw.acts.length;brk++){ var brA=null; if(bw.acts[brk].esName){for(var brk2=0;brk2<ACTS.length;brk2++){if(ACTS[brk2].es===bw.acts[brk].esName){brA=ACTS[brk2];break;}}} if(brA&&brA.hr){bHR=brA.p;break;} } }
       if(!bHR) continue;
@@ -2658,6 +2805,8 @@ function buildAnalisis(){
       if(ca.esName){ for(var ck=0;ck<ACTS.length;ck++){ if(ACTS[ck].es===ca.esName && (!ca.tipo||ACTS[ck].tipo===ca.tipo)){cact=ACTS[ck];break;} } }
       if(!cact && ca.ai>=0 && ca.ai<ACTS.length) cact=ACTS[ca.ai];
       if(!cact||cact.hr||cact.tipo==='$'||cact.tipo==='Hora') continue;
+      if(cact.payType==='Daywork') continue;
+      if((cact.modo||'Individual').toLowerCase()==='grupal') continue;
       var cPP=cact.p; if(!cPP) continue;
       var cHR=cBR; if(!cHR){ for(var crk=0;crk<cw.acts.length;crk++){ var crA=null; if(cw.acts[crk].esName){for(var crk2=0;crk2<ACTS.length;crk2++){if(ACTS[crk2].es===cw.acts[crk].esName){crA=ACTS[crk2];break;}}} if(crA&&crA.hr){cHR=crA.p;break;} } }
       if(!cHR) continue;
@@ -2674,7 +2823,7 @@ function buildAnalisis(){
   // Workers
   gEl('anWorkers').innerHTML=wHTML||'<div class="an-nodata">Sin actividades de pieza para analizar.<br>Este análisis aplica solo cuando hay actividades tipo Ficha o Caja con horas registradas.</div>';
 
-  // Resumen por actividad (grupal)
+  // Resumen por tipo de actividad individual
   var actKeys=Object.keys(actSummary);
   if(actKeys.length>0){
     var gHTML='<div class="card"><div class="ct">📋 RESUMEN POR ACTIVIDAD</div>';
@@ -2691,9 +2840,7 @@ function buildAnalisis(){
       +'</div>';
     }
     gHTML+='</div>';
-    gEl('anGrp').innerHTML=gHTML;
-  } else {
-    gEl('anGrp').innerHTML='';
+    gEl('anWorkers').innerHTML+=gHTML;
   }
 }
 
@@ -2779,7 +2926,10 @@ function save(){
       for(var sj=0;sj<workers[si].acts.length;sj++){
         var sa=workers[si].acts[sj];
         var sact=sa.ai>=0&&sa.ai<ACTS.length?ACTS[sa.ai]:null;
-        ws.acts.push({ai:sa.ai,esName:sact?sact.es:'',tipo:sact?sact.tipo:'',qty:sa.qty,ini:sa.ini,fin:sa.fin,showTime:sa.showTime,pay:sa.pay,shifts:sa.shifts,finca:sa.finca||''});
+        var actSv={ai:sa.ai,esName:sact?sact.es:'',tipo:sact?sact.tipo:'',qty:sa.qty,ini:sa.ini,fin:sa.fin,showTime:sa.showTime,pay:sa.pay,shifts:sa.shifts,finca:sa.finca||''};
+        if(sa.surcos&&sa.surcos.length) actSv.surcos=sa.surcos;
+        if(sa.anchoCama) actSv.anchoCama=sa.anchoCama;
+        ws.acts.push(actSv);
       }
       wSave.push(ws);
     }
@@ -2886,6 +3036,12 @@ function load(){
         if(!act){ a.pay=0; continue; }
         a.esName=act.es;
         a.tipo=act.tipo;  // Upsilon: siempre sincronizar tipo en live act
+        // Omega: si tiene surcos individuales, recalcular qty como puertas
+        if(a.surcos&&a.surcos.length&&isActPuertas(act)){
+          var _tpInd=0;
+          for(var si2=0;si2<a.surcos.length;si2++) _tpInd+=parseFloat(a.surcos[si2].totalPies)||0;
+          a.qty=_tpInd/100;
+        }
         if(act.hr){ a.pay=totalShiftHours(a)*getHRate(workers[i],act); }
         else if(act.tipo==='$'){ a.pay=parseFloat(a.qty)||0; }
         else{ a.pay=(parseFloat(a.qty)||0)*act.p; }
@@ -3051,7 +3207,10 @@ function saveQuiet(){
       for(var sj=0;sj<workers[si].acts.length;sj++){
         var sa=workers[si].acts[sj];
         var sact=sa.ai>=0&&sa.ai<ACTS.length?ACTS[sa.ai]:null;
-        ws.acts.push({ai:sa.ai,esName:sact?sact.es:'',tipo:sact?sact.tipo:'',qty:sa.qty,ini:sa.ini,fin:sa.fin,showTime:sa.showTime,pay:sa.pay,shifts:sa.shifts,finca:sa.finca||''});
+        var actSv2={ai:sa.ai,esName:sact?sact.es:'',tipo:sact?sact.tipo:'',qty:sa.qty,ini:sa.ini,fin:sa.fin,showTime:sa.showTime,pay:sa.pay,shifts:sa.shifts,finca:sa.finca||''};
+        if(sa.surcos&&sa.surcos.length) actSv2.surcos=sa.surcos;
+        if(sa.anchoCama) actSv2.anchoCama=sa.anchoCama;
+        ws.acts.push(actSv2);
       }
       wSave.push(ws);
     }
@@ -4112,13 +4271,24 @@ function sendToSheets() {
 // Detecta el tipo de cálculo de una actividad grupal
 // 'puertas' = acres × ancho × precio ÷ personas
 // 'cajas'   = total cajas × precio ÷ personas
+// Omega: detectar si una actividad (individual o grupal) es tipo "puertas/surcos"
+// Aplica a: Amarre de hilo, Colocación de estaca, Colocación de plástico (y variantes en inglés)
+function isActPuertas(act){
+  if(!act) return false;
+  if(act.calc==='puertas') return true;
+  var es = (act.es||'').toLowerCase();
+  var en = (act.en||'').toLowerCase();
+  return es.indexOf('estaca')>=0||es.indexOf('hilo')>=0||es.indexOf('amarre')>=0||es.indexOf('plástico')>=0||es.indexOf('plastico')>=0||es.indexOf('tomate')>=0
+    ||en.indexOf('stake')>=0||en.indexOf('staking')>=0||en.indexOf('wire')>=0||en.indexOf('drip')>=0||en.indexOf('plastic')>=0||en.indexOf('tying')>=0;
+}
+
 // 'hora'    = horas × precio (por persona)
 // 'pieza'   = cantidad ÷ personas × precio
 function grpCalcType(act){
   if(!act) return 'pieza';
   var es = (act.es||'').toLowerCase();
   if(act.calc) return act.calc; // si viene de fallback con calc explícito
-  if(es.indexOf('estaca')>=0||es.indexOf('hilo')>=0||es.indexOf('drip')>=0||es.indexOf('wire')>=0) return 'puertas';
+  if(es.indexOf('estaca')>=0||es.indexOf('hilo')>=0||es.indexOf('amarre')>=0||es.indexOf('plástico')>=0||es.indexOf('plastico')>=0||es.indexOf('tomate')>=0||es.indexOf('drip')>=0||es.indexOf('wire')>=0||es.indexOf('plastic')>=0||es.indexOf('tying')>=0||es.indexOf('staking')>=0) return 'puertas';
   if(es.indexOf('caja')>=0||es.indexOf('box')>=0||es.indexOf('empaque')>=0) return 'cajas';
   if(act.hr) return 'hora';
   return 'pieza';
@@ -4195,13 +4365,24 @@ function renderGrpActs(){
 
     var varsHtml = '';
     if(ct === 'puertas'){
-      if(!g.vars.surcos || !g.vars.surcos.length) g.vars.surcos = [{largo:'',num:''}];
+      if(!g.vars.surcos || !g.vars.surcos.length) g.vars.surcos = [{largo:'',num:'',totalPies:'',totalAcres:'',mode:''}];
       var anchoCama = g.vars.anchoCama||'';
+
+      // ── Omega: Filas inteligentes [Largo×Cant | Total Pies | Total Acres] ──
       var filasHtml = '';
       for(var fi=0;fi<g.vars.surcos.length;fi++){
         var sf = g.vars.surcos[fi];
-        var sub = (parseFloat(sf.largo)||0)*(parseFloat(sf.num)||0);
         var lbl = sf.lbl||'';
+        // Detectar modo de la fila
+        var fm = sf.mode||'';
+        // Migración: si tiene largo×num pero no mode, es modo surco legacy
+        if(!fm && (sf.largo||sf.num) && !sf.totalPies && !sf.totalAcres) fm='surco';
+        var disLargo = (fm==='pies'||fm==='acres');
+        var disNum   = (fm==='pies'||fm==='acres');
+        var disPies  = (fm==='surco'||fm==='acres');
+        var disAcres = (fm==='surco'||fm==='pies');
+        var disStyle = 'background:#e8e8e8;color:var(--gr);';
+
         filasHtml += '<div style="background:var(--lt);border:1.5px solid var(--bd);border-radius:8px;padding:9px 10px;margin-bottom:8px">'
           +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px">'
           +'<div style="display:flex;align-items:center;gap:6px">'
@@ -4210,42 +4391,60 @@ function renderGrpActs(){
           +' data-gi="'+gi+'" data-fi="'+fi+'" data-sv="lbl" oninput="setSurcoVar(this)"'
           +' style="width:52px;font-size:13px;font-weight:700;padding:4px 7px;text-transform:uppercase;text-align:center;border:1.5px solid var(--bd);border-radius:6px;background:#fff;font-family:\'DM Sans\',sans-serif">'
           +'</div>'
-          +(sub?'<span id="surcoSub_'+gi+'_'+fi+'" style="font-size:12px;font-weight:700;color:var(--g)">'+sub.toFixed(1)+' ft</span>'
-               :'<span id="surcoSub_'+gi+'_'+fi+'" style="font-size:12px;font-weight:700;color:var(--g)"></span>')
           +(g.vars.surcos.length>1
             ?'<button data-gi="'+gi+'" data-fi="'+fi+'" onclick="askDelSurcoFila(parseInt(this.dataset.gi),parseInt(this.dataset.fi))"'
             +' style="background:var(--rp);color:var(--r);border:none;border-radius:5px;padding:5px 9px;font-size:11px;font-weight:700;cursor:pointer">✕ Borrar</button>'
             :'<span></span>')
           +'</div>'
+          // Fila 1: Largo × Cant
+          +'<div style="display:grid;grid-template-columns:1fr auto 1fr;gap:4px;align-items:end;margin-bottom:6px">'
+          +'<div><label style="font-size:9px">Largo surco</label>'
+          +'<input type="text" inputmode="decimal" value="'+(sf.largo||'')+'" placeholder="pies"'
+          +' data-gi="'+gi+'" data-fi="'+fi+'" data-sf="largo" oninput="onSurcoSmart(this)"'
+          +(disLargo?' disabled style="font-size:15px;padding:8px;width:100%;'+disStyle+'"':' style="font-size:15px;padding:8px;width:100%"')+'></div>'
+          +'<span style="font-size:14px;font-weight:700;color:var(--gr);padding-bottom:10px">×</span>'
+          +'<div><label style="font-size:9px">Cant. surcos</label>'
+          +'<input type="text" inputmode="decimal" value="'+(sf.num||'')+'" placeholder="#"'
+          +' data-gi="'+gi+'" data-fi="'+fi+'" data-sf="num" oninput="onSurcoSmart(this)"'
+          +(disNum?' disabled style="font-size:15px;padding:8px;width:100%;'+disStyle+'"':' style="font-size:15px;padding:8px;width:100%"')+'></div>'
+          +'</div>'
+          // Fila 2: Total Pies | Total Acres
           +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">'
-          +'<div><label style="font-size:10px">Largo surco (pies)</label>'
-          +'<input type="text" inputmode="decimal" value="'+(sf.largo||'')+'" placeholder="ej: 709.5"'
-          +' data-gi="'+gi+'" data-fi="'+fi+'" data-sv="largo" oninput="setSurcoVarText(this)"'
-          +' style="font-size:16px;padding:9px 10px;width:100%"></div>'
-          +'<div><label style="font-size:10px">Núm. surcos</label>'
-          +'<input type="text" inputmode="decimal" value="'+(sf.num||'')+'" placeholder="ej: 12"'
-          +' data-gi="'+gi+'" data-fi="'+fi+'" data-sv="num" oninput="setSurcoVarText(this)"'
-          +' style="font-size:16px;padding:9px 10px;width:100%"></div>'
+          +'<div><label style="font-size:9px">Total Pies</label>'
+          +'<input type="text" inputmode="decimal" value="'+(sf.totalPies||'')+'" placeholder="pies lineales"'
+          +' data-gi="'+gi+'" data-fi="'+fi+'" data-sf="totalPies" oninput="onSurcoSmart(this)"'
+          +(disPies?' disabled style="font-size:15px;padding:8px;width:100%;font-weight:700;color:var(--g);'+disStyle+'"':' style="font-size:15px;padding:8px;width:100%;font-weight:700;color:var(--g)"')+'></div>'
+          +'<div><label style="font-size:9px">Total Acres</label>'
+          +'<input type="text" inputmode="decimal" value="'+(sf.totalAcres||'')+'" placeholder="acres"'
+          +' data-gi="'+gi+'" data-fi="'+fi+'" data-sf="totalAcres" oninput="onSurcoSmart(this)"'
+          +(disAcres?' disabled style="font-size:15px;padding:8px;width:100%;font-weight:700;color:var(--b);'+disStyle+'"':' style="font-size:15px;padding:8px;width:100%;font-weight:700;color:var(--b)"')+'></div>'
           +'</div>'
           +'</div>';
       }
-      var metrosTotal = 0;
-      for(var fi2=0;fi2<g.vars.surcos.length;fi2++){
-        metrosTotal += (parseFloat(g.vars.surcos[fi2].largo)||0)*(parseFloat(g.vars.surcos[fi2].num)||0);
-      }
-      var puertasTot = metrosTotal/100;
-      var acresCalc = (anchoCama && puertasTot) ? puertasTot/(parseFloat(anchoCama)||1) : 0;
 
-      varsHtml = '<div style="font-size:11px;font-weight:700;color:var(--gr);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">📏 Surcos trabajados</div>'
+      // Totales
+      var grandPies=0, grandAcres=0;
+      for(var fi2=0;fi2<g.vars.surcos.length;fi2++){
+        grandPies  += parseFloat(g.vars.surcos[fi2].totalPies)||0;
+        grandAcres += parseFloat(g.vars.surcos[fi2].totalAcres)||0;
+      }
+      var puertasTot = grandPies/100;
+
+      varsHtml = '<div style="font-size:11px;font-weight:700;color:var(--gr);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">📏 Bloques / Surcos</div>'
         + filasHtml
         +'<button data-gi="'+gi+'" onclick="addSurcoFila(parseInt(this.dataset.gi))"'
-        +' style="width:100%;padding:8px;border:2px dashed var(--g2);border-radius:7px;background:none;color:var(--g);font-family:\'DM Sans\',sans-serif;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:10px">＋ Agregar otro surco</button>'
-        +'<div id="gaMetros'+gi+'" style="background:var(--gp);border-radius:7px;padding:9px 12px;margin-bottom:8px;display:'+(metrosTotal>0?'flex':'none')+';justify-content:space-between;align-items:center">'
-        +'<span style="font-size:12px;font-weight:600;color:var(--g)">📐 Metros lineales totales</span>'
-        +'<b style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:var(--g)" id="gaMetrosVal'+gi+'">'+metrosTotal.toFixed(1)+' ft</b></div>'
-        +'<div id="gaPuertas'+gi+'" style="background:var(--dk);border-radius:7px;padding:9px 12px;margin-bottom:8px;display:'+(metrosTotal>0?'flex':'none')+';justify-content:space-between;align-items:center">'
+        +' style="width:100%;padding:8px;border:2px dashed var(--g2);border-radius:7px;background:none;color:var(--g);font-family:\'DM Sans\',sans-serif;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:10px">＋ Agregar más bloques</button>'
+        // Totales
+        +'<div id="gaMetros'+gi+'" style="background:var(--gp);border-radius:7px;padding:9px 12px;margin-bottom:8px;display:'+(grandPies>0?'flex':'none')+';justify-content:space-between;align-items:center">'
+        +'<span style="font-size:12px;font-weight:600;color:var(--g)">📐 Pies lineales totales</span>'
+        +'<b style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:var(--g)" id="gaMetrosVal'+gi+'">'+grandPies.toFixed(1)+' ft</b></div>'
+        +'<div id="gaPuertas'+gi+'" style="background:var(--dk);border-radius:7px;padding:9px 12px;margin-bottom:8px;display:'+(grandPies>0?'flex':'none')+';justify-content:space-between;align-items:center">'
         +'<span style="font-size:12px;font-weight:600;color:rgba(255,255,255,.7)">🚪 Puertas totales (÷100)</span>'
         +'<b style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:var(--a)" id="gaPuertasVal'+gi+'">'+puertasTot.toFixed(2)+'</b></div>'
+        +'<div id="gaAcres'+gi+'" style="background:var(--bp);border-radius:7px;padding:9px 12px;margin-bottom:8px;display:'+(grandAcres>0?'flex':'none')+';justify-content:space-between;align-items:center">'
+        +'<span style="font-size:12px;font-weight:600;color:var(--b)">🌿 Acres totales</span>'
+        +'<b style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:var(--b)" id="gaAcresVal'+gi+'">'+grandAcres.toFixed(3)+'</b></div>'
+        // Campos comunes
         +'<div class="r2" style="margin-bottom:8px">'
         +'<div><label style="font-size:10px">🟢 Entrada</label>'
         +'<input type="time" step="1800" value="'+(g.vars.ini||'')+'"'
@@ -4256,17 +4455,14 @@ function renderGrpActs(){
         +' data-gi="'+gi+'" data-v="fin" onchange="setGrpVar(this)"'
         +' style="font-size:16px;padding:9px 10px;width:100%"></div>'
         +'</div>'
-        +'<div style="margin-bottom:6px"><label style="font-size:10px">🌱 Ancho de cama (para calcular acres)</label>'
-        +'<input type="text" inputmode="decimal" value="'+anchoCama+'" placeholder="ej: 5.5"'
+        +'<div style="margin-bottom:6px"><label style="font-size:10px">🌱 Ancho de cama (para pago — ej: 5.67 DeWitt, 83 Mecca)</label>'
+        +'<input type="text" inputmode="decimal" value="'+anchoCama+'" placeholder="ej: 5.67"'
         +' data-gi="'+gi+'" data-v="anchoCama" oninput="setGrpVar(this)"'
         +' style="font-size:16px;padding:9px 10px;width:100%"></div>'
         +'<div style="margin-bottom:6px"><label style="font-size:10px">📍 Labor / Finca (aparece en el PDF)</label>'
         +'<input type="text" value="'+(g.vars.finca||'')+'" placeholder="ej: El Columpio, Block 3..."'
         +' data-gi="'+gi+'" data-v="finca" oninput="setGrpVar(this)"'
-        +' style="font-size:16px;padding:9px 10px;width:100%"></div>'
-        +'<div id="gaAcres'+gi+'" style="background:var(--bp);border-radius:7px;padding:9px 12px;margin-bottom:8px;display:'+(metrosTotal>0&&anchoCama&&parseFloat(anchoCama)>0?'flex':'none')+';justify-content:space-between;align-items:center">'
-        +'<span style="font-size:12px;font-weight:600;color:var(--b)">🌿 Acres trabajados</span>'
-        +'<b style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:var(--b)" id="gaAcresVal'+gi+'">'+acresCalc.toFixed(3)+'</b></div>';
+        +' style="font-size:16px;padding:9px 10px;width:100%"></div>';
     } else if(ct === 'cajas'){
       var totalC = g.vars.totalC||''; var precioC = g.vars.precioC||act.p||0.80;
       varsHtml = '<div class="r2" style="margin-bottom:8px">'
@@ -4354,9 +4550,10 @@ function updGrpPreview(gi){
   // Calcular datos del resumen
   var ppp=0, qtyLabel='';
   if(ct==='puertas'){
-    var metros=0; var surcos=g.vars.surcos||[];
-    for(var si=0;si<surcos.length;si++) metros+=(parseFloat(surcos[si].largo)||0)*(parseFloat(surcos[si].num)||0);
-    var puertas=metros/100;
+    // Omega: sumar totalPies de todas las filas
+    var grandPies=0; var surcos=g.vars.surcos||[];
+    for(var si=0;si<surcos.length;si++) grandPies+=parseFloat(surcos[si].totalPies)||0;
+    var puertas=grandPies/100;
     if(puertas&&np){
       var ppx=puertas/np;
       ppp=ppx*act.p;
@@ -4394,6 +4591,73 @@ function setGrpVar(inp){
   autoSave();
 }
 
+// ── Omega: Conversión Pies ↔ Acres por rancho ──
+function isMeccaRanch(){
+  return (gVal('rancho')||'').toLowerCase().indexOf('mecca')>=0;
+}
+function piesToAcresWithAC(pies, anchoCama){
+  if(isMeccaRanch()) return (pies*5.26)/43560;
+  if(anchoCama && parseFloat(anchoCama)>0) return (pies/100)/parseFloat(anchoCama);
+  return 0;
+}
+function acresToPiesWithAC(acres, anchoCama){
+  if(isMeccaRanch()) return (acres*43560)/5.26;
+  if(anchoCama && parseFloat(anchoCama)>0) return acres*parseFloat(anchoCama)*100;
+  return 0;
+}
+
+// Omega: input inteligente en filas de surcos — auto-fill y auto-disable
+function onSurcoSmart(inp){
+  var gi = parseInt(inp.dataset.gi);
+  var fi = parseInt(inp.dataset.fi);
+  var sf = inp.dataset.sf; // 'largo','num','totalPies','totalAcres'
+  if(!grpActs[gi]) return;
+  if(!grpActs[gi].vars.surcos) grpActs[gi].vars.surcos=[{largo:'',num:'',totalPies:'',totalAcres:'',mode:''}];
+  var row = grpActs[gi].vars.surcos[fi];
+  if(!row) return;
+  var val = inp.value.trim();
+  row[sf] = val;
+  var anchoCama = grpActs[gi].vars.anchoCama||'';
+
+  if(sf==='largo'||sf==='num'){
+    // Modo surco: largo×num → auto-fill totalPies y totalAcres
+    var l=parseFloat(row.largo)||0, n=parseFloat(row.num)||0;
+    if(l>0||n>0){
+      row.mode='surco';
+      var pies=l*n;
+      row.totalPies=pies>0?pies.toFixed(1):'';
+      row.totalAcres=pies>0?piesToAcresWithAC(pies,anchoCama).toFixed(4):'';
+    } else {
+      row.mode=''; row.totalPies=''; row.totalAcres='';
+    }
+  } else if(sf==='totalPies'){
+    // Modo pies: auto-fill totalAcres, deshabilitar largo/num
+    var p=parseFloat(val)||0;
+    if(p>0){
+      row.mode='pies';
+      row.largo=''; row.num='';
+      row.totalAcres=piesToAcresWithAC(p,anchoCama).toFixed(4);
+    } else {
+      row.mode=''; row.largo=''; row.num=''; row.totalAcres='';
+    }
+  } else if(sf==='totalAcres'){
+    // Modo acres: auto-fill totalPies, deshabilitar largo/num
+    var a=parseFloat(val)||0;
+    if(a>0){
+      row.mode='acres';
+      row.largo=''; row.num='';
+      var piesCalc=acresToPiesWithAC(a,anchoCama);
+      row.totalPies=piesCalc>0?piesCalc.toFixed(1):'';
+    } else {
+      row.mode=''; row.largo=''; row.num=''; row.totalPies='';
+    }
+  }
+  // Re-render para actualizar disabled states
+  renderGrpActs();
+  calcGrpAct(gi);
+  autoSave();
+}
+
 // ── Funciones de filas de surcos (tipo 'puertas') ──
 // Eta: setSurcoVar ya no hace re-render completo — solo guarda el label y autosave
 function setSurcoVar(inp){
@@ -4409,48 +4673,10 @@ function setSurcoVar(inp){
   autoSave();
 }
 
-function setSurcoVarText(inp){
-  var gi = parseInt(inp.dataset.gi);
-  var fi = parseInt(inp.dataset.fi);
-  var sv = inp.dataset.sv;
-  if(!grpActs[gi]) return;
-  if(!grpActs[gi].vars.surcos) grpActs[gi].vars.surcos=[{largo:'',num:''}];
-  if(!grpActs[gi].vars.surcos[fi]) grpActs[gi].vars.surcos[fi]={largo:'',num:''};
-  grpActs[gi].vars.surcos[fi][sv] = inp.value;
-  // Actualizar span del subtotal de esta fila directamente (sin rerenderizar)
-  var sub = (parseFloat(grpActs[gi].vars.surcos[fi].largo)||0)
-           *(parseFloat(grpActs[gi].vars.surcos[fi].num)||0);
-  var subEl = gEl('surcoSub_'+gi+'_'+fi);
-  if(subEl) subEl.textContent = sub>0 ? sub.toFixed(1)+' ft' : '';
-  // Recalcular metros totales y actualizar bloques de totales por ID
-  var g = grpActs[gi];
-  var surcos = g.vars.surcos||[];
-  var metros = 0;
-  for(var si=0;si<surcos.length;si++) metros+=(parseFloat(surcos[si].largo)||0)*(parseFloat(surcos[si].num)||0);
-  var puertas = metros/100;
-  var anchoCama = parseFloat(g.vars.anchoCama)||0;
-  var acres = anchoCama>0 ? puertas/anchoCama : 0;
-  // Metros
-  var mEl=gEl('gaMetros'+gi), mVal=gEl('gaMetrosVal'+gi);
-  if(mEl) mEl.style.display = metros>0?'flex':'none';
-  if(mVal) mVal.textContent = metros.toFixed(1)+' ft';
-  // Puertas
-  var pEl=gEl('gaPuertas'+gi), pVal=gEl('gaPuertasVal'+gi);
-  if(pEl) pEl.style.display = metros>0?'flex':'none';
-  if(pVal) pVal.textContent = puertas.toFixed(2);
-  // Acres
-  var aEl=gEl('gaAcres'+gi), aVal=gEl('gaAcresVal'+gi);
-  if(aEl) aEl.style.display = (metros>0&&anchoCama>0)?'flex':'none';
-  if(aVal) aVal.textContent = acres.toFixed(3);
-  // Recalcular pago por persona
-  calcGrpAct(gi);
-  autoSave();
-}
-
 function addSurcoFila(gi){
   if(!grpActs[gi]) return;
   if(!grpActs[gi].vars.surcos) grpActs[gi].vars.surcos=[];
-  grpActs[gi].vars.surcos.push({largo:'',num:'',lbl:''});
+  grpActs[gi].vars.surcos.push({largo:'',num:'',lbl:'',totalPies:'',totalAcres:'',mode:''});
   renderGrpActs();
   autoSave();
 }
@@ -4515,16 +4741,19 @@ function calcGrpAct(gi){
   var ppp = 0; // pago por persona
 
   if(ct==='puertas'){
-    // Calcular metros lineales desde filas de surcos
-    var metros = 0;
-    var surcos = g.vars.surcos||[];
-    for(var si=0;si<surcos.length;si++) metros+=(parseFloat(surcos[si].largo)||0)*(parseFloat(surcos[si].num)||0);
-    var puertas = metros/100;
+    // Omega: sumar totalPies de todas las filas (funciona para todos los modos)
+    var grandPies=0; var surcos=g.vars.surcos||[];
+    for(var si=0;si<surcos.length;si++) grandPies+=parseFloat(surcos[si].totalPies)||0;
+    var puertas=grandPies/100;
     if(!puertas||!np){ res.style.display='none'; updGrpPreview(gi); return; }
-    var puertasPorPersona = puertas/np;
-    ppp = puertasPorPersona*act.p;
-    res.innerHTML = metros.toFixed(1)+' ft ÷ 100 = <strong>'+puertas.toFixed(2)+' puertas</strong>'
-      +' ÷ '+np+' = <strong style="color:var(--g)">'+puertasPorPersona.toFixed(2)+' puertas c/u</strong> 📋'
+    var puertasPorPersona=puertas/np;
+    ppp=puertasPorPersona*act.p;
+    // Mostrar acres si hay
+    var grandAcres=0;
+    for(var si2=0;si2<surcos.length;si2++) grandAcres+=parseFloat(surcos[si2].totalAcres)||0;
+    var acresStr=grandAcres>0?' ('+grandAcres.toFixed(3)+' acres)':'';
+    res.innerHTML=grandPies.toFixed(0)+' ft'+acresStr+' ÷ 100 = <strong>'+puertas.toFixed(2)+' puertas</strong>'
+      +' ÷ '+np+' = <strong style="color:var(--g)">'+puertasPorPersona.toFixed(2)+' ptas c/u</strong>'
       +' × $'+act.p+' = <strong style="color:var(--a)">$'+ppp.toFixed(2)+' c/u</strong>';
   } else if(ct==='cajas'){
     var totalC  = parseFloat(g.vars.totalC)||0;
@@ -4565,9 +4794,10 @@ function grpPayDetail(wid_){
     var ct  = grpCalcType(act);
     var np  = g.participantes.length; if(!np) continue;
     if(ct==='puertas'){
-      var metros=0; var surcos=g.vars.surcos||[];
-      for(var si=0;si<surcos.length;si++) metros+=(parseFloat(surcos[si].largo)||0)*(parseFloat(surcos[si].num)||0);
-      var puertas=metros/100;
+      // Omega: sumar totalPies de todas las filas
+      var grandPies=0; var surcos=g.vars.surcos||[];
+      for(var si=0;si<surcos.length;si++) grandPies+=parseFloat(surcos[si].totalPies)||0;
+      var puertas=grandPies/100;
       if(puertas){
         var ppx=puertas/np;
         var pago=ppx*act.p;
@@ -4965,6 +5195,39 @@ function testFill(){
     if(list) list.appendChild(mkCard(w, workers.length-1));
   }
 
+  // ── 1b. Worker individual con surcos (solo si rancho=Mecca) ──
+  if(isMeccaRanch()){
+    // Buscar actividad individual tipo puertas (Colocación de estacas, Amarre de tomate, etc.)
+    var surcoActIdx = -1;
+    for(var sai=0;sai<ACTS.length;sai++){
+      if(ACTS[sai].modo==='Individual' && isActPuertas(ACTS[sai])){ surcoActIdx=sai; break; }
+    }
+    if(surcoActIdx>=0){
+      var sAct = ACTS[surcoActIdx];
+      var wSurco = {id:wid++, name:'Test Worker Cinco', empNum:'', contractRate:16.23, open:true, totalPay:0, acts:[]};
+      var aSurco = {
+        ai:surcoActIdx, esName:sAct.es, tipo:sAct.tipo,
+        qty:0, ini:'', fin:'', showTime:true,
+        pay:0, shifts:[{ini:defaultHE, fin:defaultHS}], finca:gVal('finca')||'',
+        surcos:[
+          {lbl:'A', largo:'600', num:'5', totalPies:'3000.0', totalAcres:((3000*5.26)/43560).toFixed(4), mode:'surco'},
+          {lbl:'B1', largo:'400', num:'3', totalPies:'1200.0', totalAcres:((1200*5.26)/43560).toFixed(4), mode:'surco'}
+        ]
+      };
+      // qty = puertas = totalPies / 100
+      var _indTP = 0;
+      for(var isi=0;isi<aSurco.surcos.length;isi++) _indTP += parseFloat(aSurco.surcos[isi].totalPies)||0;
+      aSurco.qty = _indTP / 100;
+      aSurco.pay = aSurco.qty * sAct.p;
+      wSurco.acts.push(aSurco);
+      wSurco.totalPay = aSurco.pay;
+      workers.push(wSurco);
+      addedWids.push(wSurco.id);
+      var list5 = gEl('wlist');
+      if(list5) list5.appendChild(mkCard(wSurco, workers.length-1));
+    }
+  }
+
   // ── 2. Actividad grupal (primera disponible) ──
   if(GRUPAL_ACTS.length){
     var gai = 0; // primera actividad grupal
@@ -4975,8 +5238,11 @@ function testFill(){
       var ct = grpCalcType(gact);
       var vars = {};
       if(ct==='puertas'){
-        vars.surcos = [{lbl:'A1', largo:'500', num:'10'},{lbl:'B2', largo:'350', num:'8'}];
-        vars.anchoCama = '5.67';
+        vars.surcos = [
+          {lbl:'A1', largo:'500', num:'10', totalPies:'5000.0', totalAcres:isMeccaRanch()?((5000*5.26)/43560).toFixed(4):'', mode:'surco'},
+          {lbl:'B2', largo:'350', num:'8', totalPies:'2800.0', totalAcres:isMeccaRanch()?((2800*5.26)/43560).toFixed(4):'', mode:'surco'}
+        ];
+        vars.anchoCama = isMeccaRanch()?'':'5.67';
         vars.hEnt = gVal('hEnt')||'05:30';
         vars.hSal = gVal('hSal')||'14:30';
         vars.finca = gVal('finca')||'Block Test';
@@ -4997,8 +5263,10 @@ function testFill(){
         var ct2 = grpCalcType(gact2);
         var vars2 = {};
         if(ct2==='puertas'){
-          vars2.surcos = [{lbl:'C1', largo:'400', num:'6'}];
-          vars2.anchoCama = '5.67';
+          vars2.surcos = [
+            {lbl:'C1', largo:'400', num:'6', totalPies:'2400.0', totalAcres:isMeccaRanch()?((2400*5.26)/43560).toFixed(4):'', mode:'surco'}
+          ];
+          vars2.anchoCama = isMeccaRanch()?'':'5.67';
         } else if(ct2==='cajas'){
           vars2.totalCajas = '85';
         } else {
