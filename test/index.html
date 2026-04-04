@@ -10,9 +10,21 @@
 <meta name="apple-mobile-web-app-title" content="Pennrose">
 <meta name="theme-color" content="#1a2b8c">
 <link rel="manifest" id="manifestLink">
+<script>
+// V8-C2: Manifest PWA generado como Blob (sin href vacío)
+(function(){
+  var manifest = {
+    name:'eBerry Field',short_name:'eBerry',start_url:'./',display:'standalone',
+    background_color:'#1a3a5c',theme_color:'#1a3a5c',
+    icons:[{src:'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🫐</text></svg>',sizes:'any',type:'image/svg+xml'}]
+  };
+  var blob = new Blob([JSON.stringify(manifest)],{type:'application/json'});
+  document.getElementById('manifestLink').href = URL.createObjectURL(blob);
+})();
+</script>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 <style>
 :root{--g:#1a2b8c;--g2:#2d4eb5;--gp:#eef1ff;--a:#cc2222;--ap:#fff0f0;--b:#2d7a2d;--bp:#edfaed;--r:#d94040;--rp:#ffeaea;--dk:#0f1a3d;--gr:#6b7db3;--lt:#f4f6ff;--bd:#c8d0f0}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -1024,10 +1036,17 @@ function hashPin(pin){
     });
 }
 function _fallbackHash(str){
-  // djb2-style hash → hex string (deterministic, used only when crypto.subtle fails)
-  var h=5381;
-  for(var i=0;i<str.length;i++) h=((h<<5)+h)+str.charCodeAt(i);
-  return (h>>>0).toString(16).padStart(8,'0');
+  // V8-C5: 4-word hash → 64 hex chars (same length as SHA-256)
+  var h1=0x9e3779b9, h2=0x243f6a88, h3=0xb7e15162, h4=0x6c62272e;
+  for(var i=0;i<str.length;i++){
+    var c=str.charCodeAt(i);
+    h1=((Math.imul(31,h1)+c)|0)>>>0;
+    h2=((Math.imul(37,h2)^c)|0)>>>0;
+    h3=((Math.imul(29,h3)+c)|0)>>>0;
+    h4=((Math.imul(41,h4)^c)|0)>>>0;
+  }
+  function hex8(n){ return ('00000000'+(n>>>0).toString(16)).slice(-8); }
+  return hex8(h1)+hex8(h2)+hex8(h3)+hex8(h4)+hex8(h1^h2)+hex8(h2^h3)+hex8(h3^h4)+hex8(h4^h1);
 }
 
 // ── DATA (loaded from Sheets) ──
@@ -1065,13 +1084,15 @@ var FALLBACK_GRUPAL_ACTS = [
 // ── SESSION MANAGEMENT ──────────────────────────────────────
 // Unique device ID (persisted in localStorage)
 var DEVICE_ID = (function(){
-  var k = 'eb_device_id';
-  var id = localStorage.getItem(k);
-  if(!id){
-    id = 'dev_' + Math.random().toString(36).slice(2,10) + '_' + Date.now();
-    localStorage.setItem(k, id);
-  }
-  return id;
+  try {
+    var k = 'eb_device_id';
+    var id = localStorage.getItem(k);
+    if(!id){
+      id = 'dev_' + Math.random().toString(36).slice(2,10) + '_' + Date.now();
+      localStorage.setItem(k, id);
+    }
+    return id;
+  } catch(e) { return 'private-' + Math.random().toString(36).slice(2); } // V8-C1: Safari private mode
 })();
 
 var _sessionHeartbeat = null;
@@ -1323,13 +1344,16 @@ function loginSuccess(user){
   updParam();
   load();
 
-  // V5: Cargar faces y LUEGO mostrar welcome (para que salga la foto)
+  // V7: Cargar thumbs de cache LOCAL instantáneo, fetch de red en background
   if(!user.isAdmin){
-    if(faceDataLoaded){
-      // Ya cargadas (cache) → mostrar de una vez
+    var hasCachedThumbs = loadFaceCache(); // instantáneo desde localStorage
+    if(faceDataLoaded || hasCachedThumbs){
+      // Thumbs disponibles (red o cache) → mostrar welcome de inmediato
       showWelcomeModal(user, surqIOE, crewBase);
+      // Actualizar en background si solo tenemos cache
+      if(!faceDataLoaded) loadFaceDescriptors();
     } else {
-      // Cargar y esperar (máx 2s) para que la foto aparezca
+      // Primera vez sin cache → esperar máx 2s
       var _welcomeShown = false;
       var _welcomeTimeout = setTimeout(function(){
         if(!_welcomeShown){ _welcomeShown=true; showWelcomeModal(user, surqIOE, crewBase); }
@@ -1485,6 +1509,7 @@ function showWelcomeModal(user, ioe, defaultRancho){
   // Contar workers aceptados vs no aceptados
   var accepted = 0, rejected = 0;
   _rejectedWorkers = [];
+  var contratosLoaded = Object.keys(CONTRATOS).length > 0; // V8-C7: detectar si Sheets respondió
   for(var i=0;i<NAMES.length;i++){
     var wk = null;
     for(var j=0;j<ALL_WORKERS.length;j++){
@@ -1493,7 +1518,7 @@ function showWelcomeModal(user, ioe, defaultRancho){
     if(!wk) { accepted++; continue; }
     if(!wk.ioe){ _rejectedWorkers.push({name:wk.name,empNum:wk.empNum,reason:'Sin contrato IOE'}); rejected++; continue; }
     var allowed = CONTRATOS[wk.ioe];
-    if(!allowed || !allowed.length){ accepted++; continue; }
+    if(!contratosLoaded || !allowed || !allowed.length){ accepted++; continue; } // V8-C7
     var ok = false;
     for(var k=0;k<allowed.length;k++){
       if(allowed[k].toLowerCase()===rancho.toLowerCase()){ ok=true; break; }
@@ -1563,7 +1588,10 @@ function onAdminSurqueroChange(name){
     }
     populateRanchoDropdown(liderIOE, crewBase, false);
   } else {
-    NAMES=ALL_WORKERS.map(function(w){return w.name;}); ACTS=ALL_ACTS.slice();
+    NAMES=ALL_WORKERS.map(function(w){return w.name;});
+    // V8-C6: filtrar grupales correctamente (antes copiaba ALL_ACTS sin filtrar)
+    ACTS=ALL_ACTS.filter(function(a){return (a.modo||'Individual').toLowerCase()!=='grupal';});
+    GRUPAL_ACTS=ALL_ACTS.filter(function(a){return (a.modo||'Individual').toLowerCase()==='grupal';});
     populateRanchoDropdown('', '', true); // sin lider: mostrar todos los ranchos
   }
   // ✅ Cargar datos guardados del surquero seleccionado
@@ -3088,11 +3116,9 @@ function buildAnalisis(){
 
     totalEsperado+=wEsperado;
     totalReal+=wReal;
-    // V6-C4: acumular pérdida aquí mismo (antes eran 2 loops extra)
-    var wDiff_=wReal-wEsperado;
-    if(wDiff_<0){ totalPerdida+=Math.abs(wDiff_); wConPerdida++; }
-
+    // V8-C8: unificado en una sola variable (antes era wDiff_ y wDiff duplicados)
     var wDiff=wReal-wEsperado;
+    if(wDiff<0){ totalPerdida+=Math.abs(wDiff); wConPerdida++; }
     var wIsLoss=wDiff<0;
     wHTML+='<div class="an-worker '+(wIsLoss?'loss':'gain')+'" onclick="this.classList.toggle(\'op\')">'
       +'<div class="an-whead">'
@@ -4118,8 +4144,17 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     +'<div class="nopr" style="text-align:center;margin-top:16px"><button onclick="window.print()" style="background:#1a7a4a;color:#fff;border:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-right:10px">🖨️ Imprimir / Guardar PDF</button><button onclick="window.close()" style="background:#eee;color:#555;border:none;padding:12px 20px;border-radius:8px;font-size:14px;cursor:pointer">Cerrar</button></div>'
     +'</body></html>';
   var win=window.open('','_blank','width=1000,height=700');
-  if(!win){ toast('⚠️ Habilita pop-ups para ver el PDF'); return; }
-  win.document.write(html); win.document.close(); win.focus();
+  if(win){
+    win.document.write(html); win.document.close(); win.focus();
+  } else {
+    // V8-C4: iOS Safari bloquea window.open → fallback con Blob
+    var blob = new Blob([html], {type:'text/html;charset=utf-8'});
+    var bUrl = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = bUrl; a.target = '_blank'; a.rel = 'noopener';
+    document.body.appendChild(a); a.click();
+    setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(bUrl); }, 1000);
+  }
 }
 
 
@@ -4603,8 +4638,10 @@ function grpCalcType(act){
   if(!act) return 'pieza';
   var es = (act.es||'').toLowerCase();
   if(act.calc) return act.calc; // si viene de fallback con calc explícito
-  // V6-C7: excluir cosechas, pizcas Y podas
-  if(es.indexOf('cosecha')>=0||es.indexOf('pizca')>=0||es.indexOf('poda')>=0) return 'pieza';
+  // V8-C9: excluir cosechas, pizcas y podas — español E inglés
+  var en2 = (act.en||'').toLowerCase();
+  if(es.indexOf('cosecha')>=0||es.indexOf('pizca')>=0||es.indexOf('poda')>=0
+    ||en2.indexOf('harvest')>=0||en2.indexOf('pick')>=0||en2.indexOf('prun')>=0) return 'pieza';
   if(es.indexOf('estaca')>=0||es.indexOf('hilo')>=0||es.indexOf('amarre')>=0||es.indexOf('plástico')>=0||es.indexOf('plastico')>=0
     ||es.indexOf('colocación')>=0||es.indexOf('colocacion')>=0
     ||(es.indexOf('tomate')>=0&&(es.indexOf('amarre')>=0||es.indexOf('hilo')>=0))
@@ -5391,6 +5428,32 @@ function saveCache(workers, acts, lideres){
   }catch(e){}
 }
 
+// V7: Cache de thumbnails faciales separado (puede ser grande)
+var FACE_CACHE_KEY = 'eb_facethumbs_v1';
+function saveFaceCache(){
+  try{
+    var keys = Object.keys(faceThumbnailMap);
+    if(!keys.length) return;
+    localStorage.setItem(FACE_CACHE_KEY, JSON.stringify({
+      thumbs: faceThumbnailMap, ts: Date.now()
+    }));
+  }catch(e){ /* si excede quota, no pasa nada */ }
+}
+function loadFaceCache(){
+  try{
+    var raw = localStorage.getItem(FACE_CACHE_KEY);
+    if(!raw) return false;
+    var d = JSON.parse(raw);
+    // Cache válido 48 horas (fotos cambian poco)
+    if(Date.now() - d.ts > 172800000) return false;
+    if(d.thumbs && Object.keys(d.thumbs).length){
+      faceThumbnailMap = d.thumbs;
+      return true;
+    }
+    return false;
+  }catch(e){ return false; }
+}
+
 function loadCache(){
   try{
     var raw = localStorage.getItem(CACHE_KEY);
@@ -5762,6 +5825,7 @@ function loadRegisteredFaces(cb){
           faceRegisteredMap[resp.faces[i].empNum] = true;
           if(resp.faces[i].thumbnail) faceThumbnailMap[resp.faces[i].empNum] = resp.faces[i].thumbnail;
         }
+        saveFaceCache(); // V7: actualizar cache de thumbs
       }
     } catch(e){ console.log('loadRegisteredFaces parse error', e); }
     if(cb) cb();
@@ -5975,7 +6039,7 @@ function saveFaceDescriptor(){
       var resp = JSON.parse(x.responseText);
       if(resp.success){
         faceRegisteredMap[faceCurrentWorker.empNum] = true;
-        if(thumbB64) faceThumbnailMap[faceCurrentWorker.empNum] = thumbB64;
+        if(thumbB64){ faceThumbnailMap[faceCurrentWorker.empNum] = thumbB64; saveFaceCache(); } // V7
         setFaceStatus('ok', '✅ ¡Rostro de ' + faceCurrentWorker.name + ' registrado!');
         // Auto-advance to next unregistered worker after 1.5s
         setTimeout(function(){
@@ -6304,10 +6368,19 @@ function generateInvoicePDF(){
 
   // Open in new window for print
   var win = window.open('','_blank','width=800,height=1000');
-  if(!win){ toast('⚠️ Habilita pop-ups para ver el PDF'); return; }
-  win.document.write(html);
-  win.document.close();
-  setTimeout(function(){ win.print(); }, 600);
+  if(win){
+    win.document.write(html);
+    win.document.close();
+    setTimeout(function(){ win.print(); }, 600);
+  } else {
+    // V8-C4: iOS Safari fallback
+    var blob = new Blob([html], {type:'text/html;charset=utf-8'});
+    var bUrl = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = bUrl; a.target = '_blank'; a.rel = 'noopener';
+    document.body.appendChild(a); a.click();
+    setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(bUrl); }, 1000);
+  }
 }
 
 // ── Format date for invoice (MM/DD/YY) ──
@@ -6360,6 +6433,7 @@ function loadFaceDescriptors(cb){ // V5: callback opcional para esperar carga
           } catch(pe){ skipped++; continue; }
         }
         faceDataLoaded = true;
+        saveFaceCache(); // V7: guardar thumbs en localStorage
         console.log('👤 Face descriptors loaded: ' + FACE_DESCRIPTORS.length + (skipped ? ' ('+skipped+' skipped)' : ''));
       }
     } catch(e){
