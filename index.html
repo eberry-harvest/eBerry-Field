@@ -22,6 +22,36 @@
   document.getElementById('manifestLink').href = URL.createObjectURL(blob);
 })();
 </script>
+<script>
+// Beta2: Service Worker registration
+// Solo registrar en GitHub Pages o localhost (no en previews de terceros)
+(function(){
+  var host = location.hostname || '';
+  var isDeployment = host.indexOf('github.io') !== -1
+    || host === 'localhost'
+    || host === '127.0.0.1'
+    || host.indexOf('192.168.') === 0;
+  if('serviceWorker' in navigator && isDeployment){
+    window.addEventListener('load', function(){
+      navigator.serviceWorker.register('./sw.js').then(function(reg){
+        console.log('[eBerry] SW registrado, scope:', reg.scope);
+        // Si hay una versión nueva esperando, activarla
+        reg.addEventListener('updatefound', function(){
+          var nw = reg.installing;
+          if(nw) nw.addEventListener('statechange', function(){
+            if(nw.state==='installed' && navigator.serviceWorker.controller){
+              console.log('[eBerry] Nueva versión del SW disponible');
+              nw.postMessage({action:'skipWaiting'});
+            }
+          });
+        });
+      }).catch(function(err){
+        console.warn('[eBerry] SW no se pudo registrar:', err.message);
+      });
+    });
+  }
+})();
+</script>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;600;700&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
@@ -360,6 +390,16 @@ html.login-locked{overflow:hidden!important;height:100%!important}
 .inv-auto-row .inv-a-prod{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .inv-auto-row .inv-a-val{font-family:'Bebas Neue',sans-serif;font-size:16px;white-space:nowrap}
 /* ── END STYLES ── */
+/* Beta2: Indicador offline + cola de envío */
+.conn-badge{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;letter-spacing:.5px;transition:all .3s ease}
+.conn-badge.online{background:rgba(45,122,45,.85);color:#fff}
+.conn-badge.offline{background:rgba(204,34,34,.9);color:#fff;animation:offPulse 2s infinite}
+@keyframes offPulse{0%,100%{opacity:1}50%{opacity:.6}}
+.conn-dot{width:7px;height:7px;border-radius:50%}
+.conn-badge.online .conn-dot{background:#7fff7f}
+.conn-badge.offline .conn-dot{background:#ff9999}
+.queue-badge{display:none;background:rgba(255,152,0,.9);color:#fff;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;cursor:pointer}
+.days-warn{display:none;background:rgba(204,34,34,.9);color:#fff;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;animation:offPulse 2s infinite}
 .loading-txt{color:#fff;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600}
 </style>
 </head>
@@ -371,6 +411,11 @@ html.login-locked{overflow:hidden!important;height:100%!important}
       <div style="font-size:9px;color:rgba(255,255,255,.6);letter-spacing:.5px;margin-top:-2px;font-weight:600">HARVEST COMPANY LLC</div>
     </div>
     <div id="adminBadge" style="display:none;background:var(--a);border-radius:20px;padding:4px 12px;font-size:12px;font-weight:700;color:#fff;letter-spacing:1px">🔐 ADMIN</div>
+    <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
+      <div id="connBadge" class="conn-badge online"><span class="conn-dot"></span> ONLINE</div>
+      <div id="queueBadge" class="queue-badge" onclick="flushOfflineQueue()">📤 <span id="queueCount">0</span> pendiente(s)</div>
+      <div id="daysWarn" class="days-warn">⚠️ <span id="daysWarnTxt">2+ días sin enviar</span></div>
+    </div>
     <button id="faceRegBtn" class="faceTabBtn" onclick="openFaceReg()">👤 Registro</button>
     <div style="display:flex;align-items:center;gap:6px">
       <div class="dpill" id="hdate">—</div>
@@ -1344,25 +1389,35 @@ function loginSuccess(user){
   updParam();
   load();
 
-  // V7: Cargar thumbs de cache LOCAL instantáneo, fetch de red en background
+  // V8: Welcome modal SIEMPRE inmediato — foto es bonus, no bloquea
   if(!user.isAdmin){
-    var hasCachedThumbs = loadFaceCache(); // instantáneo desde localStorage
-    if(faceDataLoaded || hasCachedThumbs){
-      // Thumbs disponibles (red o cache) → mostrar welcome de inmediato
+    // Intentar cargar thumbs de cache local (instantáneo)
+    try{ loadFaceCache(); }catch(e){}
+    // Mostrar welcome de inmediato — con o sin foto
+    try{
       showWelcomeModal(user, surqIOE, crewBase);
-      // Actualizar en background si solo tenemos cache
-      if(!faceDataLoaded) loadFaceDescriptors();
-    } else {
-      // Primera vez sin cache → esperar máx 2s
-      var _welcomeShown = false;
-      var _welcomeTimeout = setTimeout(function(){
-        if(!_welcomeShown){ _welcomeShown=true; showWelcomeModal(user, surqIOE, crewBase); }
-      }, 2000);
-      loadFaceDescriptors(function(){
-        clearTimeout(_welcomeTimeout);
-        if(!_welcomeShown){ _welcomeShown=true; showWelcomeModal(user, surqIOE, crewBase); }
-      });
+    }catch(e){
+      console.error('❌ showWelcomeModal error:', e);
+      toast('👋 Bienvenido, ' + user.name.split(' ')[0] + '!'); // fallback
     }
+    // Cargar faces en background (actualiza cache para próxima vez)
+    if(!faceDataLoaded) loadFaceDescriptors(function(){
+      // V8: si la foto no estaba en cache, actualizar el modal si sigue abierto
+      try{
+        var photoWrap = gEl('welcomePhotoWrap');
+        var photoImg = gEl('welcomePhoto');
+        if(photoWrap && photoImg && gEl('welcomeOv').classList.contains('on')){
+          var _empN = '';
+          for(var fi=0;fi<ALL_WORKERS.length;fi++){
+            if(ALL_WORKERS[fi].name.toLowerCase()===user.name.toLowerCase()){ _empN=ALL_WORKERS[fi].empNum||''; break; }
+          }
+          if(_empN && faceThumbnailMap[_empN]){
+            photoImg.src = 'data:image/jpeg;base64,' + faceThumbnailMap[_empN];
+            photoWrap.style.display = 'block';
+          }
+        }
+      }catch(e){}
+    });
   } else {
     if(!faceDataLoaded) loadFaceDescriptors();
     toast('✅ Bienvenido, Administrador!');
@@ -3775,10 +3830,10 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
       // colKey basado en esName (estable) en vez de ai numérico (puede cambiar)
       var actName=actDef.es||actDef.en||(''+ai);
       var colKey;
-      // Upsilon2: colKey basado SOLO en nombre de actividad para TODOS los tipos.
-      // Antes las tipo Hora incluían shifts en el colKey, causando columnas duplicadas
-      // cuando workers tenían horarios ligeramente diferentes para la misma actividad.
-      colKey = actName;
+      // Beta2: colKey = nombre + tipo. Esto separa columnas cuando la misma actividad
+      // tiene tipos diferentes (ej: "Trabajo general|Hora" vs "Trabajo general|Ficha").
+      // Upsilon2 quitó shifts del colKey (correcto), pero también quitó tipo (bug).
+      colKey = actName + '|' + (actDef.tipo||'');
       var found=false;
       for(var k=0;k<actCols.length;k++){ if(actCols[k].colKey===colKey){found=true;break;} }
       if(!found) actCols.push({
@@ -3906,9 +3961,12 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
       // Alpha2-fix5: eliminado dead code (wid siempre es null)
       var found3=null;
       var col3Name=col3.esName||(ACTS[col3.ai]?ACTS[col3.ai].es:'');
+      var col3Tipo=col3.tipo||'';
       for(var k3=0;k3<wks[i].acts.length;k3++){
-        var wActName3=wks[i].acts[k3].esName||(ACTS[wks[i].acts[k3].ai]?ACTS[wks[i].acts[k3].ai].es:'');
-        if(wActName3===col3Name){found3=wks[i].acts[k3];break;}
+        var wAct3=wks[i].acts[k3];
+        var wActName3=wAct3.esName||(ACTS[wAct3.ai]?ACTS[wAct3.ai].es:'');
+        var wActTipo3=wAct3.tipo||(ACTS[wAct3.ai]?ACTS[wAct3.ai].tipo:'')||'';
+        if(wActName3===col3Name && wActTipo3===col3Tipo){found3=wAct3;break;}
       }
       if(found3){
         if(col3.hr) colTotals[col3.colKey]+=totalShiftHours(found3)||0;
@@ -3950,8 +4008,10 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
       var anyQty=false;
       for(var wq=0;wq<wks.length;wq++){
         for(var aq=0;aq<wks[wq].acts.length;aq++){
-          var wqn=wks[wq].acts[aq].esName||(ACTS[wks[wq].acts[aq].ai]?ACTS[wks[wq].acts[aq].ai].es:'');
-          if(wqn===(col4.esName||(ACTS[col4.ai]?ACTS[col4.ai].es:'')) && parseFloat(wks[wq].acts[aq].qty)){ anyQty=true; break; }
+          var wqAct=wks[wq].acts[aq];
+          var wqn=wqAct.esName||(ACTS[wqAct.ai]?ACTS[wqAct.ai].es:'');
+          var wqt=wqAct.tipo||(ACTS[wqAct.ai]?ACTS[wqAct.ai].tipo:'')||'';
+          if(wqn===(col4.esName||(ACTS[col4.ai]?ACTS[col4.ai].es:'')) && wqt===(col4.tipo||'') && parseFloat(wqAct.qty)){ anyQty=true; break; }
         }
         if(anyQty) break;
       }
@@ -3962,8 +4022,10 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
       // Alpha2-fix5: eliminado dead code (wid siempre es null)
       var col4Name=col4.esName||(ACTS[col4.ai]?ACTS[col4.ai].es:'');
       for(var a2=0;a2<wks[w2].acts.length;a2++){
-        var wActName4=wks[w2].acts[a2].esName||(ACTS[wks[w2].acts[a2].ai]?ACTS[wks[w2].acts[a2].ai].es:'');
-        if(wActName4===col4Name){
+        var wAct4_=wks[w2].acts[a2];
+        var wActName4=wAct4_.esName||(ACTS[wAct4_.ai]?ACTS[wAct4_.ai].es:'');
+        var wActTipo4=wAct4_.tipo||(ACTS[wAct4_.ai]?ACTS[wAct4_.ai].tipo:'')||'';
+        if(wActName4===col4Name && wActTipo4===(col4.tipo||'')){
           var act2=wks[w2].acts[a2];
           if(act2.unitPrice) unitPr='$'+parseFloat(act2.unitPrice).toFixed(2);
           else if(ACTS[col4.ai]&&ACTS[col4.ai].p) unitPr='$'+parseFloat(ACTS[col4.ai].p).toFixed(2);
@@ -4052,9 +4114,12 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
       // Alpha2-fix5: eliminado dead code (wid siempre es null)
       var found2=null;
       var col2Name=col2.esName||(ACTS[col2.ai]?ACTS[col2.ai].es:'');
+      var col2Tipo=col2.tipo||'';
       for(var k2=0;k2<w.acts.length;k2++){
-        var wActName2=w.acts[k2].esName||(ACTS[w.acts[k2].ai]?ACTS[w.acts[k2].ai].es:'');
-        if(wActName2===col2Name){found2=w.acts[k2];break;}
+        var wAct2=w.acts[k2];
+        var wActName2=wAct2.esName||(ACTS[wAct2.ai]?ACTS[wAct2.ai].es:'');
+        var wActTipo2=wAct2.tipo||(ACTS[wAct2.ai]?ACTS[wAct2.ai].tipo:'')||'';
+        if(wActName2===col2Name && wActTipo2===col2Tipo){found2=wAct2;break;}
       }
       if(found2){
         var cv='';
@@ -4552,6 +4617,21 @@ function sendToSheets() {
   }
 
   var btn = gEl('sheetsSendBtn');
+
+  // Beta2: Si no hay señal → guardar en cola offline
+  if(!navigator.onLine){
+    addToOfflineQueue(payload);
+    if(btn){
+      btn.textContent = '📥 Guardado offline';
+      btn.style.background = '#ff9800';
+      setTimeout(function(){
+        btn.textContent = '📊 Enviar a Payroll Field Master';
+        btn.style.background = '#1a3a5c';
+      }, 4000);
+    }
+    return;
+  }
+
   if (btn) { btn.textContent = '📤 Enviando...'; btn.disabled = true; }
 
   // ── iframe form POST — bypasses CORS, FieldSync.gs reads via e.parameter.payload ──
@@ -4580,7 +4660,27 @@ function sendToSheets() {
     fm.appendChild(inp);
     document.body.appendChild(fm);
 
+    // Beta2: timeout — si en 15s no responde, guardar en cola
+    var _sendTimeout = setTimeout(function(){
+      console.warn('[eBerry] Timeout enviando a Sheets, guardando en cola');
+      addToOfflineQueue(payload);
+      if(btn){
+        btn.textContent = '📥 Timeout — guardado offline';
+        btn.style.background = '#ff9800';
+        btn.disabled = false;
+        setTimeout(function(){
+          btn.textContent = '📊 Enviar a Payroll Field Master';
+          btn.style.background = '#1a3a5c';
+        }, 4000);
+      }
+    }, 15000);
+
     fr.onload = function() {
+      clearTimeout(_sendTimeout);
+      // Beta2: registrar último envío exitoso
+      recordLastSend();
+      checkDaysWithoutSend();
+
       var msg = '✅ ' + workers.length + ' trabajador(es)';
       if (grpSent) msg += ' + ' + grpSent + ' grupal(es)';
       if (ausSent) msg += ' + ' + ausSent + ' ausencia(s)';
@@ -4600,11 +4700,17 @@ function sendToSheets() {
     fm.submit();
 
   } catch(err) {
-    toast('❌ Error: ' + (err.message || 'Sin conexión'));
+    // Beta2: si falla el iframe, guardar en cola offline
+    addToOfflineQueue(payload);
+    toast('⚠️ Error de red — guardado en cola offline');
     if (btn) {
-      btn.textContent = '📊 Enviar a Payroll Field Master';
-      btn.style.background = '#1a3a5c';
+      btn.textContent = '📥 Guardado offline';
+      btn.style.background = '#ff9800';
       btn.disabled = false;
+      setTimeout(function(){
+        btn.textContent = '📊 Enviar a Payroll Field Master';
+        btn.style.background = '#1a3a5c';
+      }, 4000);
     }
   }
 }
@@ -6696,6 +6802,209 @@ function retryFaceID(){
     video.play().catch(function(){});
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   Beta2: SISTEMA OFFLINE COMPLETO
+   1. Indicador online/offline
+   2. Cola de envío con localStorage
+   3. Auto-sync al reconectar
+   4. Aviso de 2+ días sin enviar
+   ═══════════════════════════════════════════════════════════════ */
+
+// ── OFFLINE QUEUE KEYS ──
+var OQ_KEY = 'eb_offline_queue';       // cola de payloads pendientes
+var OQ_LAST_SEND = 'eb_last_send_ts';  // timestamp del último envío exitoso
+
+// ── 1. INDICADOR DE CONEXIÓN ──
+function updateConnBadge(){
+  var badge = gEl('connBadge');
+  if(!badge) return;
+  if(navigator.onLine){
+    badge.className = 'conn-badge online';
+    badge.innerHTML = '<span class="conn-dot"></span> ONLINE';
+  } else {
+    badge.className = 'conn-badge offline';
+    badge.innerHTML = '<span class="conn-dot"></span> SIN SEÑAL';
+  }
+}
+
+window.addEventListener('online', function(){
+  updateConnBadge();
+  toast('✅ Conexión restaurada');
+  // Auto-flush cola cuando vuelve la señal
+  setTimeout(function(){ flushOfflineQueue(); }, 2000);
+});
+
+window.addEventListener('offline', function(){
+  updateConnBadge();
+  toast('⚠️ Sin conexión — tu trabajo se guarda localmente');
+});
+
+// Inicializar al cargar
+window.addEventListener('DOMContentLoaded', function(){
+  updateConnBadge();
+  updateQueueBadge();
+  checkDaysWithoutSend();
+});
+
+// ── 2. COLA DE ENVÍO OFFLINE ──
+function getOfflineQueue(){
+  try {
+    var raw = localStorage.getItem(OQ_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch(e){ return []; }
+}
+
+function saveOfflineQueue(queue){
+  try {
+    localStorage.setItem(OQ_KEY, JSON.stringify(queue));
+  } catch(e){
+    console.warn('[eBerry] No se pudo guardar cola offline:', e.message);
+  }
+}
+
+function addToOfflineQueue(payload){
+  var queue = getOfflineQueue();
+  // Agregar timestamp para tracking
+  payload._queuedAt = new Date().toISOString();
+  payload._queueId  = Date.now() + '_' + Math.random().toString(36).substr(2,6);
+  queue.push(payload);
+  saveOfflineQueue(queue);
+  updateQueueBadge();
+  toast('📥 Guardado en cola offline (' + queue.length + ' pendiente' + (queue.length>1?'s':'') + ')');
+}
+
+function updateQueueBadge(){
+  var badge = gEl('queueBadge');
+  var count = gEl('queueCount');
+  if(!badge) return;
+  var queue = getOfflineQueue();
+  if(queue.length > 0){
+    badge.style.display = 'inline-flex';
+    if(count) count.textContent = queue.length;
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function flushOfflineQueue(){
+  var queue = getOfflineQueue();
+  if(!queue.length){
+    toast('✅ No hay envíos pendientes');
+    return;
+  }
+  if(!navigator.onLine){
+    toast('⚠️ Sin conexión — se enviará cuando vuelva la señal');
+    return;
+  }
+  toast('📤 Enviando ' + queue.length + ' registro(s) pendiente(s)...');
+  _sendNextInQueue();
+}
+
+function _sendNextInQueue(){
+  var queue = getOfflineQueue();
+  if(!queue.length){
+    toast('✅ Cola offline vacía — todo enviado');
+    updateQueueBadge();
+    recordLastSend();
+    checkDaysWithoutSend();
+    return;
+  }
+
+  var payload = queue[0]; // FIFO: primero en entrar, primero en salir
+  // Limpiar campos internos antes de enviar
+  var clean = JSON.parse(JSON.stringify(payload));
+  delete clean._queuedAt;
+  delete clean._queueId;
+
+  try {
+    var oldFr = document.getElementById('_gsQFrame');
+    if(oldFr) oldFr.parentNode.removeChild(oldFr);
+    var oldFm = document.getElementById('_gsQForm');
+    if(oldFm) oldFm.parentNode.removeChild(oldFm);
+
+    var fr = document.createElement('iframe');
+    fr.id = '_gsQFrame'; fr.name = '_gsQFrame';
+    fr.style.cssText = 'display:none;width:0;height:0;border:0';
+    document.body.appendChild(fr);
+
+    var fm = document.createElement('form');
+    fm.id = '_gsQForm'; fm.method = 'POST';
+    fm.action = SHEETS_URL; fm.target = '_gsQFrame';
+    fm.style.cssText = 'display:none';
+
+    var inp = document.createElement('input');
+    inp.type = 'hidden'; inp.name = 'payload';
+    inp.value = JSON.stringify(clean);
+    fm.appendChild(inp);
+    document.body.appendChild(fm);
+
+    // Timeout de seguridad: si en 20s no responde, reintentar luego
+    var _qTimeout = setTimeout(function(){
+      console.warn('[eBerry] Timeout enviando cola, se reintentará');
+      // No eliminar de la cola — se reintentará la próxima vez
+      toast('⚠️ Timeout al enviar — se reintentará');
+    }, 20000);
+
+    fr.onload = function(){
+      clearTimeout(_qTimeout);
+      // Éxito → remover de la cola
+      queue.shift();
+      saveOfflineQueue(queue);
+      updateQueueBadge();
+      console.log('[eBerry] Cola: enviado 1, quedan ' + queue.length);
+      // Enviar el siguiente después de 1.5s (no saturar)
+      if(queue.length > 0){
+        setTimeout(_sendNextInQueue, 1500);
+      } else {
+        toast('✅ Todos los registros pendientes enviados');
+        recordLastSend();
+        checkDaysWithoutSend();
+      }
+    };
+
+    fm.submit();
+  } catch(err){
+    console.error('[eBerry] Error enviando cola:', err);
+    toast('❌ Error al enviar cola: ' + err.message);
+  }
+}
+
+// ── 3. AVISO DE 2+ DÍAS SIN ENVIAR ──
+function recordLastSend(){
+  try {
+    localStorage.setItem(OQ_LAST_SEND, new Date().toISOString());
+  } catch(e){}
+}
+
+function checkDaysWithoutSend(){
+  var warn = gEl('daysWarn');
+  var txt  = gEl('daysWarnTxt');
+  if(!warn) return;
+
+  var last = localStorage.getItem(OQ_LAST_SEND);
+  if(!last){
+    // Nunca ha enviado — no mostrar aviso aún (puede ser primera vez)
+    warn.style.display = 'none';
+    return;
+  }
+
+  var lastDate = new Date(last);
+  var now = new Date();
+  var diffMs = now - lastDate;
+  var diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if(diffDays >= 2){
+    warn.style.display = 'inline-flex';
+    if(txt) txt.textContent = diffDays + ' día' + (diffDays>1?'s':'') + ' sin enviar';
+  } else {
+    warn.style.display = 'none';
+  }
+}
+
+// Revisar cada 30 minutos si llevan días sin enviar
+setInterval(checkDaysWithoutSend, 30 * 60 * 1000);
+
 </script>
 </body>
 </html>
