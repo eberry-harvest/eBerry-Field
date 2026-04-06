@@ -7236,22 +7236,20 @@ function buildSemTable(){
 
     for(var d=0;d<7;d++){
       var cellId = rowId + '_d' + d;
-      if(isHourAct){
-        tbody += '<td class="sem-td"><div class="sem-time-cell">';
-        tbody += '<label>ENT</label><input type="text" inputmode="text" class="sem-input sem-time-txt" id="'+cellId+'_ini" placeholder="7:00" onblur="normTimeInput(this);calcSemHours(\''+wk.id+'\','+d+');semAutoFill(\''+wk.id+'\','+d+',\'ini\')">';
-        tbody += '<label>SAL</label><input type="text" inputmode="text" class="sem-input sem-time-txt" id="'+cellId+'_fin" placeholder="20:00" onblur="normTimeInput(this);calcSemHours(\''+wk.id+'\','+d+');semAutoFill(\''+wk.id+'\','+d+',\'fin\')">';
-        tbody += '<label>L.INI</label><input type="text" inputmode="text" class="sem-input sem-time-txt" id="'+cellId+'_li" placeholder="12:00" onblur="normTimeInput(this);calcSemHours(\''+wk.id+'\','+d+');semAutoFill(\''+wk.id+'\','+d+',\'li\')">';
-        tbody += '<label>L.FIN</label><input type="text" inputmode="text" class="sem-input sem-time-txt" id="'+cellId+'_lf" placeholder="12:30" onblur="normTimeInput(this);calcSemHours(\''+wk.id+'\','+d+');semAutoFill(\''+wk.id+'\','+d+',\'lf\')">';
-        tbody += '<div class="sem-hrs-val" id="'+cellId+'_hrs">0</div>';
-        // Gamma2: Pago diario (solo visual)
-        tbody += '<div id="'+cellId+'_dpay" style="font-size:9px;color:#1a6b3a;font-weight:700;margin-top:2px">$0</div>';
-        tbody += '</div></td>';
-      } else {
-        // Día trabajado (tipo daywork o similar) — solo checkbox o número
-        tbody += '<td class="sem-td"><input type="text" inputmode="decimal" class="sem-input" id="'+cellId+'_qty" onchange="calcSemRow(\''+wk.id+'\')" placeholder="0" style="width:50px">'
-          // Gamma2: Pago diario (solo visual)
-          +'<div id="'+cellId+'_dpay" style="font-size:9px;color:#1a6b3a;font-weight:700;margin-top:2px">$0</div></td>';
+      // Gamma2-V6: TODAS las actividades tienen reloj (ENT/SAL/L.INI/L.FIN)
+      tbody += '<td class="sem-td"><div class="sem-time-cell">';
+      // Para no-Hora: agregar input de cantidad arriba del reloj
+      if(!isHourAct){
+        tbody += '<input type="text" inputmode="decimal" class="sem-input" id="'+cellId+'_qty" onchange="calcSemRow(\''+wk.id+'\')" placeholder="0" style="width:50px;margin-bottom:4px;border:1.5px solid #1a2b8c;font-weight:700">';
       }
+      tbody += '<label>ENT</label><input type="text" inputmode="text" class="sem-input sem-time-txt" id="'+cellId+'_ini" placeholder="7:00" onblur="normTimeInput(this);calcSemHours(\''+wk.id+'\','+d+');semAutoFill(\''+wk.id+'\','+d+',\'ini\')">';
+      tbody += '<label>SAL</label><input type="text" inputmode="text" class="sem-input sem-time-txt" id="'+cellId+'_fin" placeholder="20:00" onblur="normTimeInput(this);calcSemHours(\''+wk.id+'\','+d+');semAutoFill(\''+wk.id+'\','+d+',\'fin\')">';
+      tbody += '<label>L.INI</label><input type="text" inputmode="text" class="sem-input sem-time-txt" id="'+cellId+'_li" placeholder="12:00" onblur="normTimeInput(this);calcSemHours(\''+wk.id+'\','+d+');semAutoFill(\''+wk.id+'\','+d+',\'li\')">';
+      tbody += '<label>L.FIN</label><input type="text" inputmode="text" class="sem-input sem-time-txt" id="'+cellId+'_lf" placeholder="12:30" onblur="normTimeInput(this);calcSemHours(\''+wk.id+'\','+d+');semAutoFill(\''+wk.id+'\','+d+',\'lf\')">';
+      tbody += '<div class="sem-hrs-val" id="'+cellId+'_hrs">0</div>';
+      // Gamma2: Pago diario (solo visual)
+      tbody += '<div id="'+cellId+'_dpay" style="font-size:9px;color:#1a6b3a;font-weight:700;margin-top:2px"></div>';
+      tbody += '</div></td>';
     }
     tbody += '<td class="sem-total sem-td" id="'+rowId+'_total">0</td>';
     // Gamma2: Celda de pago (solo visual)
@@ -7411,16 +7409,15 @@ function saveSemData(){
     var row = {wid:wk.id, name:wk.name, empNum:wk.empNum||'', days:[]};
     for(var d=0;d<7;d++){
       var cellId = 'sem_' + wk.id + '_d' + d;
-      if(isHour){
-        row.days.push({
-          ini: gVal(cellId+'_ini'),
-          fin: gVal(cellId+'_fin'),
-          lIni: gVal(cellId+'_li'),
-          lFin: gVal(cellId+'_lf')
-        });
-      } else {
-        row.days.push({qty: gVal(cellId+'_qty')});
-      }
+      // Gamma2-V6: SIEMPRE guardar reloj (ENT/SAL/L.INI/L.FIN) + qty si no es Hora
+      var dayObj = {
+        ini: gVal(cellId+'_ini'),
+        fin: gVal(cellId+'_fin'),
+        lIni: gVal(cellId+'_li'),
+        lFin: gVal(cellId+'_lf')
+      };
+      if(!isHour) dayObj.qty = gVal(cellId+'_qty');
+      row.days.push(dayObj);
     }
     data.rows.push(row);
   }
@@ -7497,13 +7494,14 @@ function restoreSemInputs(){
         var dayData = row.days[d];
         if(!dayData) continue;
 
-        if(isHour){
-          var iniEl = gEl(cellId+'_ini'); if(iniEl && dayData.ini) iniEl.value = dayData.ini;
-          var finEl = gEl(cellId+'_fin'); if(finEl && dayData.fin) finEl.value = dayData.fin;
-          var liEl = gEl(cellId+'_li'); if(liEl && dayData.lIni) liEl.value = dayData.lIni;
-          var lfEl = gEl(cellId+'_lf'); if(lfEl && dayData.lFin) lfEl.value = dayData.lFin;
-          calcSemHours(wk.id, d);
-        } else {
+        // Gamma2-V6: SIEMPRE restaurar reloj (todas las actividades)
+        var iniEl = gEl(cellId+'_ini'); if(iniEl && dayData.ini) iniEl.value = dayData.ini;
+        var finEl = gEl(cellId+'_fin'); if(finEl && dayData.fin) finEl.value = dayData.fin;
+        var liEl = gEl(cellId+'_li'); if(liEl && dayData.lIni) liEl.value = dayData.lIni;
+        var lfEl = gEl(cellId+'_lf'); if(lfEl && dayData.lFin) lfEl.value = dayData.lFin;
+        calcSemHours(wk.id, d);
+        // Para no-Hora: también restaurar qty
+        if(!isHour){
           var qEl = gEl(cellId+'_qty'); if(qEl && dayData.qty) qEl.value = dayData.qty;
         }
       }
@@ -7660,22 +7658,23 @@ function sendSemToSheets(){
 
     for(var d=0;d<7;d++){
       var cellId = 'sem_' + wk.id + '_d' + d;
-      if(isHour){
-        var hrsEl = gEl(cellId+'_hrs');
-        var hrs = parseFloat(hrsEl ? hrsEl.textContent : '0') || 0;
-        row.days.push({
-          hrs: hrs,
-          ini: gVal(cellId+'_ini'),
-          fin: gVal(cellId+'_fin'),
-          lIni: gVal(cellId+'_li'),
-          lFin: gVal(cellId+'_lf')
-        });
-        if(hrs > 0) anyData = true;
+      // Gamma2-V6: SIEMPRE enviar reloj + hrs calculadas + qty si no es Hora
+      var hrsEl = gEl(cellId+'_hrs');
+      var hrs = parseFloat(hrsEl ? hrsEl.textContent : '0') || 0;
+      var dayObj = {
+        hrs: hrs,
+        ini: gVal(cellId+'_ini'),
+        fin: gVal(cellId+'_fin'),
+        lIni: gVal(cellId+'_li'),
+        lFin: gVal(cellId+'_lf')
+      };
+      if(!isHour){
+        dayObj.qty = parseFloat(gVal(cellId+'_qty')) || 0;
+        if(dayObj.qty > 0 || hrs > 0) anyData = true;
       } else {
-        var qty = parseFloat(gVal(cellId+'_qty')) || 0;
-        row.days.push({qty: qty});
-        if(qty > 0) anyData = true;
+        if(hrs > 0) anyData = true;
       }
+      row.days.push(dayObj);
     }
     if(anyData) payload.workers.push(row);
   }
