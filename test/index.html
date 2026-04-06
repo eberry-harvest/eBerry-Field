@@ -2065,6 +2065,9 @@ function findInStrArr(arr,name){
   return null;
 }
 
+// V12: smartNum movido a scope global (antes estaba dentro de buildPDFWindow)
+function smartNum(n){ var v=parseFloat(n)||0; return v%1===0?String(Math.round(v)):v.toFixed(2); }
+
 function t2m(t){ if(!t||t.indexOf(':')<0)return null; var p=t.split(':'); return parseInt(p[0],10)*60+parseInt(p[1],10); }
 function nh(a,b){
   var e=t2m(a),s=t2m(b); if(e===null||s===null)return 0;
