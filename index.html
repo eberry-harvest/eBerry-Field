@@ -5458,26 +5458,56 @@ function syncAusencias(){
   }
 }
 
-// V7: Helper — obtener workers filtrados por rancho (reutilizable)
+// V9: Helper — obtener workers filtrados por CREW/RANCHO (no por IOE)
+// + alerta si su contrato IOE no autoriza ese rancho
 function getWorkersForRancho(){
   var rancho = gVal('rancho');
   if(!rancho) return ALL_WORKERS;
 
-  var allowedIOEs = {};
-  for(var k in CONTRATOS){
-    if(!CONTRATOS.hasOwnProperty(k)) continue;
-    for(var ri=0;ri<CONTRATOS[k].length;ri++){
-      if((CONTRATOS[k][ri]||'').toLowerCase() === rancho.toLowerCase()){
-        allowedIOEs[k] = true;
-        break;
+  var ranchoLow = rancho.toLowerCase();
+
+  // Paso 1: Filtrar por crew que coincida con el rancho
+  var filtered = [];
+  var sinContrato = [];
+
+  for(var i=0;i<ALL_WORKERS.length;i++){
+    var w = ALL_WORKERS[i];
+    var wCrew = (w.crew||'').toLowerCase();
+    var crewBase = wCrew.replace(/\s*\d+$/,'').trim();
+
+    if(wCrew === ranchoLow || crewBase === ranchoLow){
+      filtered.push(w);
+
+      // Paso 2: Verificar si su IOE autoriza ese rancho
+      var ioe = w.ioe||'';
+      var autorizado = false;
+      if(ioe && CONTRATOS[ioe]){
+        for(var ri=0;ri<CONTRATOS[ioe].length;ri++){
+          if((CONTRATOS[ioe][ri]||'').toLowerCase() === ranchoLow){
+            autorizado = true;
+            break;
+          }
+        }
+      }
+      if(!autorizado){
+        sinContrato.push(w.name + (ioe ? ' (IOE: '+ioe+')' : ' (sin IOE)'));
       }
     }
   }
-  if(!Object.keys(allowedIOEs).length) return ALL_WORKERS;
 
-  var filtered = ALL_WORKERS.filter(function(w){
-    return allowedIOEs[w.ioe||''];
-  });
+  // Paso 3: Mostrar alerta si hay workers sin autorización IOE
+  if(sinContrato.length){
+    console.warn('[V9] Workers en '+rancho+' sin autorización IOE:', sinContrato);
+    setTimeout(function(){
+      alert('⚠️ ALERTA DE CONTRATO\n\n'
+        + sinContrato.length + ' trabajador(es) en ' + rancho
+        + ' NO tienen autorización IOE para este rancho:\n\n'
+        + sinContrato.slice(0,15).join('\n')
+        + (sinContrato.length>15 ? '\n... y '+(sinContrato.length-15)+' más' : '')
+        + '\n\nVerifique con el departamento de contratos.');
+    }, 300);
+  }
+
   return filtered.length ? filtered : ALL_WORKERS;
 }
 
