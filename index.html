@@ -7543,8 +7543,9 @@ function generateSemPDF(){
     +'.info{display:flex;justify-content:space-between;margin:8px 0;font-size:11px}'
     +'table{width:100%;border-collapse:collapse;margin-top:8px}'
     +'th{background:#1a2b8c;color:#fff;padding:5px 3px;font-size:10px;border:1px solid #8899cc;text-align:center}'
-    +'td{border:1px solid #aab;padding:4px 3px;font-size:10px;text-align:center}'
+    +'td{border:1px solid #aab;padding:4px 3px;font-size:10px;text-align:center;vertical-align:top}'
     +'.name{text-align:left;font-weight:600;white-space:nowrap}'
+    +'.sch{font-size:7px;color:#555;line-height:1.3;margin-top:2px}'
     +'.total{font-weight:700;background:#d0d8ff;color:#1a2b8c}'
     +'.grand{font-weight:900;background:#1a2b8c;color:#fff}'
     +'.ft{font-size:8px;color:#333;text-align:center;margin-top:6px;border-top:1px solid #ddd;padding-top:5px}'
@@ -7589,7 +7590,27 @@ function generateSemPDF(){
       } else {
         val = parseFloat(gVal(cellId+'_qty')) || 0;
       }
-      html += '<td>'+(val > 0 ? smartNum(val) : '')+'</td>';
+      // Gamma2-V7: Horarios en el PDF
+      var ini = gVal(cellId+'_ini') || '';
+      var fin = gVal(cellId+'_fin') || '';
+      var li  = gVal(cellId+'_li')  || '';
+      var lf  = gVal(cellId+'_lf')  || '';
+      var hrsCalc = gEl(cellId+'_hrs');
+      var hrsVal = parseFloat(hrsCalc ? hrsCalc.textContent : '0') || 0;
+      var cellHtml = '';
+      if(val > 0 || ini){
+        // Valor principal (qty o hrs)
+        cellHtml += '<div style="font-weight:700;font-size:11px">'+(val > 0 ? smartNum(val) : '')+'</div>';
+        // Horarios debajo
+        if(ini || fin){
+          cellHtml += '<div class="sch">';
+          cellHtml += (ini||'—')+'–'+(fin||'—');
+          if(li || lf) cellHtml += '<br>L:'+(li||'—')+'–'+(lf||'—');
+          if(!isHour && hrsVal > 0) cellHtml += '<br>'+smartNum(hrsVal)+'h';
+          cellHtml += '</div>';
+        }
+      }
+      html += '<td>'+cellHtml+'</td>';
       rowTotal += val;
       dayTotals[d] += val;
     }
