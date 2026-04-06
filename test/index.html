@@ -1571,30 +1571,10 @@ function onRanchoChange(){
   if(!ACTS.length) ACTS = FALLBACK_ACTS.filter(function(a){ return a.modo !== 'Grupal'; });
   if(!GRUPAL_ACTS.length) GRUPAL_ACTS = FALLBACK_GRUPAL_ACTS;
 
-  // V5: Filtrar workers por rancho — solo los que tienen IOE autorizado para este rancho
-  // Encontrar qué IOEs incluyen este rancho
-  var allowedIOEs = {};
-  for(var k in CONTRATOS){
-    if(!CONTRATOS.hasOwnProperty(k)) continue;
-    for(var ri=0;ri<CONTRATOS[k].length;ri++){
-      if((CONTRATOS[k][ri]||'').toLowerCase() === rancho.toLowerCase()){
-        allowedIOEs[k] = true;
-        break;
-      }
-    }
-  }
-
-  // Solo filtrar si hay contratos cargados y el usuario es admin sin surquero seleccionado
-  // (si ya seleccionó surquero, filterDataForCrew ya filtró por crew)
-  if(currentUser && currentUser.isAdmin && !gVal('surquero') && Object.keys(allowedIOEs).length > 0){
-    NAMES = [];
-    for(var wi=0;wi<ALL_WORKERS.length;wi++){
-      var wIOE = ALL_WORKERS[wi].ioe || '';
-      if(allowedIOEs[wIOE]){
-        NAMES.push(ALL_WORKERS[wi].name);
-      }
-    }
-    if(!NAMES.length) NAMES = ALL_WORKERS.map(function(w){ return w.name; }); // fallback: si ninguno tiene IOE, mostrar todos
+  // V7: Filtrar workers por rancho usando helper centralizado
+  if(currentUser && currentUser.isAdmin && !gVal('surquero')){
+    var ranchoWorkers = getWorkersForRancho();
+    NAMES = ranchoWorkers.map(function(w){ return w.name; });
   }
 
   autoSave();
@@ -5478,6 +5458,29 @@ function syncAusencias(){
   }
 }
 
+// V7: Helper — obtener workers filtrados por rancho (reutilizable)
+function getWorkersForRancho(){
+  var rancho = gVal('rancho');
+  if(!rancho) return ALL_WORKERS;
+
+  var allowedIOEs = {};
+  for(var k in CONTRATOS){
+    if(!CONTRATOS.hasOwnProperty(k)) continue;
+    for(var ri=0;ri<CONTRATOS[k].length;ri++){
+      if((CONTRATOS[k][ri]||'').toLowerCase() === rancho.toLowerCase()){
+        allowedIOEs[k] = true;
+        break;
+      }
+    }
+  }
+  if(!Object.keys(allowedIOEs).length) return ALL_WORKERS;
+
+  var filtered = ALL_WORKERS.filter(function(w){
+    return allowedIOEs[w.ioe||''];
+  });
+  return filtered.length ? filtered : ALL_WORKERS;
+}
+
 function showAllEmployeesAsAbsent(){
   var list  = gEl('ausenciasList');
   var empty = gEl('ausenciasEmpty');
@@ -5488,10 +5491,22 @@ function showAllEmployeesAsAbsent(){
     list.innerHTML='<div style="text-align:center;padding:30px;color:var(--gr)"><div style="font-size:13px">Cargando empleados...</div></div>';
     return;
   }
-  if(hdr) hdr.textContent = ALL_WORKERS.length + ' empleados en total (vista empresa completa)';
+
+  // V7: Filtrar por rancho seleccionado
+  var rancho = gVal('rancho');
+  var filteredWorkers = getWorkersForRancho();
+
+  if(hdr){
+    if(rancho){
+      hdr.textContent = filteredWorkers.length + ' empleados en ' + rancho;
+    } else {
+      hdr.textContent = ALL_WORKERS.length + ' empleados en total (vista empresa completa)';
+    }
+  }
+
   list.innerHTML='';
-  for(var i=0;i<ALL_WORKERS.length;i++){
-    var w = ALL_WORKERS[i];
+  for(var i=0;i<filteredWorkers.length;i++){
+    var w = filteredWorkers[i];
     var card = document.createElement('div');
     card.className = 'aus-card';
     card.style.cssText='padding:10px 13px;display:flex;align-items:center;justify-content:space-between';
