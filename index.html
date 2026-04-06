@@ -7070,7 +7070,11 @@ function initSemTab(){
       ranchoSel.appendChild(opt);
     }
   }
-  // V8: Si Parámetros tiene rancho → auto-llenar y bloquear. Si no → dejar libre.
+  // Si ya hay datos guardados, restaurar
+  loadSemData();
+
+  // Gamma2-V2: Sincronizar rancho DESPUÉS de loadSemData para que no lo pise
+  // V8 original estaba ANTES de loadSemData, por eso se perdía el rancho de Parámetros
   var paramRancho = gVal('rancho');
   var semRanchoSel = gEl('semRancho');
   if(paramRancho && semRanchoSel){
@@ -7084,9 +7088,6 @@ function initSemTab(){
     semRanchoSel.style.opacity = '1';
     semRanchoSel.title = '';
   }
-
-  // Si ya hay datos guardados, restaurar
-  loadSemData();
 }
 
 // V4: Al cambiar rancho en semanal, filtrar actividades tipo Hora de ese rancho
@@ -7381,19 +7382,39 @@ function saveSemData(){
   }
 
   try {
-    var key = SEM_KEY + '_' + (currentUser?currentUser.name:'') + '_' + data.weekStart;
+    // Gamma2-V3: Key incluye rancho+surquero para que cada combo tenga su propia data
+    var key = SEM_KEY + '_' + (currentUser?currentUser.name:'') + '_' + (data.rancho||'') + '_' + data.weekStart;
     localStorage.setItem(key, JSON.stringify(data));
   } catch(e){}
 }
 
 function loadSemData(){
-  // Intentar restaurar la última semana guardada
+  // Gamma2-V3: Restaurar solo la data del rancho+surquero actual
   try {
+    var userName = currentUser ? currentUser.name : '';
+    var paramRancho = gVal('rancho') || '';
+    // Buscar key que coincida con usuario + rancho actual
+    var prefix = SEM_KEY + '_' + userName + '_' + paramRancho + '_';
+    for(var i=0;i<localStorage.length;i++){
+      var k = localStorage.key(i);
+      if(k && k.indexOf(prefix) === 0){
+        var d = JSON.parse(localStorage.getItem(k));
+        if(d && d.weekStart){
+          gEl('semWeekStart').value = d.weekStart;
+          gEl('semActivity').value = d.actIdx || '';
+          gEl('semRancho').value = d.rancho || '';
+          gEl('semFinca').value = d.finca || '';
+          buildSemTable();
+          return;
+        }
+      }
+    }
+    // Fallback: buscar keys del formato viejo (sin rancho) para no perder data existente
     for(var i=0;i<localStorage.length;i++){
       var k = localStorage.key(i);
       if(k && k.indexOf(SEM_KEY) === 0){
         var d = JSON.parse(localStorage.getItem(k));
-        if(d && d.weekStart){
+        if(d && d.weekStart && (d.rancho||'') === paramRancho){
           gEl('semWeekStart').value = d.weekStart;
           gEl('semActivity').value = d.actIdx || '';
           gEl('semRancho').value = d.rancho || '';
@@ -7408,7 +7429,8 @@ function loadSemData(){
 
 function restoreSemInputs(){
   try {
-    var key = SEM_KEY + '_' + (currentUser?currentUser.name:'') + '_' + gVal('semWeekStart');
+    // Gamma2-V3: Key incluye rancho para data por rancho+surquero
+    var key = SEM_KEY + '_' + (currentUser?currentUser.name:'') + '_' + (gVal('semRancho')||'') + '_' + gVal('semWeekStart');
     var raw = localStorage.getItem(key);
     if(!raw) return;
     var data = JSON.parse(raw);
