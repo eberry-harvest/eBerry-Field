@@ -6953,12 +6953,19 @@ function initSemTab(){
       ranchoSel.appendChild(opt);
     }
   }
-  // V6: Auto-llenar rancho desde Parámetros
-  var paramRancho = gVal('rancho'); // rancho de la pestaña ① Parámetros
+  // V8: Si Parámetros tiene rancho → auto-llenar y bloquear. Si no → dejar libre.
+  var paramRancho = gVal('rancho');
   var semRanchoSel = gEl('semRancho');
-  if(paramRancho && semRanchoSel && !semRanchoSel.value){
+  if(paramRancho && semRanchoSel){
     semRanchoSel.value = paramRancho;
-    onSemRanchoChange(); // disparar filtro de actividades
+    semRanchoSel.disabled = true;
+    semRanchoSel.style.opacity = '0.7';
+    semRanchoSel.title = 'Rancho tomado de Parámetros';
+    onSemRanchoChange();
+  } else if(semRanchoSel){
+    semRanchoSel.disabled = false;
+    semRanchoSel.style.opacity = '1';
+    semRanchoSel.title = '';
   }
 
   // Si ya hay datos guardados, restaurar
