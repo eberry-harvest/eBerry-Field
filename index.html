@@ -7169,20 +7169,22 @@ function calcSemHours(wid, dayIdx){
   var lIni = gVal(cellId + '_li');
   var lFin = gVal(cellId + '_lf');
 
-  // V11: Cálculo independiente (sin usar nh() que resta lonche global)
-  var hrs = 0;
+  // V14: Cálculo independiente, redondeado a cuartos de hora (.00, .25, .50, .75)
+  var mins = 0;
   var e = t2m(ini), s = t2m(fin);
   if(e !== null && s !== null){
     if(s <= e) s += 1440; // cruce medianoche
-    hrs = (s - e) / 60;
+    mins = s - e;
     var li = t2m(lIni), lf = t2m(lFin);
     if(li !== null && lf !== null){
       if(lf <= li) lf += 1440;
-      hrs -= (lf - li) / 60;
+      mins -= (lf - li);
     }
   }
-  if(hrs < 0) hrs = 0;
-  hrs = Math.round(hrs * 10) / 10;
+  if(mins < 0) mins = 0;
+  // Redondear a cuartos de hora: 0, 15, 30, 45 minutos
+  var qMins = Math.round(mins / 15) * 15;
+  var hrs = qMins / 60;
 
   var el = gEl(cellId + '_hrs');
   if(el) el.textContent = hrs > 0 ? smartNum(hrs) : '0';
@@ -7191,21 +7193,32 @@ function calcSemHours(wid, dayIdx){
   saveSemData();
 }
 
-// V11: Auto-llenar horario del primer worker a los demás
-// V13: fix — wid llega como string desde onchange, workers[].id es number
+// V14: Auto-llenar horario del primer worker a TODOS los demás
+// Siempre copia (sobrescribe) cuando cambias el primero
+// Si modificas uno individual después, se queda con su valor
+var _semManualEdits = {}; // rastrea edits manuales de workers 2+
+
 function semAutoFill(wid, dayIdx, field){
   if(!workers.length) return;
-  // Solo auto-llenar si el que cambió es el PRIMER worker
-  if(String(workers[0].id) !== String(wid)) return;
+  var isFirst = String(workers[0].id) === String(wid);
+
+  if(!isFirst){
+    // Marcar que este worker fue editado manualmente en este campo/día
+    _semManualEdits[wid+'_d'+dayIdx+'_'+field] = true;
+    return;
+  }
 
   var srcId = 'sem_' + wid + '_d' + dayIdx + '_' + field;
   var srcVal = gVal(srcId);
-  if(!srcVal) return;
 
   for(var w=1; w<workers.length; w++){
+    var wKey = workers[w].id+'_d'+dayIdx+'_'+field;
+    // No sobreescribir si fue editado manualmente
+    if(_semManualEdits[wKey]) continue;
+
     var tgtId = 'sem_' + workers[w].id + '_d' + dayIdx + '_' + field;
     var tgtEl = gEl(tgtId);
-    if(tgtEl && !tgtEl.value){ // solo si está vacío
+    if(tgtEl){
       tgtEl.value = srcVal;
       calcSemHours(String(workers[w].id), dayIdx);
     }
