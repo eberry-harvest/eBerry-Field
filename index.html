@@ -7565,20 +7565,17 @@ function generateSemPDF(){
     +'<div style="font-size:14px;font-weight:900;color:#1a2b8c;letter-spacing:.5px">'+dates[0]+' al '+dates[6]+'</div>'
     +'</div></div>';
 
-  // Gamma2-V8: Estructura igual que Daily Payroll Sheet — meta rows arriba, workers limpios
+  // Gamma2-V9: Columnas múltiples por día si hay horarios distintos entre workers
   var unitPrice = selAct ? (parseFloat(selAct.p)||0) : 0;
   var tipoLabel = isHour ? 'hr' : ((selAct&&selAct.tipo)||'pza');
 
-  // Recopilar datos de todos los workers para calcular totales y extraer horarios
-  var dayTotals = [0,0,0,0,0,0,0];
-  var grandTotal = 0;
-  var dayEntrada = [], daySalida = [], dayLIni = [], dayLFin = [];
+  // ── Paso 1: Recopilar datos + horarios por worker por día ──
   var workerData = [];
-
   for(var w=0;w<workers.length;w++){
     var wk = workers[w];
     var rowTotal = 0;
     var days = [];
+    var scheds = [];
     for(var d=0;d<7;d++){
       var cellId = 'sem_' + wk.id + '_d' + d;
       var val = 0;
@@ -7590,26 +7587,73 @@ function generateSemPDF(){
       }
       days.push(val);
       rowTotal += val;
-      dayTotals[d] += val;
-      // Extraer horarios del primer worker con datos para cada día
-      if(!dayEntrada[d] && gVal(cellId+'_ini')) dayEntrada[d] = gVal(cellId+'_ini');
-      if(!daySalida[d] && gVal(cellId+'_fin')) daySalida[d] = gVal(cellId+'_fin');
-      if(!dayLIni[d] && gVal(cellId+'_li'))    dayLIni[d] = gVal(cellId+'_li');
-      if(!dayLFin[d] && gVal(cellId+'_lf'))    dayLFin[d] = gVal(cellId+'_lf');
+      scheds.push({
+        ent: gVal(cellId+'_ini')||'',
+        sal: gVal(cellId+'_fin')||'',
+        lIni: gVal(cellId+'_li')||'',
+        lFin: gVal(cellId+'_lf')||''
+      });
     }
-    workerData.push({wk:wk, days:days, total:rowTotal});
-    grandTotal += rowTotal;
+    workerData.push({wk:wk, days:days, scheds:scheds, total:rowTotal});
   }
 
-  // ── Tabla con header ──
-  html += '<table><thead><tr>'
-    +'<th>No</th><th>Emp #</th><th style="min-width:120px">Nombre / Name</th>';
+  // ── Paso 2: Para cada día, agrupar por horario único → sub-columnas ──
+  var dayCols = [];
+  var dayColSpans = [];
   for(var d=0;d<7;d++){
-    html += '<th>'+SEM_DAYS[d]+'<br>'+dates[d]+'</th>';
+    var groups = {};
+    var groupOrder = [];
+    for(var w=0;w<workerData.length;w++){
+      var wd = workerData[w];
+      if(wd.days[d] === 0) continue;
+      var sc = wd.scheds[d];
+      var key = sc.ent+'|'+sc.sal+'|'+sc.lIni+'|'+sc.lFin;
+      if(!groups[key]){
+        groups[key] = {sched:sc, vals:{}, total:0};
+        groupOrder.push(key);
+      }
+      groups[key].vals[w] = wd.days[d];
+      groups[key].total += wd.days[d];
+    }
+    if(groupOrder.length === 0){
+      groupOrder.push('empty');
+      groups['empty'] = {sched:{ent:'',sal:'',lIni:'',lFin:''}, vals:{}, total:0};
+    }
+    dayColSpans.push(groupOrder.length);
+    for(var g=0;g<groupOrder.length;g++){
+      var grp = groups[groupOrder[g]];
+      dayCols.push({day:d, sched:grp.sched, vals:grp.vals, colTotal:grp.total});
+    }
   }
-  html += '<th style="background:#0f1a3d">TOTAL</th></tr></thead><tbody>';
 
-  // ── META ROWS (misma estructura que Daily Payroll) ──
+  var totalCols = dayCols.length;
+  var grandTotal = 0;
+  for(var w=0;w<workerData.length;w++) grandTotal += workerData[w].total;
+
+  // ── Tabla: Header fila 1 — Días con colspan ──
+  html += '<table><thead>';
+  html += '<tr><th rowspan="2">No</th><th rowspan="2">Emp #</th><th rowspan="2" style="min-width:100px">Nombre / Name</th>';
+  for(var d=0;d<7;d++){
+    html += '<th colspan="'+dayColSpans[d]+'" style="border-bottom:'+(dayColSpans[d]>1?'1px solid #8899cc':'none')+'">'+SEM_DAYS[d]+'<br>'+dates[d]+'</th>';
+  }
+  html += '<th rowspan="2" style="background:#0f1a3d">TOTAL</th></tr>';
+
+  // Header fila 2 — etiquetas T1/T2 si hay multi-columna
+  html += '<tr>';
+  for(var c=0;c<dayCols.length;c++){
+    var col = dayCols[c];
+    var parentSpan = dayColSpans[col.day];
+    if(parentSpan > 1){
+      var subIdx = 0;
+      for(var cc=0;cc<c;cc++){ if(dayCols[cc].day===col.day) subIdx++; }
+      html += '<th style="font-size:8px;background:#2a3b9c;padding:2px">T'+(subIdx+1)+'</th>';
+    } else {
+      html += '<th style="font-size:1px;background:#1a2b8c;padding:0;border:none">&nbsp;</th>';
+    }
+  }
+  html += '</tr></thead><tbody>';
+
+  // ── META ROWS ──
   var metaStyle = 'text-align:center;border:1px solid #ddd;font-size:10px;padding:4px 3px';
   var metaLabel = 'text-align:right;padding:4px 7px;border:1px solid #ddd;border-right:3px solid #1a2b8c;font-weight:600;font-size:10px';
   var metaEmpty = 'border:1px solid #ddd';
@@ -7617,15 +7661,15 @@ function generateSemPDF(){
   // Fila TOTAL
   html += '<tr style="border-top:3px solid #1a2b8c"><td style="'+metaEmpty+'"></td><td style="'+metaEmpty+'"></td>'
     +'<td style="'+metaLabel+';color:#1a2b8c;font-weight:900">TOTAL</td>';
-  for(var d=0;d<7;d++){
-    html += '<td style="'+metaStyle+';color:#1a2b8c;font-weight:700;border-top:3px solid #1a2b8c">'+smartNum(dayTotals[d])+'</td>';
+  for(var c=0;c<dayCols.length;c++){
+    html += '<td style="'+metaStyle+';color:#1a2b8c;font-weight:700;border-top:3px solid #1a2b8c">'+smartNum(dayCols[c].colTotal)+'</td>';
   }
   html += '<td style="'+metaStyle+';background:#0f1a3d;color:#fff;font-weight:900;border-top:3px solid #1a2b8c">'+smartNum(grandTotal)+'</td></tr>';
 
   // Fila Pago Unit.
   html += '<tr style="background:#fff"><td style="'+metaEmpty+'"></td><td style="'+metaEmpty+'"></td>'
     +'<td style="'+metaLabel+';color:#111">Pago Unit.</td>';
-  for(var d=0;d<7;d++){
+  for(var c=0;c<dayCols.length;c++){
     html += '<td style="'+metaStyle+';color:#c0392b;font-weight:700">$'+unitPrice.toFixed(2)+'</td>';
   }
   html += '<td style="'+metaEmpty+'"></td></tr>';
@@ -7633,7 +7677,7 @@ function generateSemPDF(){
   // Fila Labor
   html += '<tr style="background:#f5f8ff"><td style="'+metaEmpty+'"></td><td style="'+metaEmpty+'"></td>'
     +'<td style="'+metaLabel+';color:#111">Labor</td>';
-  for(var d=0;d<7;d++){
+  for(var c=0;c<dayCols.length;c++){
     html += '<td style="'+metaStyle+';color:#3a7fd4;font-size:9px">'+(gVal('semFinca')||'G.L')+'</td>';
   }
   html += '<td style="'+metaEmpty+'"></td></tr>';
@@ -7641,43 +7685,44 @@ function generateSemPDF(){
   // Fila Entrada
   html += '<tr style="background:#f9f9f9"><td style="'+metaEmpty+'"></td><td style="'+metaEmpty+'"></td>'
     +'<td style="'+metaLabel+';color:#111">Entrada</td>';
-  for(var d=0;d<7;d++){
-    html += '<td style="'+metaStyle+'">'+(dayEntrada[d]||'')+'</td>';
+  for(var c=0;c<dayCols.length;c++){
+    html += '<td style="'+metaStyle+'">'+dayCols[c].sched.ent+'</td>';
   }
   html += '<td style="'+metaEmpty+'"></td></tr>';
 
   // Fila Salida
-  html += '<tr class="meta-last" style="background:#f9f9f9"><td style="'+metaEmpty+'"></td><td style="'+metaEmpty+'"></td>'
+  html += '<tr style="background:#f9f9f9"><td style="'+metaEmpty+'"></td><td style="'+metaEmpty+'"></td>'
     +'<td style="'+metaLabel+';color:#111">Salida</td>';
-  for(var d=0;d<7;d++){
-    html += '<td style="'+metaStyle+'">'+(daySalida[d]||'')+'</td>';
+  for(var c=0;c<dayCols.length;c++){
+    html += '<td style="'+metaStyle+'">'+dayCols[c].sched.sal+'</td>';
   }
   html += '<td style="'+metaEmpty+'"></td></tr>';
 
   // Fila L.Inicio
   html += '<tr style="background:#f9f9f9"><td style="'+metaEmpty+'"></td><td style="'+metaEmpty+'"></td>'
     +'<td style="'+metaLabel+';color:#111">L. Inicio</td>';
-  for(var d=0;d<7;d++){
-    html += '<td style="'+metaStyle+'">'+(dayLIni[d]||'')+'</td>';
+  for(var c=0;c<dayCols.length;c++){
+    html += '<td style="'+metaStyle+'">'+dayCols[c].sched.lIni+'</td>';
   }
   html += '<td style="'+metaEmpty+'"></td></tr>';
 
   // Fila L.Fin
-  html += '<tr class="meta-last" style="background:#f9f9f9;border-bottom:3px solid #1a2b8c"><td style="'+metaEmpty+'"></td><td style="'+metaEmpty+'"></td>'
+  html += '<tr style="background:#f9f9f9;border-bottom:3px solid #1a2b8c"><td style="'+metaEmpty+'"></td><td style="'+metaEmpty+'"></td>'
     +'<td style="'+metaLabel+';color:#111">L. Fin</td>';
-  for(var d=0;d<7;d++){
-    html += '<td style="'+metaStyle+'">'+(dayLFin[d]||'')+'</td>';
+  for(var c=0;c<dayCols.length;c++){
+    html += '<td style="'+metaStyle+'">'+dayCols[c].sched.lFin+'</td>';
   }
   html += '<td style="'+metaEmpty+'"></td></tr>';
 
-  // ── WORKER ROWS (limpias, solo números) ──
+  // ── WORKER ROWS ──
   for(var w=0;w<workerData.length;w++){
     var wd = workerData[w];
     html += '<tr><td>'+(w+1)+'</td>'
       +'<td style="color:#8b0000;font-weight:700;font-size:9px">'+(wd.wk.empNum?'#'+wd.wk.empNum:'')+'</td>'
       +'<td class="name">'+escH(wd.wk.name)+'</td>';
-    for(var d=0;d<7;d++){
-      html += '<td>'+(wd.days[d] > 0 ? smartNum(wd.days[d]) : '')+'</td>';
+    for(var c=0;c<dayCols.length;c++){
+      var colVal = dayCols[c].vals[w];
+      html += '<td>'+(colVal && colVal > 0 ? smartNum(colVal) : '')+'</td>';
     }
     html += '<td class="total">'+smartNum(wd.total)+'</td></tr>';
   }
