@@ -1571,6 +1571,32 @@ function onRanchoChange(){
   if(!ACTS.length) ACTS = FALLBACK_ACTS.filter(function(a){ return a.modo !== 'Grupal'; });
   if(!GRUPAL_ACTS.length) GRUPAL_ACTS = FALLBACK_GRUPAL_ACTS;
 
+  // V5: Filtrar workers por rancho — solo los que tienen IOE autorizado para este rancho
+  // Encontrar qué IOEs incluyen este rancho
+  var allowedIOEs = {};
+  for(var k in CONTRATOS){
+    if(!CONTRATOS.hasOwnProperty(k)) continue;
+    for(var ri=0;ri<CONTRATOS[k].length;ri++){
+      if((CONTRATOS[k][ri]||'').toLowerCase() === rancho.toLowerCase()){
+        allowedIOEs[k] = true;
+        break;
+      }
+    }
+  }
+
+  // Solo filtrar si hay contratos cargados y el usuario es admin sin surquero seleccionado
+  // (si ya seleccionó surquero, filterDataForCrew ya filtró por crew)
+  if(currentUser && currentUser.isAdmin && !gVal('surquero') && Object.keys(allowedIOEs).length > 0){
+    NAMES = [];
+    for(var wi=0;wi<ALL_WORKERS.length;wi++){
+      var wIOE = ALL_WORKERS[wi].ioe || '';
+      if(allowedIOEs[wIOE]){
+        NAMES.push(ALL_WORKERS[wi].name);
+      }
+    }
+    if(!NAMES.length) NAMES = ALL_WORKERS.map(function(w){ return w.name; }); // fallback: si ninguno tiene IOE, mostrar todos
+  }
+
   autoSave();
 }
 
