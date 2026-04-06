@@ -1910,6 +1910,13 @@ function loadSheetsData(){
       saveCache(ALL_WORKERS, ALL_ACTS, LIDERES);
       startKeepAlive();
       setLoading(false);
+      // V10: Diagnóstico visual — mostrar si usó FALLBACK
+      var isFallback = ALL_ACTS.length <= FALLBACK_ACTS.length;
+      if(isFallback){
+        console.warn('🚨 ALL_ACTS = FALLBACK (' + ALL_ACTS.length + ' acts). Datos de Sheets NO cargaron.');
+      } else {
+        console.log('✅ ALL_ACTS cargó correctamente: ' + ALL_ACTS.length + ' actividades, ' + ALL_WORKERS.length + ' workers');
+      }
       showLogin();
     }
   }
@@ -1974,8 +1981,16 @@ function loadSheetsData(){
           modo: modo  // 'Individual' | 'Grupal'
         });
       }
+      // V10: Diagnóstico — cuántas actividades cargaron por rancho
+      var farmCount = {};
+      for(var fi=0;fi<ALL_ACTS.length;fi++){
+        var fn = ALL_ACTS[fi].farm || '?';
+        farmCount[fn] = (farmCount[fn]||0) + 1;
+      }
+      console.log('✅ Tasks cargadas:', ALL_ACTS.length, 'total. Por rancho:', JSON.stringify(farmCount));
     } else {
       ALL_ACTS = FALLBACK_ACTS.slice();
+      console.warn('⚠️ Tasks FALLBACK usado. err:', err, 'data:', data ? JSON.stringify(data).slice(0,200) : 'null');
     }
     loaded.tasks = true;
     checkDone();
