@@ -398,6 +398,19 @@ html.login-locked{overflow:hidden!important;height:100%!important}
 .conn-dot{width:7px;height:7px;border-radius:50%}
 .conn-badge.online .conn-dot{background:#7fff7f}
 .conn-badge.offline .conn-dot{background:#ff9999}
+/* Beta2-V3: Tabla semanal */
+.sem-th{background:var(--g);color:#fff;padding:6px 4px;text-align:center;font-size:11px;font-weight:700;white-space:nowrap;border:1px solid #8899cc}
+.sem-td{padding:4px 3px;text-align:center;border:1px solid var(--bd);font-size:12px;vertical-align:top}
+.sem-name{text-align:left;font-weight:600;font-size:11px;white-space:nowrap;min-width:120px;padding:4px 6px;background:#f8f9ff}
+.sem-input{width:100%;padding:4px;border:1px solid #dde;border-radius:4px;text-align:center;font-size:11px;font-family:'DM Sans',sans-serif}
+.sem-input:focus{outline:2px solid var(--g2);border-color:var(--g2)}
+.sem-total{font-weight:700;color:var(--g);font-size:12px;background:#eef1ff}
+.sem-day-head{font-size:10px;display:block;color:rgba(255,255,255,.7)}
+.sem-time-cell{display:flex;flex-direction:column;gap:2px;min-width:70px}
+.sem-time-cell input{font-size:10px;padding:2px 3px}
+.sem-time-cell label{font-size:8px;color:var(--gr);font-weight:600;text-align:left}
+.sem-hrs-val{font-weight:700;color:var(--dk);font-size:13px;text-align:center;margin-top:2px}
+.sem-foot{background:#d0d8ff;font-weight:700;color:var(--g);font-size:12px;border:1px solid #aab}
 .queue-badge{display:none;background:rgba(255,152,0,.9);color:#fff;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;cursor:pointer}
 .days-warn{display:none;background:rgba(204,34,34,.9);color:#fff;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;animation:offPulse 2s infinite}
 .loading-txt{color:#fff;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600}
@@ -431,6 +444,7 @@ html.login-locked{overflow:hidden!important;height:100%!important}
     <button class="tab" onclick="go(4)">⑤ Ausencias</button>
     <button class="tab" onclick="go(5)">⑥ Invoice</button>
     <button class="tab" onclick="go(6)">⑦ Análisis</button>
+    <button class="tab" onclick="go(7)">⑧ Semanal</button>
   </div>
 </header>
 <!-- ── LOGIN SCREEN ── -->
@@ -1020,6 +1034,54 @@ html.login-locked{overflow:hidden!important;height:100%!important}
     </div>
   </div>
   <div id="anWorkers"></div>
+</div>
+
+<!-- PAGE 7 — SEMANAL -->
+<div class="pg" id="p7">
+  <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px;margin-bottom:3px">📅 Hoja Semanal</div>
+  <div style="font-size:13px;color:var(--gr);margin-bottom:11px">Control de horas por semana — Lunes a Domingo</div>
+
+  <div class="card">
+    <div class="ct">📋 CONFIGURACIÓN DE SEMANA</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">
+      <div style="flex:1;min-width:140px">
+        <label style="font-size:11px;font-weight:700;color:var(--dk)">SEMANA DEL (LUNES)</label>
+        <input type="date" id="semWeekStart" onchange="onSemWeekChange()" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:8px;font-size:14px">
+      </div>
+      <div style="flex:1;min-width:140px">
+        <label style="font-size:11px;font-weight:700;color:var(--dk)">ACTIVIDAD</label>
+        <select id="semActivity" onchange="onSemActivityChange()" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:8px;font-size:14px">
+          <option value="">— Selecciona actividad —</option>
+        </select>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <div style="flex:1;min-width:120px">
+        <label style="font-size:11px;font-weight:700;color:var(--dk)">RANCHO</label>
+        <input type="text" id="semRancho" placeholder="Rancho" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:8px;font-size:14px">
+      </div>
+      <div style="flex:1;min-width:120px">
+        <label style="font-size:11px;font-weight:700;color:var(--dk)">FINCA / LABOR</label>
+        <input type="text" id="semFinca" placeholder="Labor" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:8px;font-size:14px">
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabla semanal dinámica -->
+  <div id="semTableWrap" style="display:none">
+    <div class="card" style="overflow-x:auto;padding:8px">
+      <table id="semTable" style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead id="semThead"></thead>
+        <tbody id="semTbody"></tbody>
+        <tfoot id="semTfoot"></tfoot>
+      </table>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+      <button class="btn" style="background:var(--g);color:#fff;flex:1" onclick="generateSemPDF()">📄 Generar PDF Semanal</button>
+      <button class="btn" style="background:#1a3a5c;color:#fff;flex:1" onclick="sendSemToSheets()">📊 Enviar a Sheets</button>
+    </div>
+  </div>
 </div>
 
 <!-- QR SCANNER OVERLAY -->
@@ -3545,19 +3607,21 @@ function go(n){
   }
   if(n===5) refreshInvoiceAuto();
   if(n===6) buildAnalisis();
+  if(n===7) initSemTab();
   var pgs=document.querySelectorAll('.pg'); for(var i=0;i<pgs.length;i++) pgs[i].classList.toggle('on',i===n);
   var tabs=document.querySelectorAll('.tab'); for(var i=0;i<tabs.length;i++){ tabs[i].classList.remove('act','done'); if(i===n)tabs[i].classList.add('act'); else if(i<n)tabs[i].classList.add('done'); }
   gEl('addbar').classList.toggle('on',n===1);
   var ausBar=gEl('ausBar'); if(ausBar) ausBar.style.display=(n===4?'block':'none');
   pg=n; updNav(); window.scrollTo(0,0);
 }
-function next(){ if(pg<6)go(pg+1); }
+function next(){ if(pg<7)go(pg+1); }
 function prev(){ if(pg>0)go(pg-1); }
 function updNav(){
   gEl('np').style.display=pg===0?'none':'';
   var nn=gEl('nn');
   if(pg===4){ nn.textContent='💾 Guardar'; nn.onclick=save; }
   else if(pg===6){ nn.textContent='💾 Guardar'; nn.onclick=save; }
+  else if(pg===7){ nn.textContent='💾 Guardar'; nn.onclick=save; }
   else { nn.textContent='Siguiente →'; nn.onclick=next; }
 }
 function toast(msg){ var t=gEl('toast'); t.textContent=msg; t.classList.add('on'); setTimeout(function(){ t.classList.remove('on'); },2500); }
@@ -4177,7 +4241,7 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     +'<div>'
     +'<div style="font-size:16px;font-weight:700;color:#1a2b8c;line-height:1.1">eberry harvest company llc</div>'
     +'<div style="font-size:13px;font-weight:900;letter-spacing:.5px">DAILY PAYROLL SHEET</div>'
-    +'<div style="font-size:10px;color:#111;margin-top:2px">Farm: '+vals.rancho+' &nbsp;|&nbsp; Bus #'+vals.numBus+' &nbsp;|&nbsp; '+vals.surquero+' &nbsp;|&nbsp; Lunch: '+lunchMin+' min</div>'
+    +'<div style="font-size:10px;color:#111;margin-top:2px">Farm: '+vals.rancho+' &nbsp;|&nbsp; Bus #'+vals.numBus+' &nbsp;|&nbsp; '+(currentUser&&currentUser.isAdmin?'ADM':vals.surquero)+' &nbsp;|&nbsp; Lunch: '+lunchMin+' min</div>'
     +'</div></div>'
     +'<div style="text-align:right">'
     +'<div style="font-size:8px;font-weight:700;color:#333;text-transform:uppercase;letter-spacing:1px">DATE / FECHA</div>'
@@ -4205,7 +4269,7 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
         +rows2
         +'</table></div>';
     })() : '')
-    +'<div class="ft">'+vals.rancho+' &nbsp;|&nbsp; '+vals.fecha+' &nbsp;|&nbsp; '+wks.length+' trabajadores &nbsp;|&nbsp; Bus: #'+vals.numBus+' &nbsp;|&nbsp; Surquero: '+vals.surquero+' &nbsp;|&nbsp; Generado: '+new Date().toLocaleString()+'</div>'
+    +'<div class="ft">'+vals.rancho+' &nbsp;|&nbsp; '+vals.fecha+' &nbsp;|&nbsp; '+wks.length+' trabajadores &nbsp;|&nbsp; Bus: #'+vals.numBus+' &nbsp;|&nbsp; Surquero: '+(currentUser&&currentUser.isAdmin?'ADM':vals.surquero)+' &nbsp;|&nbsp; Generado: '+new Date().toLocaleString()+'</div>'
     +'<div class="nopr" style="text-align:center;margin-top:16px"><button onclick="window.print()" style="background:#1a7a4a;color:#fff;border:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-right:10px">🖨️ Imprimir / Guardar PDF</button><button onclick="window.close()" style="background:#eee;color:#555;border:none;padding:12px 20px;border-radius:8px;font-size:14px;cursor:pointer">Cerrar</button></div>'
     +'</body></html>';
   var win=window.open('','_blank','width=1000,height=700');
@@ -6800,6 +6864,505 @@ function retryFaceID(){
   } else {
     video.srcObject = fidStream;
     video.play().catch(function(){});
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Beta2-V3: PESTAÑA SEMANAL — Control de horas Lunes a Domingo
+   ═══════════════════════════════════════════════════════════════ */
+var SEM_KEY = 'eb_semanal_v1';
+var semData = {}; // {weekStart:'2026-03-23', actIdx:0, rancho:'', finca:'', rows:[{wid, name, empNum, days:[{ini,fin,lIni,lFin}x7]}]}
+var SEM_DAYS = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
+var SEM_DAYS_FULL = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
+
+function initSemTab(){
+  // Poblar select de actividades (solo tipo Hora)
+  var sel = gEl('semActivity');
+  if(sel && sel.options.length <= 1){
+    var allActs = (ACTS||[]).concat(GRUPAL_ACTS||[]);
+    for(var i=0;i<allActs.length;i++){
+      if(allActs[i].hr || (allActs[i].tipo||'').toLowerCase()==='hora'){
+        var opt = document.createElement('option');
+        opt.value = i;
+        opt.textContent = allActs[i].es + (allActs[i].en ? ' / ' + allActs[i].en : '');
+        opt.setAttribute('data-price', allActs[i].p||0);
+        sel.appendChild(opt);
+      }
+    }
+  }
+  // Si ya hay datos guardados, restaurar
+  loadSemData();
+}
+
+function onSemWeekChange(){
+  var dateStr = gVal('semWeekStart');
+  if(!dateStr) return;
+  // Ajustar al lunes de esa semana
+  var d = new Date(dateStr + 'T12:00:00');
+  var dow = d.getDay(); // 0=dom
+  var diff = dow === 0 ? -6 : 1 - dow;
+  d.setDate(d.getDate() + diff);
+  var mo = d.getMonth()+1; var dy = d.getDate();
+  var monday = d.getFullYear()+'-'+(mo<10?'0'+mo:mo)+'-'+(dy<10?'0'+dy:dy);
+  gEl('semWeekStart').value = monday;
+  buildSemTable();
+}
+
+function onSemActivityChange(){
+  buildSemTable();
+}
+
+function buildSemTable(){
+  var weekStart = gVal('semWeekStart');
+  var actIdx = gVal('semActivity');
+  if(!weekStart || actIdx==='') { gEl('semTableWrap').style.display='none'; return; }
+
+  gEl('semTableWrap').style.display='block';
+
+  // Calcular fechas de la semana
+  var dates = [];
+  var baseD = new Date(weekStart + 'T12:00:00');
+  for(var d=0;d<7;d++){
+    var dd = new Date(baseD);
+    dd.setDate(dd.getDate()+d);
+    var mo=dd.getMonth()+1; var dy=dd.getDate();
+    dates.push((mo<10?'0'+mo:mo)+'/'+(dy<10?'0'+dy:dy));
+  }
+
+  // Workers: usar los que están cargados
+  var wList = workers.length ? workers : [];
+  if(!wList.length){
+    gEl('semThead').innerHTML='';
+    gEl('semTbody').innerHTML='<tr><td style="padding:20px;text-align:center;color:var(--gr)">Agrega trabajadores en la pestaña ② Trabajadores primero</td></tr>';
+    gEl('semTfoot').innerHTML='';
+    return;
+  }
+
+  // Detectar tipo de actividad
+  var allActs = (ACTS||[]).concat(GRUPAL_ACTS||[]);
+  var selAct = allActs[parseInt(actIdx)];
+  var isHourAct = selAct && (selAct.hr || (selAct.tipo||'').toLowerCase()==='hora');
+
+  // Header
+  var thead = '<tr><th class="sem-th" style="min-width:30px">No</th><th class="sem-th" style="min-width:120px">Nombre</th>';
+  for(var d=0;d<7;d++){
+    thead += '<th class="sem-th">' + SEM_DAYS[d] + '<span class="sem-day-head">' + dates[d] + '</span></th>';
+  }
+  thead += '<th class="sem-th" style="background:#0f1a3d">TOTAL</th></tr>';
+  gEl('semThead').innerHTML = thead;
+
+  // Body
+  var tbody = '';
+  for(var w=0;w<wList.length;w++){
+    var wk = wList[w];
+    var rowId = 'sem_' + wk.id;
+    tbody += '<tr>';
+    tbody += '<td class="sem-td" style="font-size:11px;color:#888">' + (w+1) + '</td>';
+    tbody += '<td class="sem-name sem-td">' + escH(wk.name) + '</td>';
+
+    for(var d=0;d<7;d++){
+      var cellId = rowId + '_d' + d;
+      if(isHourAct){
+        tbody += '<td class="sem-td"><div class="sem-time-cell">';
+        tbody += '<label>Ent</label><input type="time" class="sem-input" id="'+cellId+'_ini" onchange="calcSemHours(\''+wk.id+'\','+d+')">';
+        tbody += '<label>Sal</label><input type="time" class="sem-input" id="'+cellId+'_fin" onchange="calcSemHours(\''+wk.id+'\','+d+')">';
+        tbody += '<label>L.Ini</label><input type="time" class="sem-input" id="'+cellId+'_li" onchange="calcSemHours(\''+wk.id+'\','+d+')">';
+        tbody += '<label>L.Fin</label><input type="time" class="sem-input" id="'+cellId+'_lf" onchange="calcSemHours(\''+wk.id+'\','+d+')">';
+        tbody += '<div class="sem-hrs-val" id="'+cellId+'_hrs">0</div>';
+        tbody += '</div></td>';
+      } else {
+        // Día trabajado (tipo daywork o similar) — solo checkbox o número
+        tbody += '<td class="sem-td"><input type="text" inputmode="decimal" class="sem-input" id="'+cellId+'_qty" onchange="calcSemRow(\''+wk.id+'\')" placeholder="0" style="width:50px"></td>';
+      }
+    }
+    tbody += '<td class="sem-total sem-td" id="'+rowId+'_total">0</td>';
+    tbody += '</tr>';
+  }
+  gEl('semTbody').innerHTML = tbody;
+
+  // Footer: totales por día
+  var tfoot = '<tr><td class="sem-foot" colspan="2" style="text-align:right;padding:4px 8px">TOTAL</td>';
+  for(var d=0;d<7;d++){
+    tfoot += '<td class="sem-foot" id="sem_dayTotal_'+d+'" style="text-align:center">0</td>';
+  }
+  tfoot += '<td class="sem-foot" id="sem_grandTotal" style="text-align:center;background:#0f1a3d;color:#fff">0</td>';
+  tfoot += '</tr>';
+  gEl('semTfoot').innerHTML = tfoot;
+
+  // Restaurar datos si existen
+  restoreSemInputs();
+}
+
+function calcSemHours(wid, dayIdx){
+  var cellId = 'sem_' + wid + '_d' + dayIdx;
+  var ini = gVal(cellId + '_ini');
+  var fin = gVal(cellId + '_fin');
+  var lIni = gVal(cellId + '_li');
+  var lFin = gVal(cellId + '_lf');
+
+  var hrs = 0;
+  if(ini && fin){
+    hrs = nh(ini, fin);
+    if(lIni && lFin){
+      var lunchH = nh(lIni, lFin);
+      hrs -= lunchH;
+    }
+  }
+  if(hrs < 0) hrs = 0;
+
+  var el = gEl(cellId + '_hrs');
+  if(el) el.textContent = hrs > 0 ? smartNum(hrs) : '0';
+
+  calcSemRow(wid);
+  saveSemData();
+}
+
+function calcSemRow(wid){
+  var total = 0;
+  var allActs = (ACTS||[]).concat(GRUPAL_ACTS||[]);
+  var selAct = allActs[parseInt(gVal('semActivity'))];
+  var isHour = selAct && (selAct.hr || (selAct.tipo||'').toLowerCase()==='hora');
+
+  for(var d=0;d<7;d++){
+    var cellId = 'sem_' + wid + '_d' + d;
+    if(isHour){
+      var hrsEl = gEl(cellId + '_hrs');
+      total += parseFloat(hrsEl ? hrsEl.textContent : '0') || 0;
+    } else {
+      total += parseFloat(gVal(cellId + '_qty')) || 0;
+    }
+  }
+
+  var totalEl = gEl('sem_' + wid + '_total');
+  if(totalEl) totalEl.textContent = smartNum(total);
+
+  calcSemDayTotals();
+}
+
+function calcSemDayTotals(){
+  var allActs = (ACTS||[]).concat(GRUPAL_ACTS||[]);
+  var selAct = allActs[parseInt(gVal('semActivity'))];
+  var isHour = selAct && (selAct.hr || (selAct.tipo||'').toLowerCase()==='hora');
+  var grand = 0;
+
+  for(var d=0;d<7;d++){
+    var dayT = 0;
+    for(var w=0;w<workers.length;w++){
+      var cellId = 'sem_' + workers[w].id + '_d' + d;
+      if(isHour){
+        var hrsEl = gEl(cellId + '_hrs');
+        dayT += parseFloat(hrsEl ? hrsEl.textContent : '0') || 0;
+      } else {
+        dayT += parseFloat(gVal(cellId + '_qty')) || 0;
+      }
+    }
+    var dayEl = gEl('sem_dayTotal_' + d);
+    if(dayEl) dayEl.textContent = smartNum(dayT);
+    grand += dayT;
+  }
+  var grandEl = gEl('sem_grandTotal');
+  if(grandEl) grandEl.textContent = smartNum(grand);
+}
+
+// ── Guardar/Cargar datos semanales en localStorage ──
+function saveSemData(){
+  var allActs = (ACTS||[]).concat(GRUPAL_ACTS||[]);
+  var selAct = allActs[parseInt(gVal('semActivity'))];
+  var isHour = selAct && (selAct.hr || (selAct.tipo||'').toLowerCase()==='hora');
+
+  var data = {
+    weekStart: gVal('semWeekStart'),
+    actIdx: gVal('semActivity'),
+    rancho: gVal('semRancho'),
+    finca: gVal('semFinca'),
+    rows: []
+  };
+
+  for(var w=0;w<workers.length;w++){
+    var wk = workers[w];
+    var row = {wid:wk.id, name:wk.name, empNum:wk.empNum||'', days:[]};
+    for(var d=0;d<7;d++){
+      var cellId = 'sem_' + wk.id + '_d' + d;
+      if(isHour){
+        row.days.push({
+          ini: gVal(cellId+'_ini'),
+          fin: gVal(cellId+'_fin'),
+          lIni: gVal(cellId+'_li'),
+          lFin: gVal(cellId+'_lf')
+        });
+      } else {
+        row.days.push({qty: gVal(cellId+'_qty')});
+      }
+    }
+    data.rows.push(row);
+  }
+
+  try {
+    var key = SEM_KEY + '_' + (currentUser?currentUser.name:'') + '_' + data.weekStart;
+    localStorage.setItem(key, JSON.stringify(data));
+  } catch(e){}
+}
+
+function loadSemData(){
+  // Intentar restaurar la última semana guardada
+  try {
+    for(var i=0;i<localStorage.length;i++){
+      var k = localStorage.key(i);
+      if(k && k.indexOf(SEM_KEY) === 0){
+        var d = JSON.parse(localStorage.getItem(k));
+        if(d && d.weekStart){
+          gEl('semWeekStart').value = d.weekStart;
+          gEl('semActivity').value = d.actIdx || '';
+          gEl('semRancho').value = d.rancho || '';
+          gEl('semFinca').value = d.finca || '';
+          buildSemTable();
+          return;
+        }
+      }
+    }
+  } catch(e){}
+}
+
+function restoreSemInputs(){
+  try {
+    var key = SEM_KEY + '_' + (currentUser?currentUser.name:'') + '_' + gVal('semWeekStart');
+    var raw = localStorage.getItem(key);
+    if(!raw) return;
+    var data = JSON.parse(raw);
+    if(!data || !data.rows) return;
+
+    var allActs = (ACTS||[]).concat(GRUPAL_ACTS||[]);
+    var selAct = allActs[parseInt(gVal('semActivity'))];
+    var isHour = selAct && (selAct.hr || (selAct.tipo||'').toLowerCase()==='hora');
+
+    for(var r=0;r<data.rows.length;r++){
+      var row = data.rows[r];
+      // Encontrar worker por nombre (wid puede cambiar entre sesiones)
+      var wk = null;
+      for(var w=0;w<workers.length;w++){
+        if(workers[w].name === row.name){ wk = workers[w]; break; }
+      }
+      if(!wk) continue;
+
+      for(var d=0;d<7;d++){
+        var cellId = 'sem_' + wk.id + '_d' + d;
+        var dayData = row.days[d];
+        if(!dayData) continue;
+
+        if(isHour){
+          var iniEl = gEl(cellId+'_ini'); if(iniEl && dayData.ini) iniEl.value = dayData.ini;
+          var finEl = gEl(cellId+'_fin'); if(finEl && dayData.fin) finEl.value = dayData.fin;
+          var liEl = gEl(cellId+'_li'); if(liEl && dayData.lIni) liEl.value = dayData.lIni;
+          var lfEl = gEl(cellId+'_lf'); if(lfEl && dayData.lFin) lfEl.value = dayData.lFin;
+          calcSemHours(wk.id, d);
+        } else {
+          var qEl = gEl(cellId+'_qty'); if(qEl && dayData.qty) qEl.value = dayData.qty;
+        }
+      }
+      calcSemRow(wk.id);
+    }
+  } catch(e){ console.warn('[eBerry] Error restaurando semanal:', e); }
+}
+
+// ── PDF Semanal ──
+function generateSemPDF(){
+  var weekStart = gVal('semWeekStart');
+  if(!weekStart){ toast('⚠️ Selecciona la semana primero'); return; }
+  if(!workers.length){ toast('⚠️ No hay trabajadores'); return; }
+
+  var allActs = (ACTS||[]).concat(GRUPAL_ACTS||[]);
+  var selAct = allActs[parseInt(gVal('semActivity'))];
+  var isHour = selAct && (selAct.hr || (selAct.tipo||'').toLowerCase()==='hora');
+  var actName = selAct ? (selAct.es||selAct.en||'Actividad') : 'Actividad';
+
+  // Fechas de la semana
+  var dates = [];
+  var baseD = new Date(weekStart + 'T12:00:00');
+  for(var d=0;d<7;d++){
+    var dd = new Date(baseD);
+    dd.setDate(dd.getDate()+d);
+    var mo=dd.getMonth()+1; var dy=dd.getDate();
+    var dayLabel = (dy<10?'0'+dy:dy)+'-'+['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][dd.getMonth()];
+    dates.push(dayLabel);
+  }
+
+  // Beta2-V3: Surquero = ADM si sesión es admin
+  var surqueroName = gVal('surquero') || '';
+  if(currentUser && currentUser.isAdmin) surqueroName = 'ADM';
+
+  var html = '<!DOCTYPE html><html><head><meta charset="utf-8">'
+    +'<title>Semanal - ' + weekStart + '</title>'
+    +'<style>'
+    +'body{font-family:Arial,sans-serif;margin:15px;font-size:11px}'
+    +'h2{text-align:center;margin:5px 0;font-size:16px}'
+    +'.info{display:flex;justify-content:space-between;margin:8px 0;font-size:11px}'
+    +'table{width:100%;border-collapse:collapse;margin-top:8px}'
+    +'th{background:#1a2b8c;color:#fff;padding:5px 3px;font-size:10px;border:1px solid #8899cc;text-align:center}'
+    +'td{border:1px solid #aab;padding:4px 3px;font-size:10px;text-align:center}'
+    +'.name{text-align:left;font-weight:600;white-space:nowrap}'
+    +'.total{font-weight:700;background:#d0d8ff;color:#1a2b8c}'
+    +'.grand{font-weight:900;background:#1a2b8c;color:#fff}'
+    +'@media print{@page{size:landscape;margin:10mm}}'
+    +'</style></head><body>';
+
+  html += '<h2>📅 ' + actName + ' — Hoja Semanal</h2>';
+  html += '<div class="info">'
+    +'<span><b>Rancho:</b> '+(gVal('semRancho')||'—')+'</span>'
+    +'<span><b>Finca:</b> '+(gVal('semFinca')||'—')+'</span>'
+    +'<span><b>Surquero:</b> '+surqueroName+'</span>'
+    +'<span><b>Semana:</b> '+dates[0]+' al '+dates[6]+'</span>'
+    +'</div>';
+
+  html += '<table><thead><tr><th>No</th><th style="min-width:120px">Nombre</th>';
+  for(var d=0;d<7;d++){
+    html += '<th>'+SEM_DAYS[d]+'<br>'+dates[d]+'</th>';
+  }
+  html += '<th style="background:#0f1a3d">TOTAL</th></tr></thead><tbody>';
+
+  var dayTotals = [0,0,0,0,0,0,0];
+  var grandTotal = 0;
+
+  for(var w=0;w<workers.length;w++){
+    var wk = workers[w];
+    var rowTotal = 0;
+    html += '<tr><td>'+(w+1)+'</td><td class="name">'+escH(wk.name)+'</td>';
+
+    for(var d=0;d<7;d++){
+      var cellId = 'sem_' + wk.id + '_d' + d;
+      var val = 0;
+      if(isHour){
+        var hrsEl = gEl(cellId+'_hrs');
+        val = parseFloat(hrsEl ? hrsEl.textContent : '0') || 0;
+      } else {
+        val = parseFloat(gVal(cellId+'_qty')) || 0;
+      }
+      html += '<td>'+(val > 0 ? smartNum(val) : '')+'</td>';
+      rowTotal += val;
+      dayTotals[d] += val;
+    }
+    html += '<td class="total">'+smartNum(rowTotal)+'</td></tr>';
+    grandTotal += rowTotal;
+  }
+
+  html += '</tbody><tfoot><tr><td class="total" colspan="2" style="text-align:right;font-weight:900">TOTAL</td>';
+  for(var d=0;d<7;d++){
+    html += '<td class="total">'+smartNum(dayTotals[d])+'</td>';
+  }
+  html += '<td class="grand">'+smartNum(grandTotal)+'</td></tr></tfoot></table>';
+  html += '</body></html>';
+
+  // Abrir PDF (misma lógica que buildPDFWindow con fallback iOS)
+  try {
+    var w2 = window.open('','_blank');
+    if(w2){
+      w2.document.write(html);
+      w2.document.close();
+    } else {
+      var blob = new Blob([html],{type:'text/html'});
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.target = '_blank';
+      a.click();
+    }
+    toast('✅ PDF semanal generado');
+  } catch(e){
+    toast('❌ Error generando PDF: '+e.message);
+  }
+}
+
+// ── Envío semanal a Sheets ──
+function sendSemToSheets(){
+  var weekStart = gVal('semWeekStart');
+  if(!weekStart){ toast('⚠️ Selecciona la semana'); return; }
+  if(!workers.length){ toast('⚠️ No hay trabajadores'); return; }
+
+  var allActs = (ACTS||[]).concat(GRUPAL_ACTS||[]);
+  var selAct = allActs[parseInt(gVal('semActivity'))];
+  var isHour = selAct && (selAct.hr || (selAct.tipo||'').toLowerCase()==='hora');
+
+  var surqueroName = gVal('surquero') || '';
+  if(currentUser && currentUser.isAdmin) surqueroName = 'ADM';
+
+  var payload = {
+    action: 'semanal',
+    weekStart: weekStart,
+    rancho: gVal('semRancho'),
+    finca: gVal('semFinca'),
+    surquero: surqueroName,
+    actEs: selAct ? selAct.es : '',
+    actEn: selAct ? (selAct.en||selAct.es) : '',
+    tipo: isHour ? 'Hora' : (selAct?selAct.tipo:''),
+    unitPrice: selAct ? selAct.p : 0,
+    workers: []
+  };
+
+  for(var w=0;w<workers.length;w++){
+    var wk = workers[w];
+    var row = {name:wk.name, empNum:wk.empNum||'', days:[]};
+    var anyData = false;
+
+    for(var d=0;d<7;d++){
+      var cellId = 'sem_' + wk.id + '_d' + d;
+      if(isHour){
+        var hrsEl = gEl(cellId+'_hrs');
+        var hrs = parseFloat(hrsEl ? hrsEl.textContent : '0') || 0;
+        row.days.push({
+          hrs: hrs,
+          ini: gVal(cellId+'_ini'),
+          fin: gVal(cellId+'_fin'),
+          lIni: gVal(cellId+'_li'),
+          lFin: gVal(cellId+'_lf')
+        });
+        if(hrs > 0) anyData = true;
+      } else {
+        var qty = parseFloat(gVal(cellId+'_qty')) || 0;
+        row.days.push({qty: qty});
+        if(qty > 0) anyData = true;
+      }
+    }
+    if(anyData) payload.workers.push(row);
+  }
+
+  if(!payload.workers.length){ toast('⚠️ No hay datos para enviar'); return; }
+
+  // Beta2: Usar cola offline si no hay señal
+  if(!navigator.onLine){
+    addToOfflineQueue(payload);
+    toast('📥 Semanal guardado en cola offline');
+    return;
+  }
+
+  toast('📤 Enviando semanal...');
+  try {
+    var oldFr = document.getElementById('_gsSemFrame');
+    if(oldFr) oldFr.parentNode.removeChild(oldFr);
+    var oldFm = document.getElementById('_gsSemForm');
+    if(oldFm) oldFm.parentNode.removeChild(oldFm);
+
+    var fr = document.createElement('iframe');
+    fr.id = '_gsSemFrame'; fr.name = '_gsSemFrame';
+    fr.style.cssText = 'display:none';
+    document.body.appendChild(fr);
+
+    var fm = document.createElement('form');
+    fm.id = '_gsSemForm'; fm.method = 'POST';
+    fm.action = SHEETS_URL; fm.target = '_gsSemFrame';
+    fm.style.cssText = 'display:none';
+
+    var inp = document.createElement('input');
+    inp.type = 'hidden'; inp.name = 'payload';
+    inp.value = JSON.stringify(payload);
+    fm.appendChild(inp);
+    document.body.appendChild(fm);
+
+    fr.onload = function(){
+      recordLastSend();
+      toast('✅ ' + payload.workers.length + ' trabajador(es) semanal enviado a Sheets');
+    };
+    fm.submit();
+  } catch(e){
+    addToOfflineQueue(payload);
+    toast('⚠️ Error — guardado en cola offline');
   }
 }
 
