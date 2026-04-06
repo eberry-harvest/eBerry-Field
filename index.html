@@ -1579,6 +1579,16 @@ function onRanchoChange(){
     NAMES = ranchoWorkers.map(function(w){ return w.name; });
   }
 
+  // Gamma2: Sincronizar rancho → Semanal tab en tiempo real
+  var semRanchoSel = gEl('semRancho');
+  if(rancho && semRanchoSel){
+    semRanchoSel.value = rancho;
+    semRanchoSel.disabled = true;
+    semRanchoSel.style.opacity = '0.7';
+    semRanchoSel.title = 'Rancho tomado de Parámetros';
+    if(typeof onSemRanchoChange === 'function') onSemRanchoChange();
+  }
+
   autoSave();
 }
 
@@ -7164,7 +7174,10 @@ function buildSemTable(){
   for(var d=0;d<7;d++){
     thead += '<th class="sem-th">' + SEM_DAYS[d] + '<span class="sem-day-head">' + dates[d] + '</span></th>';
   }
-  thead += '<th class="sem-th" style="background:#0f1a3d">TOTAL</th></tr>';
+  thead += '<th class="sem-th" style="background:#0f1a3d">TOTAL</th>';
+  // Gamma2: Columna de pago (solo visual, no va a PDF ni Sheets)
+  thead += '<th class="sem-th" style="background:#1a6b3a">$ Pago</th>';
+  thead += '</tr>';
   gEl('semThead').innerHTML = thead;
 
   // Body
@@ -7185,13 +7198,19 @@ function buildSemTable(){
         tbody += '<label>L.INI</label><input type="text" inputmode="text" class="sem-input sem-time-txt" id="'+cellId+'_li" placeholder="12:00" onblur="normTimeInput(this);calcSemHours(\''+wk.id+'\','+d+');semAutoFill(\''+wk.id+'\','+d+',\'li\')">';
         tbody += '<label>L.FIN</label><input type="text" inputmode="text" class="sem-input sem-time-txt" id="'+cellId+'_lf" placeholder="12:30" onblur="normTimeInput(this);calcSemHours(\''+wk.id+'\','+d+');semAutoFill(\''+wk.id+'\','+d+',\'lf\')">';
         tbody += '<div class="sem-hrs-val" id="'+cellId+'_hrs">0</div>';
+        // Gamma2: Pago diario (solo visual)
+        tbody += '<div id="'+cellId+'_dpay" style="font-size:9px;color:#1a6b3a;font-weight:700;margin-top:2px">$0</div>';
         tbody += '</div></td>';
       } else {
         // Día trabajado (tipo daywork o similar) — solo checkbox o número
-        tbody += '<td class="sem-td"><input type="text" inputmode="decimal" class="sem-input" id="'+cellId+'_qty" onchange="calcSemRow(\''+wk.id+'\')" placeholder="0" style="width:50px"></td>';
+        tbody += '<td class="sem-td"><input type="text" inputmode="decimal" class="sem-input" id="'+cellId+'_qty" onchange="calcSemRow(\''+wk.id+'\')" placeholder="0" style="width:50px">'
+          // Gamma2: Pago diario (solo visual)
+          +'<div id="'+cellId+'_dpay" style="font-size:9px;color:#1a6b3a;font-weight:700;margin-top:2px">$0</div></td>';
       }
     }
     tbody += '<td class="sem-total sem-td" id="'+rowId+'_total">0</td>';
+    // Gamma2: Celda de pago (solo visual)
+    tbody += '<td class="sem-td" id="'+rowId+'_pay" style="font-weight:700;color:#1a6b3a;font-size:11px">$0</td>';
     tbody += '</tr>';
   }
   gEl('semTbody').innerHTML = tbody;
@@ -7202,6 +7221,8 @@ function buildSemTable(){
     tfoot += '<td class="sem-foot" id="sem_dayTotal_'+d+'" style="text-align:center">0</td>';
   }
   tfoot += '<td class="sem-foot" id="sem_grandTotal" style="text-align:center;background:#0f1a3d;color:#fff">0</td>';
+  // Gamma2: Total de pago en footer
+  tfoot += '<td class="sem-foot" id="sem_grandPay" style="text-align:center;background:#1a6b3a;color:#fff;font-weight:900">$0</td>';
   tfoot += '</tr>';
   gEl('semTfoot').innerHTML = tfoot;
 
@@ -7269,19 +7290,30 @@ function calcSemRow(wid){
   var total = 0;
   var selAct = ALL_ACTS[parseInt(gVal('semActivity'))];
   var isHour = selAct && (selAct.hr || (selAct.tipo||'').toLowerCase()==='hora');
+  var price = selAct ? (parseFloat(selAct.p) || 0) : 0;
 
   for(var d=0;d<7;d++){
     var cellId = 'sem_' + wid + '_d' + d;
+    var dayVal = 0;
     if(isHour){
       var hrsEl = gEl(cellId + '_hrs');
-      total += parseFloat(hrsEl ? hrsEl.textContent : '0') || 0;
+      dayVal = parseFloat(hrsEl ? hrsEl.textContent : '0') || 0;
     } else {
-      total += parseFloat(gVal(cellId + '_qty')) || 0;
+      dayVal = parseFloat(gVal(cellId + '_qty')) || 0;
     }
+    total += dayVal;
+    // Gamma2: Pago por día
+    var dpayEl = gEl(cellId + '_dpay');
+    if(dpayEl) dpayEl.textContent = dayVal > 0 ? '$' + smartNum(dayVal * price) : '';
   }
 
   var totalEl = gEl('sem_' + wid + '_total');
   if(totalEl) totalEl.textContent = smartNum(total);
+
+  // Gamma2: Pago total del worker
+  var pay = total * price;
+  var payEl = gEl('sem_' + wid + '_pay');
+  if(payEl) payEl.textContent = '$' + smartNum(pay);
 
   calcSemDayTotals();
 }
@@ -7308,6 +7340,12 @@ function calcSemDayTotals(){
   }
   var grandEl = gEl('sem_grandTotal');
   if(grandEl) grandEl.textContent = smartNum(grand);
+
+  // Gamma2: Gran total de pago
+  var price = selAct ? (parseFloat(selAct.p) || 0) : 0;
+  var grandPay = grand * price;
+  var grandPayEl = gEl('sem_grandPay');
+  if(grandPayEl) grandPayEl.textContent = '$' + smartNum(grandPay);
 }
 
 // ── Guardar/Cargar datos semanales en localStorage ──
@@ -7463,7 +7501,8 @@ function generateSemPDF(){
     +'<div style="font-size:14px;font-weight:900;color:#1a2b8c;letter-spacing:.5px">'+dates[0]+' al '+dates[6]+'</div>'
     +'</div></div>';
 
-  html += '<table><thead><tr><th>No</th><th style="min-width:120px">Nombre</th>';
+  // Gamma2: Columna Emp# agregada
+  html += '<table><thead><tr><th>No</th><th>Emp#</th><th style="min-width:120px">Nombre</th>';
   for(var d=0;d<7;d++){
     html += '<th>'+SEM_DAYS[d]+'<br>'+dates[d]+'</th>';
   }
@@ -7475,7 +7514,7 @@ function generateSemPDF(){
   for(var w=0;w<workers.length;w++){
     var wk = workers[w];
     var rowTotal = 0;
-    html += '<tr><td>'+(w+1)+'</td><td class="name">'+escH(wk.name)+'</td>';
+    html += '<tr><td>'+(w+1)+'</td><td style="color:#8b0000;font-weight:700;font-size:9px">'+(wk.empNum?'#'+wk.empNum:'')+'</td><td class="name">'+escH(wk.name)+'</td>';
 
     for(var d=0;d<7;d++){
       var cellId = 'sem_' + wk.id + '_d' + d;
@@ -7494,7 +7533,7 @@ function generateSemPDF(){
     grandTotal += rowTotal;
   }
 
-  html += '</tbody><tfoot><tr><td class="total" colspan="2" style="text-align:right;font-weight:900">TOTAL</td>';
+  html += '</tbody><tfoot><tr><td class="total" colspan="3" style="text-align:right;font-weight:900">TOTAL</td>';
   for(var d=0;d<7;d++){
     html += '<td class="total">'+smartNum(dayTotals[d])+'</td>';
   }
