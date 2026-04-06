@@ -7445,16 +7445,23 @@ function generateSemPDF(){
     +'.name{text-align:left;font-weight:600;white-space:nowrap}'
     +'.total{font-weight:700;background:#d0d8ff;color:#1a2b8c}'
     +'.grand{font-weight:900;background:#1a2b8c;color:#fff}'
-    +'@media print{@page{size:landscape;margin:10mm}}'
+    +'.ft{font-size:8px;color:#333;text-align:center;margin-top:6px;border-top:1px solid #ddd;padding-top:5px}'
+    +'@media print{.nopr{display:none}@page{size:landscape;margin:10mm}}'
     +'</style></head><body>';
 
-  html += '<h2>📅 ' + actName + ' — Hoja Semanal</h2>';
-  html += '<div class="info">'
-    +'<span><b>Rancho:</b> '+(gVal('semRancho')||'—')+'</span>'
-    +'<span><b>Finca:</b> '+(gVal('semFinca')||'—')+'</span>'
-    +'<span><b>Surquero:</b> '+surqueroName+'</span>'
-    +'<span><b>Semana:</b> '+dates[0]+' al '+dates[6]+'</span>'
-    +'</div>';
+  // Gamma2: Header con logo eBerry (igual que Daily Payroll)
+  html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;border-bottom:3px solid #1a2b8c;padding-bottom:8px">'
+    +'<div style="display:flex;align-items:center;gap:10px">'
+    +'<img src="'+EBERRY_LOGO+'" style="height:55px;width:auto" alt="eBerry">'
+    +'<div>'
+    +'<div style="font-size:16px;font-weight:700;color:#1a2b8c;line-height:1.1">eberry harvest company llc</div>'
+    +'<div style="font-size:13px;font-weight:900;letter-spacing:.5px">'+actName+' &mdash; Hoja Semanal</div>'
+    +'<div style="font-size:10px;color:#111;margin-top:2px">Rancho: '+(gVal('semRancho')||'—')+' &nbsp;|&nbsp; Finca: '+(gVal('semFinca')||'—')+' &nbsp;|&nbsp; Surquero: '+surqueroName+'</div>'
+    +'</div></div>'
+    +'<div style="text-align:right">'
+    +'<div style="font-size:8px;font-weight:700;color:#333;text-transform:uppercase;letter-spacing:1px">SEMANA</div>'
+    +'<div style="font-size:14px;font-weight:900;color:#1a2b8c;letter-spacing:.5px">'+dates[0]+' al '+dates[6]+'</div>'
+    +'</div></div>';
 
   html += '<table><thead><tr><th>No</th><th style="min-width:120px">Nombre</th>';
   for(var d=0;d<7;d++){
@@ -7492,6 +7499,9 @@ function generateSemPDF(){
     html += '<td class="total">'+smartNum(dayTotals[d])+'</td>';
   }
   html += '<td class="grand">'+smartNum(grandTotal)+'</td></tr></tfoot></table>';
+  // Gamma2: Footer + botones Imprimir/Cerrar
+  html += '<div class="ft">'+(gVal('semRancho')||'—')+' &nbsp;|&nbsp; Semana: '+dates[0]+' al '+dates[6]+' &nbsp;|&nbsp; '+workers.length+' trabajadores &nbsp;|&nbsp; Surquero: '+surqueroName+' &nbsp;|&nbsp; Generado: '+new Date().toLocaleString()+'</div>';
+  html += '<div class="nopr" style="text-align:center;margin-top:16px"><button onclick="window.print()" style="background:#1a7a4a;color:#fff;border:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-right:10px">🖨️ Imprimir / Guardar PDF</button><button onclick="window.close()" style="background:#eee;color:#555;border:none;padding:12px 20px;border-radius:8px;font-size:14px;cursor:pointer">Cerrar</button></div>';
   html += '</body></html>';
 
   // Abrir PDF (misma lógica que buildPDFWindow con fallback iOS)
