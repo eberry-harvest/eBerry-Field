@@ -7192,10 +7192,11 @@ function calcSemHours(wid, dayIdx){
 }
 
 // V11: Auto-llenar horario del primer worker a los demás
+// V13: fix — wid llega como string desde onchange, workers[].id es number
 function semAutoFill(wid, dayIdx, field){
   if(!workers.length) return;
   // Solo auto-llenar si el que cambió es el PRIMER worker
-  if(workers[0].id !== wid) return;
+  if(String(workers[0].id) !== String(wid)) return;
 
   var srcId = 'sem_' + wid + '_d' + dayIdx + '_' + field;
   var srcVal = gVal(srcId);
@@ -7206,7 +7207,7 @@ function semAutoFill(wid, dayIdx, field){
     var tgtEl = gEl(tgtId);
     if(tgtEl && !tgtEl.value){ // solo si está vacío
       tgtEl.value = srcVal;
-      calcSemHours(workers[w].id, dayIdx);
+      calcSemHours(String(workers[w].id), dayIdx);
     }
   }
 }
