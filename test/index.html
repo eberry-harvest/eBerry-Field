@@ -404,6 +404,8 @@ html.login-locked{overflow:hidden!important;height:100%!important}
 .sem-name{text-align:left;font-weight:600;font-size:11px;white-space:nowrap;min-width:120px;padding:4px 6px;background:#f8f9ff}
 .sem-input{width:100%;padding:4px;border:1px solid #dde;border-radius:4px;text-align:center;font-size:11px;font-family:'DM Sans',sans-serif}
 .sem-input:focus{outline:2px solid var(--g2);border-color:var(--g2)}
+.sem-time-txt{width:90px;font-size:12px;letter-spacing:0.5px}
+.sem-time-txt::placeholder{color:#bbc;font-size:10px}
 .sem-total{font-weight:700;color:var(--g);font-size:12px;background:#eef1ff}
 .sem-day-head{font-size:10px;display:block;color:rgba(255,255,255,.7)}
 .sem-time-cell{display:flex;flex-direction:column;gap:2px;min-width:70px}
@@ -2069,6 +2071,51 @@ function findInStrArr(arr,name){
 function smartNum(n){ var v=parseFloat(n)||0; return v%1===0?String(Math.round(v)):v.toFixed(2); }
 
 function t2m(t){ if(!t||t.indexOf(':')<0)return null; var p=t.split(':'); return parseInt(p[0],10)*60+parseInt(p[1],10); }
+
+// V15: Parser flexible de hora — acepta "20:00", "8:00 PM", "8pm", "8:00pm", "8 pm", "0800"
+function parseFlexTime(raw){
+  if(!raw) return null;
+  var s = raw.trim().toLowerCase().replace(/\s+/g,' ');
+  var isPM = s.indexOf('pm') >= 0 || s.indexOf('p.m') >= 0;
+  var isAM = s.indexOf('am') >= 0 || s.indexOf('a.m') >= 0;
+  s = s.replace(/(am|pm|a\.m\.?|p\.m\.?)/gi,'').trim();
+
+  var h = 0, m = 0;
+  if(s.indexOf(':') >= 0){
+    var parts = s.split(':');
+    h = parseInt(parts[0],10) || 0;
+    m = parseInt(parts[1],10) || 0;
+  } else if(s.length === 3 || s.length === 4){
+    // "800" → 8:00, "2000" → 20:00
+    var num = parseInt(s,10);
+    if(s.length === 3){ h = Math.floor(num/100); m = num%100; }
+    else { h = Math.floor(num/100); m = num%100; }
+  } else {
+    h = parseInt(s,10) || 0;
+    m = 0;
+  }
+
+  // Aplicar AM/PM
+  if(isPM && h < 12) h += 12;
+  if(isAM && h === 12) h = 0;
+
+  // Validar
+  if(h < 0 || h > 23 || m < 0 || m > 59) return null;
+
+  return {h:h, m:m, str:(h<10?'0':'')+h+':'+(m<10?'0':'')+m};
+}
+
+// V15: Normalizar input de hora al perder foco — muestra formato consistente
+function normTimeInput(el){
+  if(!el || !el.value) return;
+  var parsed = parseFlexTime(el.value);
+  if(parsed){
+    el.value = parsed.str; // "20:00" formato 24h internamente
+    el.style.color = '';
+  } else {
+    el.style.color = 'red'; // indicar error
+  }
+}
 function nh(a,b){
   var e=t2m(a),s=t2m(b); if(e===null||s===null)return 0;
   // Cruce de medianoche: si salida <= entrada, sumar 24h (1440 min)
@@ -7133,10 +7180,10 @@ function buildSemTable(){
       var cellId = rowId + '_d' + d;
       if(isHourAct){
         tbody += '<td class="sem-td"><div class="sem-time-cell">';
-        tbody += '<label>ENT</label><input type="time" class="sem-input" id="'+cellId+'_ini" onchange="calcSemHours(\''+wk.id+'\','+d+');semAutoFill(\''+wk.id+'\','+d+',\'ini\')">';
-        tbody += '<label>SAL</label><input type="time" class="sem-input" id="'+cellId+'_fin" onchange="calcSemHours(\''+wk.id+'\','+d+');semAutoFill(\''+wk.id+'\','+d+',\'fin\')">';
-        tbody += '<label>L.INI</label><input type="time" class="sem-input" id="'+cellId+'_li" onchange="calcSemHours(\''+wk.id+'\','+d+');semAutoFill(\''+wk.id+'\','+d+',\'li\')">';
-        tbody += '<label>L.FIN</label><input type="time" class="sem-input" id="'+cellId+'_lf" onchange="calcSemHours(\''+wk.id+'\','+d+');semAutoFill(\''+wk.id+'\','+d+',\'lf\')">';
+        tbody += '<label>ENT</label><input type="text" inputmode="text" class="sem-input sem-time-txt" id="'+cellId+'_ini" placeholder="7:00" onblur="normTimeInput(this);calcSemHours(\''+wk.id+'\','+d+');semAutoFill(\''+wk.id+'\','+d+',\'ini\')">';
+        tbody += '<label>SAL</label><input type="text" inputmode="text" class="sem-input sem-time-txt" id="'+cellId+'_fin" placeholder="20:00" onblur="normTimeInput(this);calcSemHours(\''+wk.id+'\','+d+');semAutoFill(\''+wk.id+'\','+d+',\'fin\')">';
+        tbody += '<label>L.INI</label><input type="text" inputmode="text" class="sem-input sem-time-txt" id="'+cellId+'_li" placeholder="12:00" onblur="normTimeInput(this);calcSemHours(\''+wk.id+'\','+d+');semAutoFill(\''+wk.id+'\','+d+',\'li\')">';
+        tbody += '<label>L.FIN</label><input type="text" inputmode="text" class="sem-input sem-time-txt" id="'+cellId+'_lf" placeholder="12:30" onblur="normTimeInput(this);calcSemHours(\''+wk.id+'\','+d+');semAutoFill(\''+wk.id+'\','+d+',\'lf\')">';
         tbody += '<div class="sem-hrs-val" id="'+cellId+'_hrs">0</div>';
         tbody += '</div></td>';
       } else {
@@ -7193,35 +7240,28 @@ function calcSemHours(wid, dayIdx){
   saveSemData();
 }
 
-// V14: Auto-llenar horario del primer worker a TODOS los demás
-// Siempre copia (sobrescribe) cuando cambias el primero
-// Si modificas uno individual después, se queda con su valor
-var _semManualEdits = {}; // rastrea edits manuales de workers 2+
-
+// V16: Auto-llenar TODOS los campos del día desde worker 1
+// Cuando cambias cualquier campo del primer worker, copia los 4 campos
+// (ini, fin, li, lf) de ese día a todos los demás workers
 function semAutoFill(wid, dayIdx, field){
-  if(!workers.length) return;
-  var isFirst = String(workers[0].id) === String(wid);
+  if(!workers.length || workers.length < 2) return;
+  // Solo auto-llenar cuando editas el PRIMER worker
+  if(String(workers[0].id) !== String(wid)) return;
 
-  if(!isFirst){
-    // Marcar que este worker fue editado manualmente en este campo/día
-    _semManualEdits[wid+'_d'+dayIdx+'_'+field] = true;
-    return;
-  }
-
-  var srcId = 'sem_' + wid + '_d' + dayIdx + '_' + field;
-  var srcVal = gVal(srcId);
+  var fields = ['ini','fin','li','lf'];
+  var srcBase = 'sem_' + wid + '_d' + dayIdx + '_';
 
   for(var w=1; w<workers.length; w++){
-    var wKey = workers[w].id+'_d'+dayIdx+'_'+field;
-    // No sobreescribir si fue editado manualmente
-    if(_semManualEdits[wKey]) continue;
-
-    var tgtId = 'sem_' + workers[w].id + '_d' + dayIdx + '_' + field;
-    var tgtEl = gEl(tgtId);
-    if(tgtEl){
-      tgtEl.value = srcVal;
-      calcSemHours(String(workers[w].id), dayIdx);
+    var tgtBase = 'sem_' + workers[w].id + '_d' + dayIdx + '_';
+    for(var f=0; f<fields.length; f++){
+      var srcVal = gVal(srcBase + fields[f]);
+      var tgtEl = gEl(tgtBase + fields[f]);
+      if(tgtEl && srcVal){
+        tgtEl.value = srcVal;
+      }
     }
+    // Recalcular ese worker para ese día
+    calcSemHours(String(workers[w].id), dayIdx);
   }
 }
 
