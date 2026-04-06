@@ -1045,8 +1045,10 @@ html.login-locked{overflow:hidden!important;height:100%!important}
     <div class="ct">📋 CONFIGURACIÓN DE SEMANA</div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">
       <div style="flex:1;min-width:140px">
-        <label style="font-size:11px;font-weight:700;color:var(--dk)">SEMANA DEL (LUNES)</label>
-        <input type="date" id="semWeekStart" onchange="onSemWeekChange()" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:8px;font-size:14px">
+        <label style="font-size:11px;font-weight:700;color:var(--dk)">RANCHO</label>
+        <select id="semRancho" onchange="onSemRanchoChange()" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:8px;font-size:14px">
+          <option value="">— Selecciona un rancho —</option>
+        </select>
       </div>
       <div style="flex:1;min-width:140px">
         <label style="font-size:11px;font-weight:700;color:var(--dk)">ACTIVIDAD</label>
@@ -1056,9 +1058,9 @@ html.login-locked{overflow:hidden!important;height:100%!important}
       </div>
     </div>
     <div style="display:flex;gap:10px;flex-wrap:wrap">
-      <div style="flex:1;min-width:120px">
-        <label style="font-size:11px;font-weight:700;color:var(--dk)">RANCHO</label>
-        <input type="text" id="semRancho" placeholder="Rancho" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:8px;font-size:14px">
+      <div style="flex:1;min-width:140px">
+        <label style="font-size:11px;font-weight:700;color:var(--dk)">SEMANA DEL (LUNES)</label>
+        <input type="date" id="semWeekStart" onchange="onSemWeekChange()" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:8px;font-size:14px">
       </div>
       <div style="flex:1;min-width:120px">
         <label style="font-size:11px;font-weight:700;color:var(--dk)">FINCA / LABOR</label>
@@ -6876,22 +6878,74 @@ var SEM_DAYS = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
 var SEM_DAYS_FULL = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
 
 function initSemTab(){
-  // Poblar select de actividades (solo tipo Hora)
-  var sel = gEl('semActivity');
-  if(sel && sel.options.length <= 1){
-    var allActs = (ACTS||[]).concat(GRUPAL_ACTS||[]);
-    for(var i=0;i<allActs.length;i++){
-      if(allActs[i].hr || (allActs[i].tipo||'').toLowerCase()==='hora'){
-        var opt = document.createElement('option');
-        opt.value = i;
-        opt.textContent = allActs[i].es + (allActs[i].en ? ' / ' + allActs[i].en : '');
-        opt.setAttribute('data-price', allActs[i].p||0);
-        sel.appendChild(opt);
+  // V4: Poblar dropdown de ranchos (mismo que Parámetros, desde CONTRATOS)
+  var ranchoSel = gEl('semRancho');
+  if(ranchoSel && ranchoSel.options.length <= 1){
+    var allRanchos = {};
+    if(currentUser && currentUser.isAdmin){
+      // Admin: todos los ranchos de todas las columnas IOE
+      for(var k in CONTRATOS){
+        if(!CONTRATOS.hasOwnProperty(k)) continue;
+        for(var ri=0;ri<CONTRATOS[k].length;ri++){
+          var rn = CONTRATOS[k][ri];
+          if(rn) allRanchos[rn] = true;
+        }
       }
+    } else {
+      // Surquero: solo ranchos de su IOE
+      var surqName = currentUser ? currentUser.name : '';
+      var surqIOE = '';
+      for(var si=0;si<ALL_WORKERS.length;si++){
+        if(ALL_WORKERS[si].name.toLowerCase()===surqName.toLowerCase()){ surqIOE=ALL_WORKERS[si].ioe||''; break; }
+      }
+      if(surqIOE && CONTRATOS[surqIOE]){
+        for(var ri2=0;ri2<CONTRATOS[surqIOE].length;ri2++){
+          allRanchos[CONTRATOS[surqIOE][ri2]] = true;
+        }
+      }
+    }
+    var sorted = Object.keys(allRanchos).sort();
+    for(var i=0;i<sorted.length;i++){
+      var opt = document.createElement('option');
+      opt.value = sorted[i];
+      opt.textContent = sorted[i];
+      ranchoSel.appendChild(opt);
     }
   }
   // Si ya hay datos guardados, restaurar
   loadSemData();
+}
+
+// V4: Al cambiar rancho en semanal, filtrar actividades tipo Hora de ese rancho
+function onSemRanchoChange(){
+  var rancho = gVal('semRancho');
+  var sel = gEl('semActivity');
+  // Limpiar opciones anteriores
+  sel.innerHTML = '<option value="">— Selecciona actividad —</option>';
+
+  if(!rancho) return;
+
+  // Filtrar ALL_ACTS por farm === rancho Y tipo Hora
+  var idx = 0;
+  for(var i=0;i<ALL_ACTS.length;i++){
+    var farm = (ALL_ACTS[i].farm||'').toLowerCase();
+    var isHora = ALL_ACTS[i].hr || (ALL_ACTS[i].tipo||'').toLowerCase()==='hora';
+    if(farm === rancho.toLowerCase() && isHora){
+      var opt = document.createElement('option');
+      opt.value = i; // índice en ALL_ACTS
+      opt.textContent = ALL_ACTS[i].es + (ALL_ACTS[i].en ? ' / ' + ALL_ACTS[i].en : '') + ' ($' + (parseFloat(ALL_ACTS[i].p)||0).toFixed(2) + '/hr)';
+      opt.setAttribute('data-price', ALL_ACTS[i].p||0);
+      sel.appendChild(opt);
+      idx++;
+    }
+  }
+
+  if(!idx){
+    var noOpt = document.createElement('option');
+    noOpt.value = '';
+    noOpt.textContent = '⚠️ No hay actividades tipo Hora para ' + rancho;
+    sel.appendChild(noOpt);
+  }
 }
 
 function onSemWeekChange(){
@@ -6939,8 +6993,7 @@ function buildSemTable(){
   }
 
   // Detectar tipo de actividad
-  var allActs = (ACTS||[]).concat(GRUPAL_ACTS||[]);
-  var selAct = allActs[parseInt(actIdx)];
+  var selAct = ALL_ACTS[parseInt(actIdx)];
   var isHourAct = selAct && (selAct.hr || (selAct.tipo||'').toLowerCase()==='hora');
 
   // Header
@@ -7019,8 +7072,7 @@ function calcSemHours(wid, dayIdx){
 
 function calcSemRow(wid){
   var total = 0;
-  var allActs = (ACTS||[]).concat(GRUPAL_ACTS||[]);
-  var selAct = allActs[parseInt(gVal('semActivity'))];
+  var selAct = ALL_ACTS[parseInt(gVal('semActivity'))];
   var isHour = selAct && (selAct.hr || (selAct.tipo||'').toLowerCase()==='hora');
 
   for(var d=0;d<7;d++){
@@ -7040,8 +7092,7 @@ function calcSemRow(wid){
 }
 
 function calcSemDayTotals(){
-  var allActs = (ACTS||[]).concat(GRUPAL_ACTS||[]);
-  var selAct = allActs[parseInt(gVal('semActivity'))];
+  var selAct = ALL_ACTS[parseInt(gVal('semActivity'))];
   var isHour = selAct && (selAct.hr || (selAct.tipo||'').toLowerCase()==='hora');
   var grand = 0;
 
@@ -7066,8 +7117,7 @@ function calcSemDayTotals(){
 
 // ── Guardar/Cargar datos semanales en localStorage ──
 function saveSemData(){
-  var allActs = (ACTS||[]).concat(GRUPAL_ACTS||[]);
-  var selAct = allActs[parseInt(gVal('semActivity'))];
+  var selAct = ALL_ACTS[parseInt(gVal('semActivity'))];
   var isHour = selAct && (selAct.hr || (selAct.tipo||'').toLowerCase()==='hora');
 
   var data = {
@@ -7131,8 +7181,7 @@ function restoreSemInputs(){
     var data = JSON.parse(raw);
     if(!data || !data.rows) return;
 
-    var allActs = (ACTS||[]).concat(GRUPAL_ACTS||[]);
-    var selAct = allActs[parseInt(gVal('semActivity'))];
+    var selAct = ALL_ACTS[parseInt(gVal('semActivity'))];
     var isHour = selAct && (selAct.hr || (selAct.tipo||'').toLowerCase()==='hora');
 
     for(var r=0;r<data.rows.length;r++){
@@ -7170,8 +7219,7 @@ function generateSemPDF(){
   if(!weekStart){ toast('⚠️ Selecciona la semana primero'); return; }
   if(!workers.length){ toast('⚠️ No hay trabajadores'); return; }
 
-  var allActs = (ACTS||[]).concat(GRUPAL_ACTS||[]);
-  var selAct = allActs[parseInt(gVal('semActivity'))];
+  var selAct = ALL_ACTS[parseInt(gVal('semActivity'))];
   var isHour = selAct && (selAct.hr || (selAct.tipo||'').toLowerCase()==='hora');
   var actName = selAct ? (selAct.es||selAct.en||'Actividad') : 'Actividad';
 
@@ -7276,8 +7324,7 @@ function sendSemToSheets(){
   if(!weekStart){ toast('⚠️ Selecciona la semana'); return; }
   if(!workers.length){ toast('⚠️ No hay trabajadores'); return; }
 
-  var allActs = (ACTS||[]).concat(GRUPAL_ACTS||[]);
-  var selAct = allActs[parseInt(gVal('semActivity'))];
+  var selAct = ALL_ACTS[parseInt(gVal('semActivity'))];
   var isHour = selAct && (selAct.hr || (selAct.tipo||'').toLowerCase()==='hora');
 
   var surqueroName = gVal('surquero') || '';
