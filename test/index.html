@@ -5458,24 +5458,30 @@ function syncAusencias(){
   }
 }
 
+// V9: Normalizar nombre de crew/rancho quitando espacios, números al final
+function _normCrew(s){
+  return (s||'').replace(/\s*\d+$/,'').replace(/[\s_-]+/g,'').toLowerCase();
+}
+
 // V9: Helper — obtener workers filtrados por CREW/RANCHO (no por IOE)
 // + alerta si su contrato IOE no autoriza ese rancho
 function getWorkersForRancho(){
   var rancho = gVal('rancho');
   if(!rancho) return ALL_WORKERS;
 
-  var ranchoLow = rancho.toLowerCase();
+  var ranchoNorm = _normCrew(rancho);
+  var ranchoLow  = rancho.toLowerCase();
 
   // Paso 1: Filtrar por crew que coincida con el rancho
+  // Compara normalizado: "De War 1" → "dewar", "DeWar" → "dewar"
   var filtered = [];
   var sinContrato = [];
 
   for(var i=0;i<ALL_WORKERS.length;i++){
     var w = ALL_WORKERS[i];
-    var wCrew = (w.crew||'').toLowerCase();
-    var crewBase = wCrew.replace(/\s*\d+$/,'').trim();
+    var crewNorm = _normCrew(w.crew);
 
-    if(wCrew === ranchoLow || crewBase === ranchoLow){
+    if(crewNorm === ranchoNorm){
       filtered.push(w);
 
       // Paso 2: Verificar si su IOE autoriza ese rancho
@@ -5483,7 +5489,7 @@ function getWorkersForRancho(){
       var autorizado = false;
       if(ioe && CONTRATOS[ioe]){
         for(var ri=0;ri<CONTRATOS[ioe].length;ri++){
-          if((CONTRATOS[ioe][ri]||'').toLowerCase() === ranchoLow){
+          if(_normCrew(CONTRATOS[ioe][ri]) === ranchoNorm){
             autorizado = true;
             break;
           }
@@ -5494,6 +5500,9 @@ function getWorkersForRancho(){
       }
     }
   }
+
+  console.log('[V9] getWorkersForRancho:', rancho, '→ norm:', ranchoNorm,
+    '| found:', filtered.length, '| sinContrato:', sinContrato.length);
 
   // Paso 3: Mostrar alerta si hay workers sin autorización IOE
   if(sinContrato.length){
@@ -5526,17 +5535,35 @@ function showAllEmployeesAsAbsent(){
   var rancho = gVal('rancho');
   var filteredWorkers = getWorkersForRancho();
 
+  // V10: Excluir workers ya agregados en Trabajadores y ausencias manuales
+  var absentOnly = [];
+  for(var i=0;i<filteredWorkers.length;i++){
+    var w = filteredWorkers[i];
+    if(nameInArr(workers, w.name)) continue;
+    if(nameInArr(ausencias, w.name)) continue;
+    absentOnly.push(w);
+  }
+
+  var totalRancho = filteredWorkers.length;
+  var presentes = totalRancho - absentOnly.length;
+
   if(hdr){
     if(rancho){
-      hdr.textContent = filteredWorkers.length + ' empleados en ' + rancho;
+      hdr.textContent = absentOnly.length + ' ausentes en ' + rancho
+        + ' (' + presentes + ' presentes de ' + totalRancho + ')';
     } else {
-      hdr.textContent = ALL_WORKERS.length + ' empleados en total (vista empresa completa)';
+      hdr.textContent = absentOnly.length + ' ausentes de ' + ALL_WORKERS.length + ' en total';
     }
   }
 
   list.innerHTML='';
-  for(var i=0;i<filteredWorkers.length;i++){
-    var w = filteredWorkers[i];
+  if(!absentOnly.length){
+    list.innerHTML='<div style="text-align:center;padding:30px;color:var(--success)"><div style="font-size:14px;font-weight:600">✅ Todos presentes</div><div style="font-size:12px;color:var(--gr);margin-top:5px">Los '+totalRancho+' empleados de '+(rancho||'la empresa')+' están en la lista</div></div>';
+    return;
+  }
+
+  for(var i=0;i<absentOnly.length;i++){
+    var w = absentOnly[i];
     var card = document.createElement('div');
     card.className = 'aus-card';
     card.style.cssText='padding:10px 13px;display:flex;align-items:center;justify-content:space-between';
