@@ -7130,10 +7130,10 @@ function buildSemTable(){
       var cellId = rowId + '_d' + d;
       if(isHourAct){
         tbody += '<td class="sem-td"><div class="sem-time-cell">';
-        tbody += '<label>Ent</label><input type="time" class="sem-input" id="'+cellId+'_ini" onchange="calcSemHours(\''+wk.id+'\','+d+')">';
-        tbody += '<label>Sal</label><input type="time" class="sem-input" id="'+cellId+'_fin" onchange="calcSemHours(\''+wk.id+'\','+d+')">';
-        tbody += '<label>L.Ini</label><input type="time" class="sem-input" id="'+cellId+'_li" onchange="calcSemHours(\''+wk.id+'\','+d+')">';
-        tbody += '<label>L.Fin</label><input type="time" class="sem-input" id="'+cellId+'_lf" onchange="calcSemHours(\''+wk.id+'\','+d+')">';
+        tbody += '<label>ENT</label><input type="time" class="sem-input" id="'+cellId+'_ini" onchange="calcSemHours(\''+wk.id+'\','+d+');semAutoFill(\''+wk.id+'\','+d+',\'ini\')">';
+        tbody += '<label>SAL</label><input type="time" class="sem-input" id="'+cellId+'_fin" onchange="calcSemHours(\''+wk.id+'\','+d+');semAutoFill(\''+wk.id+'\','+d+',\'fin\')">';
+        tbody += '<label>L.INI</label><input type="time" class="sem-input" id="'+cellId+'_li" onchange="calcSemHours(\''+wk.id+'\','+d+');semAutoFill(\''+wk.id+'\','+d+',\'li\')">';
+        tbody += '<label>L.FIN</label><input type="time" class="sem-input" id="'+cellId+'_lf" onchange="calcSemHours(\''+wk.id+'\','+d+');semAutoFill(\''+wk.id+'\','+d+',\'lf\')">';
         tbody += '<div class="sem-hrs-val" id="'+cellId+'_hrs">0</div>';
         tbody += '</div></td>';
       } else {
@@ -7166,21 +7166,46 @@ function calcSemHours(wid, dayIdx){
   var lIni = gVal(cellId + '_li');
   var lFin = gVal(cellId + '_lf');
 
+  // V11: Cálculo independiente (sin usar nh() que resta lonche global)
   var hrs = 0;
-  if(ini && fin){
-    hrs = nh(ini, fin);
-    if(lIni && lFin){
-      var lunchH = nh(lIni, lFin);
-      hrs -= lunchH;
+  var e = t2m(ini), s = t2m(fin);
+  if(e !== null && s !== null){
+    if(s <= e) s += 1440; // cruce medianoche
+    hrs = (s - e) / 60;
+    var li = t2m(lIni), lf = t2m(lFin);
+    if(li !== null && lf !== null){
+      if(lf <= li) lf += 1440;
+      hrs -= (lf - li) / 60;
     }
   }
   if(hrs < 0) hrs = 0;
+  hrs = Math.round(hrs * 10) / 10;
 
   var el = gEl(cellId + '_hrs');
   if(el) el.textContent = hrs > 0 ? smartNum(hrs) : '0';
 
   calcSemRow(wid);
   saveSemData();
+}
+
+// V11: Auto-llenar horario del primer worker a los demás
+function semAutoFill(wid, dayIdx, field){
+  if(!workers.length) return;
+  // Solo auto-llenar si el que cambió es el PRIMER worker
+  if(workers[0].id !== wid) return;
+
+  var srcId = 'sem_' + wid + '_d' + dayIdx + '_' + field;
+  var srcVal = gVal(srcId);
+  if(!srcVal) return;
+
+  for(var w=1; w<workers.length; w++){
+    var tgtId = 'sem_' + workers[w].id + '_d' + dayIdx + '_' + field;
+    var tgtEl = gEl(tgtId);
+    if(tgtEl && !tgtEl.value){ // solo si está vacío
+      tgtEl.value = srcVal;
+      calcSemHours(workers[w].id, dayIdx);
+    }
+  }
 }
 
 function calcSemRow(wid){
