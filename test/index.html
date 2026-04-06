@@ -6938,6 +6938,14 @@ function initSemTab(){
       ranchoSel.appendChild(opt);
     }
   }
+  // V6: Auto-llenar rancho desde Parámetros
+  var paramRancho = gVal('rancho'); // rancho de la pestaña ① Parámetros
+  var semRanchoSel = gEl('semRancho');
+  if(paramRancho && semRanchoSel && !semRanchoSel.value){
+    semRanchoSel.value = paramRancho;
+    onSemRanchoChange(); // disparar filtro de actividades
+  }
+
   // Si ya hay datos guardados, restaurar
   loadSemData();
 }
