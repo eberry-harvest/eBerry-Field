@@ -3982,8 +3982,7 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
   var estPerPerson=estPuertas&&ep&&ep.length?estPuertas/ep.length:0;
   var hilPerPerson=hilPuertas&&hp&&hp.length?hilPuertas/hp.length:0;
   function inA(arr,id){ for(var x=0;x<arr.length;x++) if(arr[x]===id) return true; return false; }
-  // Tau: formato inteligente — entero si .00, sino 2 decimales
-  function smartNum(n){ var v=parseFloat(n)||0; return v%1===0?String(Math.round(v)):v.toFixed(2); }
+  // V11-C4: smartNum() duplicada eliminada — usa la global (línea 2096)
 
   // Build column list
   var actCols=[]; var i,j;
@@ -4667,6 +4666,47 @@ function getWeekNumber(dateStr){
     var oneWeek=604800000;
     return 'WE '+Math.ceil((diff/oneWeek)+1);
   }catch(e){ return ''; }
+}
+
+// V11-C5: Helper reutilizable para POST via iframe oculto
+// TODO: refactorizar sendToSheets, sendSemToSheets, _sendNextInQueue para usar este helper
+function submitViaIframe(url, payload, onDone, timeoutMs, onTimeout, frameId){
+  frameId = frameId || '_postFrame';
+  timeoutMs = timeoutMs || 15000;
+  try {
+    var oldFr = document.getElementById(frameId);
+    if(oldFr) oldFr.parentNode.removeChild(oldFr);
+    var oldFm = document.getElementById(frameId+'_form');
+    if(oldFm) oldFm.parentNode.removeChild(oldFm);
+
+    var fr = document.createElement('iframe');
+    fr.id = frameId; fr.name = frameId;
+    fr.style.cssText = 'display:none';
+    document.body.appendChild(fr);
+
+    var fm = document.createElement('form');
+    fm.id = frameId+'_form'; fm.method = 'POST';
+    fm.action = url; fm.target = frameId;
+    fm.style.cssText = 'display:none';
+
+    var inp = document.createElement('input');
+    inp.type = 'hidden'; inp.name = 'payload';
+    inp.value = JSON.stringify(payload);
+    fm.appendChild(inp);
+    document.body.appendChild(fm);
+
+    var _to = setTimeout(function(){
+      if(typeof onTimeout === 'function') onTimeout(payload);
+    }, timeoutMs);
+
+    fr.onload = function(){
+      clearTimeout(_to);
+      if(typeof onDone === 'function') onDone(payload);
+    };
+    fm.submit();
+  } catch(e){
+    if(typeof onTimeout === 'function') onTimeout(payload);
+  }
 }
 
 function sendToSheets() {
@@ -5616,16 +5656,14 @@ function getWorkersForRancho(){
   console.log('[V9] getWorkersForRancho:', rancho, '→ norm:', ranchoNorm,
     '| found:', filtered.length, '| sinContrato:', sinContrato.length);
 
-  // Paso 3: Mostrar alerta si hay workers sin autorización IOE
+  // Paso 3: Mostrar aviso si hay workers sin autorización IOE
+  // V11-C1: toast() en vez de alert() — alert() congela Safari en iOS
   if(sinContrato.length){
-    console.warn('[V9] Workers en '+rancho+' sin autorización IOE:', sinContrato);
+    console.warn('[V11] Workers en '+rancho+' sin autorización IOE:', sinContrato);
     setTimeout(function(){
-      alert('⚠️ ALERTA DE CONTRATO\n\n'
-        + sinContrato.length + ' trabajador(es) en ' + rancho
-        + ' NO tienen autorización IOE para este rancho:\n\n'
-        + sinContrato.slice(0,15).join('\n')
-        + (sinContrato.length>15 ? '\n... y '+(sinContrato.length-15)+' más' : '')
-        + '\n\nVerifique con el departamento de contratos.');
+      toast('⚠️ ' + sinContrato.length + ' trabajador(es) sin IOE para ' + rancho
+        + ': ' + sinContrato.slice(0,3).join(', ')
+        + (sinContrato.length>3 ? ' y '+(sinContrato.length-3)+' más' : ''));
     }, 300);
   }
 
@@ -7122,10 +7160,10 @@ function initSemTab(){
       ranchoSel.appendChild(opt);
     }
   }
-  // Si ya hay datos guardados, restaurar
-  loadSemData();
+  // V11-C2: Rancho y actividades PRIMERO, luego restaurar datos guardados
+  // Antes loadSemData() corría antes de poblar semActivity → el valor guardado se perdía
 
-  // Gamma2-V10: Rancho en Semanal SIEMPRE viene de Parámetros — SIEMPRE bloqueado
+  // Paso 1: Rancho SIEMPRE viene de Parámetros — SIEMPRE bloqueado
   var paramRancho = gVal('rancho');
   var semRanchoSel = gEl('semRancho');
   if(semRanchoSel){
@@ -7134,12 +7172,15 @@ function initSemTab(){
     if(paramRancho){
       semRanchoSel.value = paramRancho;
       semRanchoSel.title = 'Rancho tomado de Parámetros';
-      onSemRanchoChange();
+      onSemRanchoChange(); // ← puebla semActivity con las actividades del rancho
     } else {
       semRanchoSel.value = '';
       semRanchoSel.title = 'Selecciona rancho en Parámetros primero';
     }
   }
+
+  // Paso 2: AHORA sí restaurar datos guardados (semActivity ya tiene opciones)
+  loadSemData();
 }
 
 // Gamma2-V5: Mostrar TODAS las actividades individuales del rancho (no solo Hora)
@@ -7852,7 +7893,14 @@ function sendSemToSheets(){
     fm.appendChild(inp);
     document.body.appendChild(fm);
 
+    // V11-C3: Timeout 15s — si Sheets no responde, guardar en cola offline
+    var _semTimeout = setTimeout(function(){
+      addToOfflineQueue(payload);
+      toast('📦 Timeout — semanal guardado en cola offline');
+    }, 15000);
+
     fr.onload = function(){
+      clearTimeout(_semTimeout);
       recordLastSend();
       toast('✅ ' + payload.workers.length + ' trabajador(es) semanal enviado a Sheets');
     };
