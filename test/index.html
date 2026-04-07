@@ -1891,6 +1891,7 @@ function loadSheetsData(){
   var loaded = {workers: false, tasks: false, config: false};
   var done = false;
 
+  // Delta2: hard timeout 12→25s (antes moría antes que el XHR de 15s + retries)
   var timeout = setTimeout(function(){
     if(done) return; done = true;
     if(!loaded.workers){ ALL_WORKERS=[]; NAMES=FALLBACK_NAMES.slice(); }
@@ -1898,8 +1899,12 @@ function loadSheetsData(){
      // habilitar PIN aunque no llegue config (usa respaldo 1999)
     buildLideres();
     setLoading(false);
+    // Delta2: si caímos a FALLBACK, mostrar banner de reintento
+    if(ALL_ACTS.length <= FALLBACK_ACTS.length){
+      _showFallbackBanner('Actividades no cargaron (timeout). Usando datos básicos.');
+    }
     showLogin();
-  }, 12000);
+  }, 25000);
 
   function checkDone(){
     if(done) return;
@@ -1914,8 +1919,11 @@ function loadSheetsData(){
       var isFallback = ALL_ACTS.length <= FALLBACK_ACTS.length;
       if(isFallback){
         console.warn('🚨 ALL_ACTS = FALLBACK (' + ALL_ACTS.length + ' acts). Datos de Sheets NO cargaron.');
+        // Delta2: banner de reintento persistente
+        _showFallbackBanner('Solo ' + ALL_ACTS.length + ' actividades cargaron. Conexión lenta.');
       } else {
         console.log('✅ ALL_ACTS cargó correctamente: ' + ALL_ACTS.length + ' actividades, ' + ALL_WORKERS.length + ' workers');
+        _hideFallbackBanner(); // Delta2: quitar banner si existía
       }
       showLogin();
     }
@@ -1955,7 +1963,9 @@ function loadSheetsData(){
       if(data.contratos) CONTRATOS = data.contratos;
     } else {
       ALL_WORKERS = [];
-      toast('⚠️ Usando datos locales (sin conexión)');
+      // Delta2: intentar usar cache viejo como fallback intermedio
+      _tryStaleCache('workers');
+      if(!ALL_WORKERS.length) toast('⚠️ Usando datos locales (sin conexión)');
     }
     loaded.workers = true;
     checkDone();
@@ -1991,6 +2001,8 @@ function loadSheetsData(){
     } else {
       ALL_ACTS = FALLBACK_ACTS.slice();
       console.warn('⚠️ Tasks FALLBACK usado. err:', err, 'data:', data ? JSON.stringify(data).slice(0,200) : 'null');
+      // Delta2: intentar usar cache viejo como fallback intermedio
+      _tryStaleCache('acts');
     }
     loaded.tasks = true;
     checkDone();
@@ -4743,6 +4755,8 @@ function sendToSheets() {
       var totalH = act.hr ? totalShiftHours(a) : 0;
       // Tau: solo Hours usa contractRate; todo lo demás usa act.p
       var uPrice = act.hr ? getHRate(w, act) : act.p;
+      // V12: incluir horarios para FIELD_DROP cols 16-19
+      // ini/fin son por actividad; lonche (lIni/lFin) es global de Parámetros
       wOut.acts.push({
         actEs:      act.es,
         actEn:      act.en || act.es,
@@ -4750,7 +4764,11 @@ function sendToSheets() {
         unitPrice:  uPrice,
         qty:        act.tipo === 'Hora' ? '' : (a.qty || ''),
         totalHours: act.tipo === 'Hora' ? totalH : '',
-        finca:      a.finca || gVal('finca')
+        finca:      a.finca || gVal('finca'),
+        hEnt:       a.ini || '',
+        hSal:       a.fin || '',
+        hLIni:      gVal('lIni') || '',
+        hLFin:      gVal('lFin') || ''
       });
     }
     payload.workers.push(wOut);
@@ -5885,6 +5903,65 @@ function loadCache(){
   }catch(e){ return null; }
 }
 
+// Delta2: Leer cache "viejo" (hasta 7 días) como fallback intermedio
+// Mejor tener actividades de hace 3 días que solo 4 FALLBACK genéricas
+function _loadStaleCache(){
+  try{
+    var raw = localStorage.getItem(CACHE_KEY);
+    if(!raw) return null;
+    var d = JSON.parse(raw);
+    var age = Date.now() - d.ts;
+    // Aceptar cache hasta 7 días (604800000 ms)
+    if(age > 604800000) return null;
+    d._stale = true;
+    d._ageHrs = Math.round(age / 3600000);
+    return d;
+  }catch(e){ return null; }
+}
+
+// Delta2: Intentar recuperar datos de cache viejo cuando fetch falla
+function _tryStaleCache(type){
+  var stale = _loadStaleCache();
+  if(!stale) return;
+  if(type === 'acts' && stale.acts && stale.acts.length > FALLBACK_ACTS.length){
+    ALL_ACTS = stale.acts;
+    console.log('♻️ Delta2: Usando cache de ~' + stale._ageHrs + 'h atrás (' + ALL_ACTS.length + ' acts)');
+    toast('📋 Usando actividades guardadas (' + stale._ageHrs + 'h atrás)');
+  }
+  if(type === 'workers' && stale.workers && stale.workers.length){
+    ALL_WORKERS = stale.workers;
+    if(stale.contratos) CONTRATOS = stale.contratos;
+    console.log('♻️ Delta2: Usando workers de cache ~' + stale._ageHrs + 'h atrás (' + ALL_WORKERS.length + ' workers)');
+  }
+}
+
+// Delta2: Banner persistente cuando FALLBACK está activo
+function _showFallbackBanner(msg){
+  _hideFallbackBanner();
+  var ban = document.createElement('div');
+  ban.id = 'fallbackBanner';
+  ban.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#ff6b35;color:#fff;padding:10px 16px;font-size:14px;font-weight:600;display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 8px rgba(0,0,0,.3)';
+  var txt = document.createElement('span');
+  txt.textContent = '⚠️ ' + msg;
+  var btn = document.createElement('button');
+  btn.textContent = '🔄 Reintentar';
+  btn.style.cssText = 'background:#fff;color:#ff6b35;border:none;border-radius:6px;padding:6px 14px;font-weight:700;font-size:13px;cursor:pointer;margin-left:12px;white-space:nowrap';
+  btn.onclick = function(){
+    _hideFallbackBanner();
+    toast('🔄 Recargando actividades...');
+    loadSheetsData();
+  };
+  ban.appendChild(txt);
+  ban.appendChild(btn);
+  document.body.appendChild(ban);
+  // Ajustar body padding para que no tape contenido
+  document.body.style.paddingTop = (ban.offsetHeight + 2) + 'px';
+}
+function _hideFallbackBanner(){
+  var old = document.getElementById('fallbackBanner');
+  if(old){ old.parentNode.removeChild(old); document.body.style.paddingTop = ''; }
+}
+
 // ── KEEP-ALIVE (ping Apps Script every 4 min to prevent sleep) ──
 function startKeepAlive(){
   setInterval(function(){
@@ -5949,14 +6026,17 @@ window.addEventListener('DOMContentLoaded', function(){
 function refreshDataBackground(){
   fetchFromScript('workers', function(err, data){
     if(!err && data && data.success && data.workers){
+      var wasFallback = !ALL_WORKERS.length;
       ALL_WORKERS = data.workers;
       if(data.contratos) CONTRATOS = data.contratos;
       buildLideres();
       saveCache(ALL_WORKERS, ALL_ACTS, LIDERES);
+      if(wasFallback) console.log('✅ Delta2: Workers recuperados en background (' + ALL_WORKERS.length + ')');
     }
   });
   fetchFromScript('tasks', function(err, data){
     if(!err && data && data.success && data.tasks){
+      var wasFallback = ALL_ACTS.length <= FALLBACK_ACTS.length;
       ALL_ACTS = [];
       var tipoMap={'Hours':'Hora','Hour':'Hora',
         'Daywork':'Ficha',  // Tau: Daywork = cajita cantidad, no shifts
@@ -5967,6 +6047,12 @@ function refreshDataBackground(){
         ALL_ACTS.push({farm:t.farm,es:t.es,en:t.en||t.es,tipo:tipoNorm,payType:t.tipo||'',p:t.rate||16.23,hr:tipoNorm==='Hora',modo:modo});
       }
       saveCache(ALL_WORKERS, ALL_ACTS, LIDERES);
+      // Delta2: si estábamos en FALLBACK y recuperamos datos, notificar
+      if(wasFallback && ALL_ACTS.length > FALLBACK_ACTS.length){
+        _hideFallbackBanner();
+        toast('✅ Actividades actualizadas (' + ALL_ACTS.length + ' cargadas)');
+        console.log('✅ Delta2: Tasks recuperadas en background (' + ALL_ACTS.length + ' acts)');
+      }
     }
   });
 }
