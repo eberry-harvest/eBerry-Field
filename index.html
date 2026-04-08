@@ -4668,7 +4668,9 @@ function confirmDelAll(){
 
 // ── SEND TO PAYROLL FIELD MASTER ─────────────────────────────
 // Single clean implementation — matches FieldSync.gs expected format
-var SHEETS_URL = 'https://script.google.com/macros/s/AKfycbwjC6Gjcb3_VRmjnVDPIRptpxM8__BRa_bi2q7MJcmY0MOcXRPdS4JVqvfyKHHK6G7m/exec';
+// ORIGINAL (producción): 'AKfycbwjC6Gjcb3_VRmjnVDPIRptpxM8__BRa_bi2q7MJcmY0MOcXRPdS4JVqvfyKHHK6G7m'
+// V2: Apuntando a FieldSync TEST → EBerry006_TEST_FIELD (2026-04-08)
+var SHEETS_URL = 'https://script.google.com/macros/s/AKfycbylzVzFgT6joi6FncGInwSYtc5lzWcOJEhRBfdfywwFXCj77ZIoXopHgaIxnm0myeFocw/exec';
 
 function getWeekNumber(dateStr){
   try{
