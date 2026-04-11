@@ -440,12 +440,12 @@ html.login-locked{overflow:hidden!important;height:100%!important}
   </div>
   <div class="tabs">
     <button class="tab act" onclick="go(0)">① Parámetros</button>
-    <button class="tab" onclick="go(1)">② Trabajadores</button>
-    <button class="tab" onclick="go(2)">③ Act. Grupales</button>
-    <button class="tab" onclick="go(3)">④ Resumen</button>
-    <button class="tab" onclick="go(4)">⑤ Ausencias</button>
-    <button class="tab" onclick="go(5)">⑥ Invoice</button>
-    <button class="tab" onclick="go(6)">⑦ Análisis</button>
+    <button class="tab" onclick="go(1)">② Análisis</button>
+    <button class="tab" onclick="go(2)">③ Trabajadores</button>
+    <button class="tab" onclick="go(3)">④ Act. Grupales</button>
+    <button class="tab" onclick="go(4)">⑤ Resumen</button>
+    <button class="tab" onclick="go(5)">⑥ Ausencias</button>
+    <button class="tab" onclick="go(6)">⑦ Invoice</button>
     <button class="tab" onclick="go(7)">⑧ Semanal</button>
   </div>
 </header>
@@ -891,8 +891,24 @@ html.login-locked{overflow:hidden!important;height:100%!important}
   <input type="hidden" id="payMin" data-save value="16.23">
 </div>
 
-<!-- PAGE 1 -->
-<div class="pg" id="p1">
+<!-- PAGE 1 — ANÁLISIS -->
+<div class="pg" id="p1an">
+  <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px;margin-bottom:3px">📊 Análisis de Rendimiento</div>
+  <div style="font-size:13px;color:var(--gr);margin-bottom:11px">Productividad por trabajador — Pérdidas y Ganancias</div>
+  <div class="an-banner" id="anBanner"></div>
+  <div class="card">
+    <div class="ct">📐 FÓRMULA</div>
+    <div style="font-size:12px;color:var(--gr);line-height:1.8">
+      <b style="color:var(--dk)">Tarifa/Hora</b> ÷ <b style="color:var(--dk)">Precio/Pieza</b> = Piezas mínimas por hora<br>
+      Pzas/h × <b style="color:var(--dk)">Horas trabajadas</b> = Mínimo esperado<br>
+      Si <b style="color:var(--r)">real &lt; mínimo</b> = 🔻 Pérdida para la empresa
+    </div>
+  </div>
+  <div id="anWorkers"></div>
+</div>
+
+<!-- PAGE 2 — TRABAJADORES -->
+<div class="pg" id="p2w">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">
     <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px">Trabajadores</div>
     <button onclick="askDelAll()" style="background:var(--rp);color:var(--r);border:1.5px solid var(--r);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer">🗑️ Eliminar todos</button>
@@ -1020,22 +1036,6 @@ html.login-locked{overflow:hidden!important;height:100%!important}
 
   <!-- PDF button -->
   <button class="btn pdf" onclick="generateInvoicePDF()" style="margin-top:12px"><span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#1a7a4a;color:#fff;font-weight:900;font-size:12px;margin-right:6px">2</span>📄 Generar Invoice PDF</button>
-</div>
-
-<!-- PAGE 6 — ANÁLISIS -->
-<div class="pg" id="p6">
-  <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px;margin-bottom:3px">📊 Análisis de Rendimiento</div>
-  <div style="font-size:13px;color:var(--gr);margin-bottom:11px">Productividad por trabajador — Pérdidas y Ganancias</div>
-  <div class="an-banner" id="anBanner"></div>
-  <div class="card">
-    <div class="ct">📐 FÓRMULA</div>
-    <div style="font-size:12px;color:var(--gr);line-height:1.8">
-      <b style="color:var(--dk)">Tarifa/Hora</b> ÷ <b style="color:var(--dk)">Precio/Pieza</b> = Piezas mínimas por hora<br>
-      Pzas/h × <b style="color:var(--dk)">Horas trabajadas</b> = Mínimo esperado<br>
-      Si <b style="color:var(--r)">real &lt; mínimo</b> = 🔻 Pérdida para la empresa
-    </div>
-  </div>
-  <div id="anWorkers"></div>
 </div>
 
 <!-- PAGE 7 — SEMANAL -->
@@ -2045,7 +2045,7 @@ function showLogin(){
 
 // ── APP STATE (Iota: variables globales organizadas) ──
 // Navegación
-var pg = 0;                  // página activa (0=Config, 1=Workers, 2=Grupal, 3=Ausencias, 4=Resumen)
+var pg = 0;                  // página activa (0=Config, 1=Análisis, 2=Workers, 3=Grupal, 4=Resumen, 5=Ausencias, 6=Invoice, 7=Semanal)
 // Workers y actividades
 var workers = [];            // [{id, name, open, acts[], totalPay}]
 var wid = 0;                 // siguiente ID de worker
@@ -3690,23 +3690,23 @@ function showEmptyState(){
 }
 
 function go(n){
-  if(n===1){updBanner(); setTimeout(function(){ for(var i=0;i<workers.length;i++) updTot(workers[i].id); },50);}
-  if(n===2){updParts();renderGrpActs();}
-  if(n===3)buildSum();
-  if(n===4){
+  if(n===1) buildAnalisis();
+  if(n===2){updBanner(); setTimeout(function(){ for(var i=0;i<workers.length;i++) updTot(workers[i].id); },50);}
+  if(n===3){updParts();renderGrpActs();}
+  if(n===4)buildSum();
+  if(n===5){
     if(currentUser && currentUser.isAdmin && !gVal('surquero')){
       showAllEmployeesAsAbsent();
     } else {
       syncAusencias(); renderAusencias();
     }
   }
-  if(n===5) refreshInvoiceAuto();
-  if(n===6) buildAnalisis();
+  if(n===6) refreshInvoiceAuto();
   if(n===7) initSemTab();
   var pgs=document.querySelectorAll('.pg'); for(var i=0;i<pgs.length;i++) pgs[i].classList.toggle('on',i===n);
   var tabs=document.querySelectorAll('.tab'); for(var i=0;i<tabs.length;i++){ tabs[i].classList.remove('act','done'); if(i===n)tabs[i].classList.add('act'); else if(i<n)tabs[i].classList.add('done'); }
-  gEl('addbar').classList.toggle('on',n===1);
-  var ausBar=gEl('ausBar'); if(ausBar) ausBar.style.display=(n===4?'block':'none');
+  gEl('addbar').classList.toggle('on',n===2);
+  var ausBar=gEl('ausBar'); if(ausBar) ausBar.style.display=(n===5?'block':'none');
   pg=n; updNav(); window.scrollTo(0,0);
 }
 function next(){ if(pg<7)go(pg+1); }
@@ -3714,8 +3714,8 @@ function prev(){ if(pg>0)go(pg-1); }
 function updNav(){
   gEl('np').style.display=pg===0?'none':'';
   var nn=gEl('nn');
-  if(pg===4){ nn.textContent='💾 Guardar'; nn.onclick=save; }
-  else if(pg===6){ nn.textContent='💾 Guardar'; nn.onclick=save; }
+  if(pg===1){ nn.textContent='💾 Guardar'; nn.onclick=save; }
+  else if(pg===5){ nn.textContent='💾 Guardar'; nn.onclick=save; }
   else if(pg===7){ nn.textContent='💾 Guardar'; nn.onclick=save; }
   else { nn.textContent='Siguiente →'; nn.onclick=next; }
 }
@@ -4407,6 +4407,70 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
         +rows2
         +'</table></div>';
     })() : '')
+    // ── V5: Bloque de Análisis de Rendimiento en el PDF ──
+    +(function(){
+      var globalH = nh(vals.hEnt||'',vals.hSal||'');
+      var anRows='', totalLoss=0, wLoss=0;
+      for(var wi=0;wi<wks.length;wi++){
+        var w=wks[wi];
+        var baseRate=w.contractRate||0;
+        var wLossAmt=0, wHasAn=false, wDetails='';
+        for(var aj=0;aj<w.acts.length;aj++){
+          var a=w.acts[aj];
+          var act=null;
+          if(a.esName){
+            for(var ak=0;ak<ACTS.length;ak++){
+              if(ACTS[ak].es===a.esName && (!a.tipo || ACTS[ak].tipo===a.tipo)){ act=ACTS[ak]; break; }
+            }
+            if(!act){ for(var ak2=0;ak2<ACTS.length;ak2++){ if(ACTS[ak2].es===a.esName){ act=ACTS[ak2]; break; } } }
+          }
+          if(!act && a.ai>=0 && a.ai<ACTS.length) act=ACTS[a.ai];
+          if(!act) continue;
+          if(act.hr || act.tipo==='$' || act.tipo==='Hora') continue;
+          if(act.payType==='Daywork') continue;
+          if((act.modo||'Individual').toLowerCase()==='grupal') continue;
+          var pp=act.p; if(!pp||pp<=0) continue;
+          var hr=baseRate;
+          if(!hr||hr<=0){
+            for(var rk=0;rk<w.acts.length;rk++){
+              var rAct=null;
+              if(w.acts[rk].esName){ for(var rk2=0;rk2<ACTS.length;rk2++){ if(ACTS[rk2].es===w.acts[rk].esName){rAct=ACTS[rk2];break;} } }
+              if(!rAct && w.acts[rk].ai>=0 && w.acts[rk].ai<ACTS.length) rAct=ACTS[w.acts[rk].ai];
+              if(rAct && rAct.hr){ hr=rAct.p; break; }
+            }
+          }
+          if(!hr||hr<=0) continue;
+          var horas=totalShiftHours(a);
+          if(!horas||horas<=0) horas=globalH;
+          if(!horas||horas<=0) continue;
+          var pzH=hr/pp, pzExp=pzH*horas, pzReal=parseFloat(a.qty)||0;
+          var diff=pzReal*pp - pzExp*pp;
+          wHasAn=true;
+          if(diff<0){
+            wLossAmt+=Math.abs(diff);
+            wDetails+='<div style="font-size:9px;color:#c00;margin-left:12px">'+esc(act.es)+': hizo '+pzReal+' de '+pzExp.toFixed(0)+' min &rarr; <b>-$'+Math.abs(diff).toFixed(2)+'</b></div>';
+          }
+        }
+        if(!wHasAn) continue;
+        if(wLossAmt>0){
+          totalLoss+=wLossAmt; wLoss++;
+          anRows+='<tr style="background:#fff5f5"><td style="padding:4px 8px;border:1px solid #ecc;font-size:10px;font-weight:600;color:#8b0000">'+esc(w.name)+'</td>'
+            +'<td style="padding:4px 8px;border:1px solid #ecc;font-size:10px;text-align:center">$'+baseRate.toFixed(2)+'/h</td>'
+            +'<td style="padding:4px 8px;border:1px solid #ecc;font-size:10px;color:#c00;font-weight:700;text-align:right">-$'+wLossAmt.toFixed(2)+'</td></tr>'
+            +'<tr style="background:#fff5f5"><td colspan="3" style="border:1px solid #ecc;padding:2px 8px">'+wDetails+'</td></tr>';
+        }
+      }
+      if(!anRows) return '';
+      return '<div style="margin-top:14px;border:2px solid #c00;border-radius:8px;overflow:hidden;page-break-inside:avoid">'
+        +'<div style="background:#c00;color:#fff;padding:7px 12px;font-weight:700;font-size:11px;display:flex;justify-content:space-between">'
+        +'<span>&#x1F4C9; AN&Aacute;LISIS DE RENDIMIENTO &mdash; P&Eacute;RDIDAS</span>'
+        +'<span>'+wLoss+' trabajador(es) &bull; Total: -$'+totalLoss.toFixed(2)+'</span></div>'
+        +'<table style="width:100%;border-collapse:collapse">'
+        +'<tr style="background:#ffe5e5"><th style="padding:4px 8px;font-size:9px;text-align:left;border:1px solid #ecc">Trabajador</th><th style="padding:4px 8px;font-size:9px;text-align:center;border:1px solid #ecc">Tarifa/h</th><th style="padding:4px 8px;font-size:9px;text-align:right;border:1px solid #ecc">P&eacute;rdida</th></tr>'
+        +anRows
+        +'<tr style="background:#8b0000;color:#fff;font-weight:700"><td colspan="2" style="padding:5px 8px;font-size:10px;border:1px solid #c00">TOTAL P&Eacute;RDIDA EMPRESA</td><td style="padding:5px 8px;font-size:12px;text-align:right;border:1px solid #c00">-$'+totalLoss.toFixed(2)+'</td></tr>'
+        +'</table></div>';
+    })()
     +'<div class="ft">'+vals.rancho+' &nbsp;|&nbsp; '+vals.fecha+' &nbsp;|&nbsp; '+wks.length+' trabajadores &nbsp;|&nbsp; Bus: #'+vals.numBus+' &nbsp;|&nbsp; Surquero: '+(currentUser&&currentUser.isAdmin?'ADM':vals.surquero)+' &nbsp;|&nbsp; Generado: '+new Date().toLocaleString()+'</div>'
     +'<div class="nopr" style="text-align:center;margin-top:16px"><button onclick="window.print()" style="background:#1a7a4a;color:#fff;border:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-right:10px">🖨️ Imprimir / Guardar PDF</button><button onclick="window.close()" style="background:#eee;color:#555;border:none;padding:12px 20px;border-radius:8px;font-size:14px;cursor:pointer">Cerrar</button></div>'
     +'</body></html>';
