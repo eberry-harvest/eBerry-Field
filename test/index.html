@@ -2684,7 +2684,7 @@ function mkActRow(wid_,ai,_cont){
   div.appendChild(bdg);
   if(!act.hr){
     // Omega: actividades individuales tipo puertas → sistema de surcos
-    if(isActPuertas(act) && isMeccaRanch()){
+    if(isActPuertas(act)){
       var surcoDiv=document.createElement('div'); surcoDiv.id='indSurco_'+wid_+'_'+ai;
       surcoDiv.className='qr';
       if(!a.surcos||!a.surcos.length) a.surcos=[{lbl:'',largo:'',num:'',totalPies:'',totalAcres:'',mode:''}];
