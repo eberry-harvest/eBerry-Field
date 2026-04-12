@@ -2689,7 +2689,7 @@ function mkActRow(wid_,ai,_cont){
       surcoDiv.className='qr';
       if(!a.surcos||!a.surcos.length) a.surcos=[{lbl:'',largo:'',num:'',totalPies:'',totalAcres:'',mode:''}];
       div.appendChild(surcoDiv);
-      renderIndSurcos(wid_,ai);
+      // Epsilon2-fix: renderIndSurcos movido DESPUÉS de cont.appendChild(div) — antes el div no estaba en DOM y gEl devolvía null
     } else {
       var qr=document.createElement('div'); qr.className='qr'; qr.id='qr'+wid_+'_'+ai;
       var lbl2=act.tipo==='Caja'?'Cajas':act.tipo==='Ficha'?'Piezas':'Monto $';
@@ -2705,6 +2705,8 @@ function mkActRow(wid_,ai,_cont){
   var sb=document.createElement('div'); sb.className='sub'; sb.id='sb'+wid_+'_'+ai; sb.style.display='none';
   div.appendChild(sb);
   cont.appendChild(div);
+  // Epsilon2-fix: renderizar surcos DESPUÉS de que el div esté en el DOM
+  if(isActPuertas(act)) renderIndSurcos(wid_,ai);
   if(a.qty||(a.ini&&a.fin)) recalc(wid_,ai);
 }
 
