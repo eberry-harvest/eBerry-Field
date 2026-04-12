@@ -8263,15 +8263,4 @@ function checkDaysWithoutSend(){
 
   if(diffDays >= 2){
     warn.style.display = 'inline-flex';
-    if(txt) txt.textContent = diffDays + ' día' + (diffDays>1?'s':'') + ' sin enviar';
-  } else {
-    warn.style.display = 'none';
-  }
-}
-
-// Revisar cada 30 minutos si llevan días sin enviar
-setInterval(checkDaysWithoutSend, 30 * 60 * 1000);
-
-</script>
-</body>
-</html>
+    if(txt) txt.textContent = diffDays + 
