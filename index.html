@@ -2798,7 +2798,7 @@ function renderIndSurcos(wi,ai){
 }
 
 function onIndSurcoSmart(inp){
-  var wi=inp.dataset.wi, ai=parseInt(inp.dataset.ai), fi=parseInt(inp.dataset.fi);
+  var wi=parseInt(inp.dataset.wi), ai=parseInt(inp.dataset.ai), fi=parseInt(inp.dataset.fi);
   var sf=inp.dataset.sf;
   var w=getW(wi); if(!w||!w.acts[ai]) return;
   var a=w.acts[ai];
@@ -2840,7 +2840,7 @@ function onIndSurcoSmart(inp){
 }
 
 function setIndAnchoCama(inp){
-  var wi=inp.dataset.wi, ai=parseInt(inp.dataset.ai);
+  var wi=parseInt(inp.dataset.wi), ai=parseInt(inp.dataset.ai);
   var w=getW(wi); if(!w||!w.acts[ai]) return;
   w.acts[ai].anchoCama=inp.value.trim();
   var _cp=inp.selectionStart;
@@ -2854,7 +2854,7 @@ function setIndAnchoCama(inp){
 }
 
 function setIndSurcoVar(inp){
-  var wi=inp.dataset.wi, ai=parseInt(inp.dataset.ai), fi=parseInt(inp.dataset.fi);
+  var wi=parseInt(inp.dataset.wi), ai=parseInt(inp.dataset.ai), fi=parseInt(inp.dataset.fi);
   var w=getW(wi); if(!w||!w.acts[ai]) return;
   if(!w.acts[ai].surcos) return;
   if(w.acts[ai].surcos[fi]) w.acts[ai].surcos[fi].lbl=inp.value;
@@ -2862,7 +2862,7 @@ function setIndSurcoVar(inp){
 }
 
 function addIndSurcoFila(wi,ai){
-  ai=parseInt(ai);
+  wi=parseInt(wi); ai=parseInt(ai);
   var w=getW(wi); if(!w||!w.acts[ai]) return;
   if(!w.acts[ai].surcos) w.acts[ai].surcos=[];
   w.acts[ai].surcos.push({lbl:'',largo:'',num:'',totalPies:'',totalAcres:'',mode:''});
@@ -2871,7 +2871,7 @@ function addIndSurcoFila(wi,ai){
 }
 
 function askDelIndSurcoFila(wi,ai,fi){
-  ai=parseInt(ai);
+  wi=parseInt(wi); ai=parseInt(ai);
   var w=getW(wi); if(!w||!w.acts[ai]) return;
   var sf=w.acts[ai].surcos[fi];
   var name=sf&&sf.lbl?'"'+sf.lbl+'"':'#'+(fi+1);
