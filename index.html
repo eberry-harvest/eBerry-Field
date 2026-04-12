@@ -2687,7 +2687,11 @@ function mkActRow(wid_,ai,_cont){
     if(isActPuertas(act)){
       var surcoDiv=document.createElement('div'); surcoDiv.id='indSurco_'+wid_+'_'+ai;
       surcoDiv.className='qr';
-      if(!a.surcos||!a.surcos.length) a.surcos=[{lbl:'',largo:'',num:'',totalPies:'',totalAcres:'',mode:''}];
+      // V3: migrar surcos viejos → indPies
+      if(!a.indPies && a.surcos && a.surcos.length){
+        var _migP=0; for(var _ms=0;_ms<a.surcos.length;_ms++) _migP+=parseFloat(a.surcos[_ms].totalPies)||0;
+        if(_migP>0) a.indPies=_migP.toFixed(1);
+      }
       div.appendChild(surcoDiv);
       // Epsilon2-fix: renderIndSurcos movido DESPUÉS de cont.appendChild(div) — antes el div no estaba en DOM y gEl devolvía null
     } else {
@@ -2715,173 +2719,45 @@ function renderIndSurcos(wi,ai){
   var w=getW(wi); if(!w||!w.acts[ai]) return;
   var a=w.acts[ai]; var act=ACTS[a.ai]; if(!act) return;
   var cont=gEl('indSurco_'+wi+'_'+ai); if(!cont) return;
-  if(!a.surcos||!a.surcos.length) a.surcos=[{lbl:'',largo:'',num:'',totalPies:'',totalAcres:'',mode:''}];
-  var anchoCama = a.anchoCama||'';
-  var filasHtml='';
-  for(var fi=0;fi<a.surcos.length;fi++){
-    var sf=a.surcos[fi];
-    var lbl=(sf.lbl||'').replace(/"/g,'&quot;');
-    var fm=sf.mode||'';
-    if(!fm && (sf.largo||sf.num) && !sf.totalPies && !sf.totalAcres) fm='surco';
-    var disL=(fm==='pies'||fm==='acres'), disN=(fm==='pies'||fm==='acres');
-    var disP=(fm==='surco'||fm==='acres'), disA=(fm==='surco'||fm==='pies');
-    var ds='background:#e8e8e8;color:var(--gr);';
-    filasHtml+='<div style="background:var(--lt);border:1.5px solid var(--bd);border-radius:8px;padding:9px 10px;margin-bottom:8px">'
-      +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px">'
-      +'<div style="display:flex;align-items:center;gap:6px">'
-      +'<span style="font-size:10px;font-weight:700;color:var(--gr);text-transform:uppercase">Bloque</span>'
-      +'<input type="text" maxlength="5" value="'+lbl+'" placeholder="A1"'
-      +' data-wi="'+wi+'" data-ai="'+ai+'" data-fi="'+fi+'" data-sv="lbl" oninput="setIndSurcoVar(this)"'
-      +' style="width:52px;font-size:13px;font-weight:700;padding:4px 7px;text-transform:uppercase;text-align:center;border:1.5px solid var(--bd);border-radius:6px;background:#fff;font-family:\'DM Sans\',sans-serif">'
-      +'</div>'
-      +(a.surcos.length>1
-        ?'<button data-wi="'+wi+'" data-ai="'+ai+'" data-fi="'+fi+'" onclick="askDelIndSurcoFila(this.dataset.wi,this.dataset.ai,parseInt(this.dataset.fi))"'
-        +' style="background:var(--rp);color:var(--r);border:none;border-radius:5px;padding:5px 9px;font-size:11px;font-weight:700;cursor:pointer">\u2715 Borrar</button>'
-        :'<span></span>')
-      +'</div>'
-      +'<div style="display:grid;grid-template-columns:1fr auto 1fr;gap:4px;align-items:end;margin-bottom:6px">'
-      +'<div><label style="font-size:9px">Largo surco</label>'
-      +'<input type="text" inputmode="decimal" value="'+(sf.largo||'')+'" placeholder="pies"'
-      +' data-wi="'+wi+'" data-ai="'+ai+'" data-fi="'+fi+'" data-sf="largo" oninput="onIndSurcoSmart(this)"'
-      +(disL?' disabled style="font-size:15px;padding:8px;width:100%;'+ds+'"':' style="font-size:15px;padding:8px;width:100%"')+'></div>'
-      +'<span style="font-size:14px;font-weight:700;color:var(--gr);padding-bottom:10px">\u00d7</span>'
-      +'<div><label style="font-size:9px">Cant. surcos</label>'
-      +'<input type="text" inputmode="decimal" value="'+(sf.num||'')+'" placeholder="#"'
-      +' data-wi="'+wi+'" data-ai="'+ai+'" data-fi="'+fi+'" data-sf="num" oninput="onIndSurcoSmart(this)"'
-      +(disN?' disabled style="font-size:15px;padding:8px;width:100%;'+ds+'"':' style="font-size:15px;padding:8px;width:100%"')+'></div>'
-      +'</div>'
-      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">'
-      +'<div><label style="font-size:9px">Total Pies</label>'
-      +'<input type="text" inputmode="decimal" value="'+(sf.totalPies||'')+'" placeholder="pies lineales"'
-      +' data-wi="'+wi+'" data-ai="'+ai+'" data-fi="'+fi+'" data-sf="totalPies" oninput="onIndSurcoSmart(this)"'
-      +(disP?' disabled style="font-size:15px;padding:8px;width:100%;font-weight:700;color:var(--g);'+ds+'"':' style="font-size:15px;padding:8px;width:100%;font-weight:700;color:var(--g)"')+'></div>'
-      +'<div><label style="font-size:9px">Total Acres</label>'
-      +'<input type="text" inputmode="decimal" value="'+(sf.totalAcres||'')+'" placeholder="acres"'
-      +' data-wi="'+wi+'" data-ai="'+ai+'" data-fi="'+fi+'" data-sf="totalAcres" oninput="onIndSurcoSmart(this)"'
-      +(disA?' disabled style="font-size:15px;padding:8px;width:100%;font-weight:700;color:var(--b);'+ds+'"':' style="font-size:15px;padding:8px;width:100%;font-weight:700;color:var(--b)"')+'></div>'
-      +'</div></div>';
-  }
-  // Totales
-  var gP=0, gA=0;
-  for(var fi2=0;fi2<a.surcos.length;fi2++){
-    gP+=parseFloat(a.surcos[fi2].totalPies)||0;
-    gA+=parseFloat(a.surcos[fi2].totalAcres)||0;
-  }
-  // Omega: puertas = acres × anchoCama cuando hay ambos, fallback pies/100
-  var indAC=parseFloat(a.anchoCama)||0;
-  var puertas=(gA>0&&indAC>0)?gA*indAC:gP/100;
-  var puertasF=(gA>0&&indAC>0)?'(acres\u00d7ancho)':'(\u00f7100)';
-  // Campo de anchoCama para individual
-  var acHtml='<div style="margin-bottom:8px"><label style="font-size:10px">\ud83c\udf3e ANCHO DE CAMA (para pago \u2014 ej: 5.67 DeWitt, 83 Mecca)</label>'
-    +'<input type="text" inputmode="decimal" id="indAC_'+wi+'_'+ai+'" value="'+(a.anchoCama||'')+'" placeholder="83"'
-    +' data-wi="'+wi+'" data-ai="'+ai+'" oninput="setIndAnchoCama(this)"'
-    +' style="font-size:16px;padding:9px 10px;width:100%;margin-top:3px"></div>';
-  cont.innerHTML='<div style="font-size:11px;font-weight:700;color:var(--gr);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">\ud83d\udccf Bloques / Surcos (individual)</div>'
-    +acHtml+filasHtml
-    +'<button data-wi="'+wi+'" data-ai="'+ai+'" onclick="addIndSurcoFila(this.dataset.wi,this.dataset.ai)"'
-    +' style="width:100%;padding:8px;border:2px dashed var(--g2);border-radius:7px;background:none;color:var(--g);font-family:\'DM Sans\',sans-serif;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:10px">\uff0b Agregar m\u00e1s bloques</button>'
-    +(gP>0?'<div style="background:var(--gp);border-radius:7px;padding:9px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'
-    +'<span style="font-size:12px;font-weight:600;color:var(--g)">\ud83d\udcd0 Pies lineales</span>'
-    +'<b style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:var(--g)">'+gP.toFixed(1)+' ft</b></div>':'')
-    +(puertas>0?'<div style="background:var(--dk);border-radius:7px;padding:9px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'
-    +'<span style="font-size:12px;font-weight:600;color:#fff">\ud83d\udeaa Puertas '+puertasF+'</span>'
-    +'<b style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:#fff">'+puertas.toFixed(2)+'</b></div>':'')
-    +(gA>0?'<div style="background:var(--bp);border-radius:7px;padding:9px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'
-    +'<span style="font-size:12px;font-weight:600;color:var(--b)">\ud83c\udf3e Acres</span>'
-    +'<b style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:var(--b)">'+gA.toFixed(4)+'</b></div>':'')
-    +(puertas>0?'<div style="background:var(--a);border-radius:7px;padding:10px 12px;display:flex;justify-content:space-between;align-items:center">'
-    +'<span style="font-size:12px;font-weight:700;color:#fff">\ud83d\udcb0 '+puertas.toFixed(2)+' ptas \u00d7 $'+act.p+'</span>'
-    +'<b style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;color:#fff">$'+(puertas*act.p).toFixed(2)+'</b></div>':'');
-  // Actualizar qty para recalc
+  // V3: Simplificado — solo Total Pies, puertas=pies÷100, pago=puertas×precio
+  var totalPies=parseFloat(a.indPies)||0;
+  var puertas=totalPies/100;
+  var pago=puertas*act.p;
+  cont.innerHTML='<div style="font-size:11px;font-weight:700;color:var(--gr);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">PIES LINEALES (INDIVIDUAL)</div>'
+    +'<div style="margin-bottom:10px">'
+    +'<label style="font-size:10px;color:var(--gr)">TOTAL PIES</label>'
+    +'<input type="text" inputmode="decimal" id="indPies_'+wi+'_'+ai+'" value="'+(a.indPies||'')+'" placeholder="Ej: 8164"'
+    +' data-wi="'+wi+'" data-ai="'+ai+'" oninput="onIndPies(this)"'
+    +' style="font-size:20px;font-weight:700;padding:12px;width:100%;margin-top:3px;border:2px solid var(--g);border-radius:8px;color:var(--g);font-family:\'DM Sans\',sans-serif">'
+    +'</div>'
+    +(totalPies>0
+      ?'<div style="background:var(--dk);border-radius:8px;padding:12px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'
+      +'<span style="font-size:13px;font-weight:600;color:#fff">PUERTAS (÷100)</span>'
+      +'<b style="font-family:\'Bebas Neue\',sans-serif;font-size:24px;color:#fff">'+puertas.toFixed(2)+'</b></div>'
+      +'<div style="background:var(--a);border-radius:8px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center">'
+      +'<span style="font-size:13px;font-weight:700;color:#fff">'+puertas.toFixed(2)+' ptas × $'+act.p+'</span>'
+      +'<b style="font-family:\'Bebas Neue\',sans-serif;font-size:26px;color:#fff">$'+pago.toFixed(2)+'</b></div>'
+      :'');
   a.qty=puertas;
   recalc(wi,ai);
 }
 
-function onIndSurcoSmart(inp){
-  var wi=parseInt(inp.dataset.wi), ai=parseInt(inp.dataset.ai), fi=parseInt(inp.dataset.fi);
-  var sf=inp.dataset.sf;
+// V3: Simplificado — solo un input de Total Pies
+function onIndPies(inp){
+  var wi=parseInt(inp.dataset.wi), ai=parseInt(inp.dataset.ai);
   var w=getW(wi); if(!w||!w.acts[ai]) return;
-  var a=w.acts[ai];
-  if(!a.surcos) a.surcos=[{lbl:'',largo:'',num:'',totalPies:'',totalAcres:'',mode:''}];
-  var row=a.surcos[fi]; if(!row) return;
-  var val=inp.value.trim();
-  row[sf]=val;
-  var anchoCama=a.anchoCama||'';
-  if(sf==='largo'||sf==='num'){
-    var l=parseFloat(row.largo)||0, n=parseFloat(row.num)||0;
-    if(l>0||n>0){
-      row.mode='surco';
-      var pies=l*n;
-      row.totalPies=pies>0?pies.toFixed(1):'';
-      row.totalAcres=pies>0?piesToAcresWithAC(pies,anchoCama).toFixed(4):'';
-    } else { row.mode=''; row.totalPies=''; row.totalAcres=''; }
-  } else if(sf==='totalPies'){
-    var p=parseFloat(val)||0;
-    if(p>0){
-      row.mode='pies'; row.largo=''; row.num='';
-      row.totalAcres=piesToAcresWithAC(p,anchoCama).toFixed(4);
-    } else { row.mode=''; row.largo=''; row.num=''; row.totalAcres=''; }
-  } else if(sf==='totalAcres'){
-    var ac=parseFloat(val)||0;
-    if(ac>0){
-      row.mode='acres'; row.largo=''; row.num='';
-      var pCalc=acresToPiesWithAC(ac,anchoCama);
-      row.totalPies=pCalc>0?pCalc.toFixed(1):'';
-    } else { row.mode=''; row.largo=''; row.num=''; row.totalPies=''; }
-  }
-  // Restaurar foco después del re-render
-  var _wi=wi, _ai=ai, _fi=fi, _sf=sf, _cursorPos=inp.selectionStart;
+  w.acts[ai].indPies=inp.value.trim();
+  var _wi=wi, _ai=ai, _cp=inp.selectionStart;
   renderIndSurcos(_wi,_ai);
   autoSave();
   setTimeout(function(){
-    var el=document.querySelector('[data-wi="'+_wi+'"][data-ai="'+_ai+'"][data-fi="'+_fi+'"][data-sf="'+_sf+'"]');
-    if(el){ el.focus(); if(typeof _cursorPos==='number') try{el.setSelectionRange(_cursorPos,_cursorPos);}catch(e){} }
-  },0);
-}
-
-function setIndAnchoCama(inp){
-  var wi=parseInt(inp.dataset.wi), ai=parseInt(inp.dataset.ai);
-  var w=getW(wi); if(!w||!w.acts[ai]) return;
-  w.acts[ai].anchoCama=inp.value.trim();
-  var _cp=inp.selectionStart;
-  // Recalcular puertas y pago con nuevo anchoCama
-  renderIndSurcos(wi,ai);
-  autoSave();
-  setTimeout(function(){
-    var el=gEl('indAC_'+wi+'_'+ai);
+    var el=gEl('indPies_'+_wi+'_'+_ai);
     if(el){ el.focus(); if(typeof _cp==='number') try{el.setSelectionRange(_cp,_cp);}catch(e){} }
   },0);
 }
 
-function setIndSurcoVar(inp){
-  var wi=parseInt(inp.dataset.wi), ai=parseInt(inp.dataset.ai), fi=parseInt(inp.dataset.fi);
-  var w=getW(wi); if(!w||!w.acts[ai]) return;
-  if(!w.acts[ai].surcos) return;
-  if(w.acts[ai].surcos[fi]) w.acts[ai].surcos[fi].lbl=inp.value;
-  autoSave();
-}
-
-function addIndSurcoFila(wi,ai){
-  wi=parseInt(wi); ai=parseInt(ai);
-  var w=getW(wi); if(!w||!w.acts[ai]) return;
-  if(!w.acts[ai].surcos) w.acts[ai].surcos=[];
-  w.acts[ai].surcos.push({lbl:'',largo:'',num:'',totalPies:'',totalAcres:'',mode:''});
-  renderIndSurcos(wi,ai);
-  autoSave();
-}
-
-function askDelIndSurcoFila(wi,ai,fi){
-  wi=parseInt(wi); ai=parseInt(ai);
-  var w=getW(wi); if(!w||!w.acts[ai]) return;
-  var sf=w.acts[ai].surcos[fi];
-  var name=sf&&sf.lbl?'"'+sf.lbl+'"':'#'+(fi+1);
-  if(confirm('\u00bfEliminar bloque '+name+'?')){
-    w.acts[ai].surcos.splice(fi,1);
-    if(!w.acts[ai].surcos.length) w.acts[ai].surcos=[{lbl:'',largo:'',num:'',totalPies:'',totalAcres:'',mode:''}];
-    renderIndSurcos(wi,ai);
-    autoSave();
-  }
-}
+// V3: funciones legacy de surcos individuales removidas (setIndAnchoCama, setIndSurcoVar, addIndSurcoFila, askDelIndSurcoFila)
+// Ahora solo se usa onIndPies() + renderIndSurcos()
 
 function onQty(wi,ai,v){ var w=getW(wi); if(!w||!w.acts[ai])return; w.acts[ai].qty=v; recalc(wi,ai); autoSave(); }
 function onIni(wi,ai,v){ var w=getW(wi); if(!w||!w.acts[ai])return; w.acts[ai].ini=v; w.acts[ai].showTime=true; recalc(wi,ai); autoSave(); }
@@ -3462,6 +3338,7 @@ function save(){
         var actSv={ai:sa.ai,esName:sact?sact.es:'',tipo:sact?sact.tipo:'',qty:sa.qty,ini:sa.ini,fin:sa.fin,showTime:sa.showTime,pay:sa.pay,shifts:sa.shifts,finca:sa.finca||''};
         if(sa.surcos&&sa.surcos.length) actSv.surcos=sa.surcos;
         if(sa.anchoCama) actSv.anchoCama=sa.anchoCama;
+        if(sa.indPies) actSv.indPies=sa.indPies; // V3: guardar pies individuales
         ws.acts.push(actSv);
       }
       wSave.push(ws);
@@ -3569,16 +3446,14 @@ function load(){
         if(!act){ a.pay=0; continue; }
         a.esName=act.es;
         a.tipo=act.tipo;  // Upsilon: siempre sincronizar tipo en live act
-        // Omega: si tiene surcos individuales, recalcular qty como puertas
-        // Puertas = acres × anchoCama cuando hay ambos, fallback pies/100
-        if(a.surcos&&a.surcos.length&&isActPuertas(act)){
-          var _tpInd=0, _taInd=0;
-          for(var si2=0;si2<a.surcos.length;si2++){
-            _tpInd+=parseFloat(a.surcos[si2].totalPies)||0;
-            _taInd+=parseFloat(a.surcos[si2].totalAcres)||0;
+        // V3: surcos individuales simplificado — puertas = indPies/100
+        if(isActPuertas(act)){
+          var _ipV3=parseFloat(a.indPies)||0;
+          // Migración: si no hay indPies pero hay surcos viejos, sumar totalPies
+          if(!_ipV3 && a.surcos && a.surcos.length){
+            for(var si2=0;si2<a.surcos.length;si2++) _ipV3+=parseFloat(a.surcos[si2].totalPies)||0;
           }
-          var _acInd=parseFloat(a.anchoCama)||0;
-          a.qty=(_taInd>0&&_acInd>0)?_taInd*_acInd:_tpInd/100;
+          if(_ipV3>0) a.qty=_ipV3/100;
         }
         if(act.hr){ a.pay=totalShiftHours(a)*getHRate(workers[i],act); }
         else if(act.tipo==='$'){ a.pay=parseFloat(a.qty)||0; }
@@ -3761,6 +3636,7 @@ function saveQuiet(){
         var actSv2={ai:sa.ai,esName:sact?sact.es:'',tipo:sact?sact.tipo:'',qty:sa.qty,ini:sa.ini,fin:sa.fin,showTime:sa.showTime,pay:sa.pay,shifts:sa.shifts,finca:sa.finca||''};
         if(sa.surcos&&sa.surcos.length) actSv2.surcos=sa.surcos;
         if(sa.anchoCama) actSv2.anchoCama=sa.anchoCama;
+        if(sa.indPies) actSv2.indPies=sa.indPies; // V3
         ws.acts.push(actSv2);
       }
       wSave.push(ws);
@@ -8262,5 +8138,4 @@ function checkDaysWithoutSend(){
   var diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
   if(diffDays >= 2){
-    warn.style.display = 'inline-flex';
-    if(txt) txt.textContent = diffDays + 
+    warn.style.di
