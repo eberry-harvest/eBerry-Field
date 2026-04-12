@@ -2714,50 +2714,66 @@ function mkActRow(wid_,ai,_cont){
   if(a.qty||(a.ini&&a.fin)) recalc(wid_,ai);
 }
 
-// ── Omega: Sistema de surcos INDIVIDUAL (misma UI que grupal, sin dividir) ──
+// ── V4: Sistema individual simplificado — Total Pies + Ancho de cama ──
+// Puertas = pies÷100 → pago = puertas×precio
+// Acres = pies × anchoCama (sin dividir por ahora)
 function renderIndSurcos(wi,ai){
   var w=getW(wi); if(!w||!w.acts[ai]) return;
   var a=w.acts[ai]; var act=ACTS[a.ai]; if(!act) return;
   var cont=gEl('indSurco_'+wi+'_'+ai); if(!cont) return;
-  // V3: Simplificado — solo Total Pies, puertas=pies÷100, pago=puertas×precio
   var totalPies=parseFloat(a.indPies)||0;
+  var anchoCama=parseFloat(a.indAncho)||0;
   var puertas=totalPies/100;
+  var acres=(totalPies>0&&anchoCama>0)?totalPies*anchoCama:0;
   var pago=puertas*act.p;
-  cont.innerHTML='<div style="font-size:11px;font-weight:700;color:var(--gr);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">PIES LINEALES (INDIVIDUAL)</div>'
-    +'<div style="margin-bottom:10px">'
-    +'<label style="font-size:10px;color:var(--gr)">TOTAL PIES</label>'
+  var h='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">'
+    +'<div>'
+    +'<label style="font-size:10px;font-weight:700;color:var(--gr)">TOTAL PIES</label>'
     +'<input type="text" inputmode="decimal" id="indPies_'+wi+'_'+ai+'" value="'+(a.indPies||'')+'" placeholder="Ej: 8164"'
-    +' data-wi="'+wi+'" data-ai="'+ai+'" oninput="onIndPies(this)"'
-    +' style="font-size:20px;font-weight:700;padding:12px;width:100%;margin-top:3px;border:2px solid var(--g);border-radius:8px;color:var(--g);font-family:\'DM Sans\',sans-serif">'
+    +' data-wi="'+wi+'" data-ai="'+ai+'" data-f="pies" oninput="onIndField(this)"'
+    +' style="font-size:18px;font-weight:700;padding:10px;width:100%;margin-top:3px;border:2px solid var(--g);border-radius:8px;color:var(--g);font-family:\'DM Sans\',sans-serif">'
     +'</div>'
-    +(totalPies>0
-      ?'<div style="background:var(--dk);border-radius:8px;padding:12px 14px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'
-      +'<span style="font-size:13px;font-weight:600;color:#fff">PUERTAS (÷100)</span>'
-      +'<b style="font-family:\'Bebas Neue\',sans-serif;font-size:24px;color:#fff">'+puertas.toFixed(2)+'</b></div>'
-      +'<div style="background:var(--a);border-radius:8px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center">'
-      +'<span style="font-size:13px;font-weight:700;color:#fff">'+puertas.toFixed(2)+' ptas × $'+act.p+'</span>'
-      +'<b style="font-family:\'Bebas Neue\',sans-serif;font-size:26px;color:#fff">$'+pago.toFixed(2)+'</b></div>'
-      :'');
+    +'<div>'
+    +'<label style="font-size:10px;font-weight:700;color:var(--gr)">ANCHO DE CAMA</label>'
+    +'<input type="text" inputmode="decimal" id="indAncho_'+wi+'_'+ai+'" value="'+(a.indAncho||'')+'" placeholder="Ej: 5.67"'
+    +' data-wi="'+wi+'" data-ai="'+ai+'" data-f="ancho" oninput="onIndField(this)"'
+    +' style="font-size:18px;font-weight:700;padding:10px;width:100%;margin-top:3px;border:2px solid var(--b);border-radius:8px;color:var(--b);font-family:\'DM Sans\',sans-serif">'
+    +'</div></div>';
+  if(totalPies>0){
+    h+='<div style="background:var(--dk);border-radius:8px;padding:11px 14px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">'
+      +'<span style="font-size:12px;font-weight:600;color:#fff">PUERTAS (pies÷100)</span>'
+      +'<b style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;color:#fff">'+puertas.toFixed(2)+'</b></div>';
+    if(acres>0){
+      h+='<div style="background:var(--bp);border-radius:8px;padding:11px 14px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">'
+        +'<span style="font-size:12px;font-weight:600;color:var(--b)">ACRES (pies×ancho)</span>'
+        +'<b style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;color:var(--b)">'+acres.toFixed(4)+'</b></div>';
+    }
+    h+='<div style="background:var(--a);border-radius:8px;padding:11px 14px;display:flex;justify-content:space-between;align-items:center">'
+      +'<span style="font-size:12px;font-weight:700;color:#fff">'+puertas.toFixed(2)+' ptas × $'+act.p+'</span>'
+      +'<b style="font-family:\'Bebas Neue\',sans-serif;font-size:24px;color:#fff">$'+pago.toFixed(2)+'</b></div>';
+  }
+  cont.innerHTML=h;
   a.qty=puertas;
+  a.indAcres=acres;
   recalc(wi,ai);
 }
 
-// V3: Simplificado — solo un input de Total Pies
-function onIndPies(inp){
+// V4: handler unificado para Total Pies y Ancho de cama
+function onIndField(inp){
   var wi=parseInt(inp.dataset.wi), ai=parseInt(inp.dataset.ai);
+  var f=inp.dataset.f; // 'pies' o 'ancho'
   var w=getW(wi); if(!w||!w.acts[ai]) return;
-  w.acts[ai].indPies=inp.value.trim();
-  var _wi=wi, _ai=ai, _cp=inp.selectionStart;
+  if(f==='pies') w.acts[ai].indPies=inp.value.trim();
+  else if(f==='ancho') w.acts[ai].indAncho=inp.value.trim();
+  var _wi=wi, _ai=ai, _f=f, _cp=inp.selectionStart;
   renderIndSurcos(_wi,_ai);
   autoSave();
   setTimeout(function(){
-    var el=gEl('indPies_'+_wi+'_'+_ai);
+    var elId=(_f==='pies'?'indPies_':'indAncho_')+_wi+'_'+_ai;
+    var el=gEl(elId);
     if(el){ el.focus(); if(typeof _cp==='number') try{el.setSelectionRange(_cp,_cp);}catch(e){} }
   },0);
 }
-
-// V3: funciones legacy de surcos individuales removidas (setIndAnchoCama, setIndSurcoVar, addIndSurcoFila, askDelIndSurcoFila)
-// Ahora solo se usa onIndPies() + renderIndSurcos()
 
 function onQty(wi,ai,v){ var w=getW(wi); if(!w||!w.acts[ai])return; w.acts[ai].qty=v; recalc(wi,ai); autoSave(); }
 function onIni(wi,ai,v){ var w=getW(wi); if(!w||!w.acts[ai])return; w.acts[ai].ini=v; w.acts[ai].showTime=true; recalc(wi,ai); autoSave(); }
@@ -3338,7 +3354,9 @@ function save(){
         var actSv={ai:sa.ai,esName:sact?sact.es:'',tipo:sact?sact.tipo:'',qty:sa.qty,ini:sa.ini,fin:sa.fin,showTime:sa.showTime,pay:sa.pay,shifts:sa.shifts,finca:sa.finca||''};
         if(sa.surcos&&sa.surcos.length) actSv.surcos=sa.surcos;
         if(sa.anchoCama) actSv.anchoCama=sa.anchoCama;
-        if(sa.indPies) actSv.indPies=sa.indPies; // V3: guardar pies individuales
+        if(sa.indPies) actSv.indPies=sa.indPies; // V3
+        if(sa.indAncho) actSv.indAncho=sa.indAncho; // V4
+        if(sa.indAcres) actSv.indAcres=sa.indAcres; // V4
         ws.acts.push(actSv);
       }
       wSave.push(ws);
@@ -3446,14 +3464,16 @@ function load(){
         if(!act){ a.pay=0; continue; }
         a.esName=act.es;
         a.tipo=act.tipo;  // Upsilon: siempre sincronizar tipo en live act
-        // V3: surcos individuales simplificado — puertas = indPies/100
+        // V4: surcos individuales — puertas=indPies/100, acres=indPies×indAncho
         if(isActPuertas(act)){
-          var _ipV3=parseFloat(a.indPies)||0;
+          var _ipV4=parseFloat(a.indPies)||0;
           // Migración: si no hay indPies pero hay surcos viejos, sumar totalPies
-          if(!_ipV3 && a.surcos && a.surcos.length){
-            for(var si2=0;si2<a.surcos.length;si2++) _ipV3+=parseFloat(a.surcos[si2].totalPies)||0;
+          if(!_ipV4 && a.surcos && a.surcos.length){
+            for(var si2=0;si2<a.surcos.length;si2++) _ipV4+=parseFloat(a.surcos[si2].totalPies)||0;
           }
-          if(_ipV3>0) a.qty=_ipV3/100;
+          if(_ipV4>0) a.qty=_ipV4/100;
+          var _iaV4=parseFloat(a.indAncho)||0;
+          if(_ipV4>0&&_iaV4>0) a.indAcres=_ipV4*_iaV4;
         }
         if(act.hr){ a.pay=totalShiftHours(a)*getHRate(workers[i],act); }
         else if(act.tipo==='$'){ a.pay=parseFloat(a.qty)||0; }
@@ -3637,6 +3657,8 @@ function saveQuiet(){
         if(sa.surcos&&sa.surcos.length) actSv2.surcos=sa.surcos;
         if(sa.anchoCama) actSv2.anchoCama=sa.anchoCama;
         if(sa.indPies) actSv2.indPies=sa.indPies; // V3
+        if(sa.indAncho) actSv2.indAncho=sa.indAncho; // V4
+        if(sa.indAcres) actSv2.indAcres=sa.indAcres; // V4
         ws.acts.push(actSv2);
       }
       wSave.push(ws);
@@ -8138,4 +8160,16 @@ function checkDaysWithoutSend(){
   var diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
   if(diffDays >= 2){
-    warn.style.di
+    warn.style.display = 'inline-flex';
+    if(txt) txt.textContent = diffDays + ' día' + (diffDays>1?'s':'') + ' sin enviar';
+  } else {
+    warn.style.display = 'none';
+  }
+}
+
+// Revisar cada 30 minutos si llevan días sin enviar
+setInterval(checkDaysWithoutSend, 30 * 60 * 1000);
+
+</script>
+</body>
+</html>
