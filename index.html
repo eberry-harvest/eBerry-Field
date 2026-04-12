@@ -2716,7 +2716,7 @@ function mkActRow(wid_,ai,_cont){
 
 // ── V4: Sistema individual simplificado — Total Pies + Ancho de cama ──
 // Puertas = pies÷100 → pago = puertas×precio
-// Acres = pies × anchoCama (sin dividir por ahora)
+// Acres = (pies × anchoCama) ÷ 43560
 function renderIndSurcos(wi,ai){
   var w=getW(wi); if(!w||!w.acts[ai]) return;
   var a=w.acts[ai]; var act=ACTS[a.ai]; if(!act) return;
@@ -2724,7 +2724,7 @@ function renderIndSurcos(wi,ai){
   var totalPies=parseFloat(a.indPies)||0;
   var anchoCama=parseFloat(a.indAncho)||0;
   var puertas=totalPies/100;
-  var acres=(totalPies>0&&anchoCama>0)?totalPies*anchoCama:0;
+  var acres=(totalPies>0&&anchoCama>0)?(totalPies*anchoCama)/43560:0;
   var pago=puertas*act.p;
   var h='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">'
     +'<div>'
@@ -2745,7 +2745,7 @@ function renderIndSurcos(wi,ai){
       +'<b style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;color:#fff">'+puertas.toFixed(2)+'</b></div>';
     if(acres>0){
       h+='<div style="background:var(--bp);border-radius:8px;padding:11px 14px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">'
-        +'<span style="font-size:12px;font-weight:600;color:var(--b)">ACRES (pies×ancho)</span>'
+        +'<span style="font-size:12px;font-weight:600;color:var(--b)">ACRES (pies×ancho÷43560)</span>'
         +'<b style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;color:var(--b)">'+acres.toFixed(4)+'</b></div>';
     }
     h+='<div style="background:var(--a);border-radius:8px;padding:11px 14px;display:flex;justify-content:space-between;align-items:center">'
@@ -3473,7 +3473,7 @@ function load(){
           }
           if(_ipV4>0) a.qty=_ipV4/100;
           var _iaV4=parseFloat(a.indAncho)||0;
-          if(_ipV4>0&&_iaV4>0) a.indAcres=_ipV4*_iaV4;
+          if(_ipV4>0&&_iaV4>0) a.indAcres=(_ipV4*_iaV4)/43560;
         }
         if(act.hr){ a.pay=totalShiftHours(a)*getHRate(workers[i],act); }
         else if(act.tipo==='$'){ a.pay=parseFloat(a.qty)||0; }
