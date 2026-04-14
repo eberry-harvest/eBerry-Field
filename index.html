@@ -2356,10 +2356,15 @@ if(typeof MutationObserver!=='undefined')(function(){
     for(var i=0;i<all.length;i++){ if(all[i].id!=='qrOv') return true; }
     return false;
   }
+  // V13-FIX1: Debounce overlay QR — evita doble-tap accidental
+  var _ovDebounce = null;
   var obs=new MutationObserver(function(){
     if(!qrActive)return;
-    if(anyOverlayOpen()) pauseQR();
-    else resumeQR();
+    if(_ovDebounce) return;
+    _ovDebounce = setTimeout(function(){
+      _ovDebounce = null;
+      if(anyOverlayOpen()) pauseQR(); else resumeQR();
+    }, 50);
   });
   // Observar body completo: detecta class changes y nodos nuevos (.ov dinámicos)
   obs.observe(document.body,{attributes:true,attributeFilter:['class'],subtree:true,childList:true});
@@ -2800,7 +2805,8 @@ function recalc(wi,ai){
   var w=getW(wi); if(!w||!w.acts[ai])return;
   var a=w.acts[ai]; var act=ACTS[a.ai]; var pay=0;
   if(!act) return;
-  if(act.hr){ pay=totalShiftHours(a)*getHRate(w,act); }
+  // V13-FIX2: isHourAct() en vez de act.hr — cubre tipo='hora' sin act.hr=true
+  if(isHourAct(act)){ pay=totalShiftHours(a)*getHRate(w,act); }
   else if(act.tipo==='$'){ pay=parseFloat(a.qty)||0; }
   // Tau: Daywork usa contractRate si existe (misma lógica que Hours)
   else { pay=(parseFloat(a.qty)||0)*act.p; }  // Daywork, Pieces, Cajas — todos usan act.p
@@ -3348,10 +3354,15 @@ function _serializeState(){
   }
   return {vals:vals, wSave:wSave};
 }
+// V13-FIX3: try/catch separados — si historial falla por storage lleno, estado principal sí se guarda
 function _persistState(vals, wSave){
-  localStorage.setItem(getUserKey(),JSON.stringify({v:vals,w:wSave,id:wid,ep:estP,hp:hilP,cp:cajasP,ga:grpActs,aus:ausencias}));
-  var dateKey=getUserHistKey(vals.fecha||new Date().toISOString().split('T')[0]);
-  localStorage.setItem(dateKey,JSON.stringify({v:vals,w:wSave,id:wid,ep:estP,hp:hilP,cp:cajasP,saved:new Date().toISOString()}));
+  try {
+    localStorage.setItem(getUserKey(),JSON.stringify({v:vals,w:wSave,id:wid,ep:estP,hp:hilP,cp:cajasP,ga:grpActs,aus:ausencias}));
+  } catch(e){ console.warn('[eBerry] Error guardando estado:', e.message); return; }
+  try {
+    var dateKey=getUserHistKey(vals.fecha||new Date().toISOString().split('T')[0]);
+    localStorage.setItem(dateKey,JSON.stringify({v:vals,w:wSave,id:wid,ep:estP,hp:hilP,cp:cajasP,saved:new Date().toISOString()}));
+  } catch(e){ console.warn('[eBerry] localStorage lleno — historial no guardado:', e.message); }
 }
 
 function save(){
@@ -3566,7 +3577,8 @@ function showEmptyState(){
 }
 
 function go(n){
-  if(n===1) buildAnalisis();
+  // V13-FIX4: Guard — evita análisis vacío si workers no ha cargado aún
+  if(n===1){ if(workers && workers.length) buildAnalisis(); else setTimeout(buildAnalisis,200); }
   if(n===2){updBanner(); setTimeout(function(){ for(var i=0;i<workers.length;i++) updTot(workers[i].id); },50);}
   if(n===3){updParts();renderGrpActs();}
   if(n===4)buildSum();
@@ -4290,8 +4302,9 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
         }
       }
       if(!anRows) return '';
-      return '<div style="margin-top:14px;border:2px solid #c00;border-radius:8px;overflow:hidden;page-break-inside:avoid">'
-        +'<div style="background:#c00;color:#fff;padding:7px 12px;font-weight:700;font-size:11px;display:flex;justify-content:space-between">'
+      // V14-FIX: Quitado overflow:hidden + page-break-inside:avoid — causaban salto de página innecesario
+      return '<div style="margin-top:14px;border:2px solid #c00;border-radius:8px">'
+        +'<div style="background:#c00;color:#fff;padding:7px 12px;font-weight:700;font-size:11px;display:flex;justify-content:space-between;border-radius:6px 6px 0 0">'
         +'<span>&#x1F4C9; AN&Aacute;LISIS DE RENDIMIENTO &mdash; P&Eacute;RDIDAS</span>'
         +'<span>'+wLoss+' trabajador(es) &bull; Total: -$'+totalLoss.toFixed(2)+'</span></div>'
         +'<table style="width:100%;border-collapse:collapse">'
@@ -5796,7 +5809,10 @@ function _showFallbackBanner(msg){
   ban.appendChild(btn);
   document.body.appendChild(ban);
   // Ajustar body padding para que no tape contenido
-  document.body.style.paddingTop = (ban.offsetHeight + 2) + 'px';
+  // V13-FIX5: rAF evita layout thrashing en Android
+  requestAnimationFrame(function(){
+    document.body.style.paddingTop = (ban.offsetHeight + 2) + 'px';
+  });
 }
 function _hideFallbackBanner(){
   var old = document.getElementById('fallbackBanner');
