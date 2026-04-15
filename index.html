@@ -1299,6 +1299,11 @@ function logoutUser(){
   closeSession();
   // V7: limpiar intervalos para evitar acumulación en re-login
   if(_keepAliveTimer){ clearInterval(_keepAliveTimer); _keepAliveTimer=null; }
+  // V20_02-FIX: limpiar estado del surquero anterior para que el siguiente no herede datos
+  resetState();
+  var wlist = gEl('wlist'); if(wlist) wlist.innerHTML = '';
+  var sel = gEl('rancho'); if(sel){ sel.innerHTML = '<option value="">— Selecciona un rancho —</option>'; sel.value = ''; }
+  ACTS = []; GRUPAL_ACTS = []; NAMES = [];
   currentUser = null;
   // Hide logout button
   var btn = gEl('logoutBtn'); if(btn) btn.style.display = 'none';
@@ -1312,6 +1317,7 @@ function logoutUser(){
   gEl('loginScreen').classList.remove('hide');
   document.body.classList.add('login-locked');
   document.documentElement.classList.add('login-locked');
+  go(0);
   toast('👋 Sesión cerrada');
 }
 
@@ -3565,9 +3571,21 @@ function applyAutoFill(){
     if(disp){ disp.textContent = currentUser.name; disp.style.display='block'; }
     if(inp)  inp.value = currentUser.name;
     if(adminSel) adminSel.style.display='none'; // ✅ siempre oculto para surqueros
-    // Rancho — siempre del crew
+    // V20_02-FIX: rancho del crew con match correcto + disparar onRanchoChange
     var crewBase = currentUser.crew.replace(/\s*\d+$/,'').trim();
-    var rEl = gEl('rancho'); if(rEl) rEl.value = crewBase;
+    var rEl = gEl('rancho');
+    if(rEl){
+      var _matched = false;
+      for(var _oi=0;_oi<rEl.options.length;_oi++){
+        if(rEl.options[_oi].value.toLowerCase()===crewBase.toLowerCase()){ rEl.selectedIndex=_oi; _matched=true; break; }
+      }
+      if(!_matched){
+        for(var _oi2=0;_oi2<rEl.options.length;_oi2++){
+          if(rEl.options[_oi2].value.toLowerCase().indexOf(crewBase.toLowerCase())===0){ rEl.selectedIndex=_oi2; _matched=true; break; }
+        }
+      }
+      onRanchoChange();
+    }
   } else {
     // Admin — ocultar display, mostrar select con surqueros
     // ✅ Lambda fix: preservar surquero seleccionado al reconstruir dropdown
