@@ -23,33 +23,75 @@
 })();
 </script>
 <script>
-// Beta2: Service Worker registration
-// Solo registrar en GitHub Pages o localhost (no en previews de terceros)
+// V15: Service Worker registration v2 — Network-First + toast de actualización
 (function(){
   var host = location.hostname || '';
   var isDeployment = host.indexOf('github.io') !== -1
     || host === 'localhost'
     || host === '127.0.0.1'
     || host.indexOf('192.168.') === 0;
-  if('serviceWorker' in navigator && isDeployment){
-    window.addEventListener('load', function(){
-      navigator.serviceWorker.register('./sw.js').then(function(reg){
-        console.log('[eBerry] SW registrado, scope:', reg.scope);
-        // Si hay una versión nueva esperando, activarla
-        reg.addEventListener('updatefound', function(){
-          var nw = reg.installing;
-          if(nw) nw.addEventListener('statechange', function(){
-            if(nw.state==='installed' && navigator.serviceWorker.controller){
-              console.log('[eBerry] Nueva versión del SW disponible');
-              nw.postMessage({action:'skipWaiting'});
-            }
-          });
-        });
-      }).catch(function(err){
-        console.warn('[eBerry] SW no se pudo registrar:', err.message);
-      });
+  if(!('serviceWorker' in navigator) || !isDeployment) return;
+
+  // Toast de "nueva versión disponible"
+  function showUpdateToast(){
+    if(document.getElementById('sw-update-toast')) return;
+    var t = document.createElement('div');
+    t.id = 'sw-update-toast';
+    t.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#1a3a5c;color:#fff;padding:12px 18px;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,.4);z-index:9999;display:flex;align-items:center;gap:12px;font-family:DM Sans,sans-serif;font-size:.95rem;max-width:90vw';
+    t.innerHTML = '<span>\uD83E\uDED0 Nueva versi\u00f3n disponible</span>'
+      + '<button id="sw-update-btn" style="background:#4CAF50;color:#fff;border:none;padding:8px 16px;border-radius:6px;font-weight:700;cursor:pointer;font-size:.9rem;min-width:44px;min-height:44px">Actualizar</button>';
+    document.body.appendChild(t);
+    document.getElementById('sw-update-btn').addEventListener('click', function(){
+      t.remove();
+      if(navigator.serviceWorker.controller){
+        navigator.serviceWorker.controller.postMessage({action:'skipWaiting'});
+      }
     });
   }
+
+  window.addEventListener('load', function(){
+    navigator.serviceWorker.register('./sw.js').then(function(reg){
+      console.log('[eBerry] SW registrado, scope:', reg.scope);
+
+      // Verificar actualizaciones cada vez que la app vuelve al frente
+      document.addEventListener('visibilitychange', function(){
+        if(document.visibilityState === 'visible') reg.update();
+      });
+
+      // SW nuevo instalándose
+      reg.addEventListener('updatefound', function(){
+        var nw = reg.installing;
+        if(!nw) return;
+        nw.addEventListener('statechange', function(){
+          if(nw.state === 'installed' && navigator.serviceWorker.controller){
+            console.log('[eBerry] SW nuevo en waiting — mostrando toast');
+            showUpdateToast();
+          }
+        });
+      });
+
+      // SW ya tenía versión waiting al cargar
+      if(reg.waiting && navigator.serviceWorker.controller){
+        showUpdateToast();
+      }
+
+    }).catch(function(err){
+      console.warn('[eBerry] SW no se pudo registrar:', err.message);
+    });
+
+    // Cuando el SW nuevo tome control → recargar para usar HTML nuevo
+    navigator.serviceWorker.addEventListener('controllerchange', function(){
+      window.location.reload();
+    });
+
+    // SW detectó HTML nuevo via hash (postMessage SW_UPDATE_READY)
+    navigator.serviceWorker.addEventListener('message', function(ev){
+      if(ev.data && ev.data.type === 'SW_UPDATE_READY'){
+        console.log('[eBerry] HTML nuevo detectado por SW — mostrando toast');
+        showUpdateToast();
+      }
+    });
+  });
 })();
 </script>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;600;700&display=swap" rel="stylesheet">
