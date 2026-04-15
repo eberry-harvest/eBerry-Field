@@ -1334,21 +1334,24 @@ function closeSession(){
 function logoutUser(){
   saveQuiet();
   closeSession();
-  // V7: limpiar intervalos para evitar acumulación en re-login
   if(_keepAliveTimer){ clearInterval(_keepAliveTimer); _keepAliveTimer=null; }
+  // V32-FIX: limpiar estado completo del surquero anterior
+  resetState();
+  var wlist = gEl('wlist'); if(wlist) wlist.innerHTML = '';
+  ACTS = []; GRUPAL_ACTS = []; NAMES = [];
+  var rList = gEl('ranchBlockList'); if(rList) rList.innerHTML = '';
+  var slot = gEl('pagesSlot'); if(slot){ document.body.appendChild(slot); slot.style.display='none'; }
   currentUser = null;
-  // Hide logout button
   var btn = gEl('logoutBtn'); if(btn) btn.style.display = 'none';
   var badge = gEl('adminBadge'); if(badge) badge.style.display = 'none';
   var fBtn = gEl('faceRegBtn'); if(fBtn) fBtn.classList.remove('vis');
-  // Reset pin state
   pinBuffer = '';
   updPinDots();
   gEl('loginErr').textContent = '';
-  // Show login screen
   gEl('loginScreen').classList.remove('hide');
   document.body.classList.add('login-locked');
   document.documentElement.classList.add('login-locked');
+  go(0);
   toast('👋 Sesión cerrada');
 }
 
@@ -3981,8 +3984,11 @@ function applyAutoFill(){
     if(adminSel) adminSel.style.display='none'; // ✅ siempre oculto para surqueros
     // Rancho — siempre del crew
     var crewBase = currentUser.crew.replace(/\s*\d+$/,'').trim();
-    // V28-FIX-UI3: no sobreescribir rancho si populateRanchoDropdown ya lo seteó
-    var rEl = gEl('rancho'); if(rEl && !rEl.value) rEl.value = crewBase;
+    // V32-FIX: asegurar rancho correcto del crew + filtrar ACTS
+    var rEl = gEl('rancho');
+    if(rEl && !rEl.value) rEl.value = crewBase;
+    // Siempre re-filtrar ACTS para el rancho del surquero
+    _filterActsForRancho(gVal('rancho'));
   } else {
     // Admin — ocultar display, mostrar select con surqueros
     // ✅ Lambda fix: preservar surquero seleccionado al reconstruir dropdown
