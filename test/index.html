@@ -1657,8 +1657,8 @@ function _filterActsForRancho(rancho){
   }
   if(!ACTS.length) ACTS = FALLBACK_ACTS.filter(function(a){ return a.modo !== 'Grupal'; });
   if(!GRUPAL_ACTS.length) GRUPAL_ACTS = FALLBACK_GRUPAL_ACTS;
-  // V30-FIX: actualizar NAMES para TODOS los usuarios al cambiar rancho (antes solo admin)
-  if(currentUser){
+  // V31-FIX: solo admin actualiza NAMES por rancho — surquero ya tiene NAMES correcto de filterDataForCrew
+  if(currentUser && currentUser.isAdmin && !gVal('surquero')){
     var ranchoWorkers = getWorkersForRancho();
     if(ranchoWorkers.length) NAMES = ranchoWorkers.map(function(w){ return w.name; });
   }
