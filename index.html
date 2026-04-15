@@ -1108,7 +1108,7 @@ html.login-locked{overflow:hidden!important;height:100%!important}
       </div>
       <div style="flex:1;min-width:120px">
         <label style="font-size:11px;font-weight:700;color:var(--dk)">FINCA / LABOR</label>
-        <input type="text" id="semFinca" placeholder="Labor" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:8px;font-size:14px">
+        <input type="text" id="semFinca" placeholder="Labor" oninput="saveSemData()" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:8px;font-size:14px">
       </div>
     </div>
   </div>
@@ -2963,6 +2963,7 @@ function togTime(wi,ai){
     var ex=findTime(w.acts[ai].ai, wi);
     if(ex){ var _wi=wi,_ai=ai,_e=ex; setTimeout(function(){ showTm(_wi,_ai,_e.ini,_e.fin); },50); }
   }
+  autoSave(); // V17-FIX3: toggle horario debe guardar
 }
 
 function chAct(wi,ai,nai){
@@ -2979,6 +2980,7 @@ function chAct(wi,ai,nai){
   w.acts[ai].showTime=true;
   var ex=findTime(nai, wi);
   if(ex){ var _wi=wi,_ai=ai,_e=ex; setTimeout(function(){ showTm(_wi,_ai,_e.ini,_e.fin); },100); }
+  autoSave(); // V17-FIX1: cambiar actividad debe guardar
 }
 
 function delAct(wi,ai){
@@ -3403,7 +3405,8 @@ function _persistState(vals, wSave){
   } catch(e){ console.warn('[eBerry] Error guardando estado:', e.message); return; }
   try {
     var dateKey=getUserHistKey(vals.fecha||new Date().toISOString().split('T')[0]);
-    localStorage.setItem(dateKey,JSON.stringify({v:vals,w:wSave,id:wid,ep:estP,hp:hilP,cp:cajasP,saved:new Date().toISOString()}));
+    // V17-FIX7: ausencias incluidas en historial (antes faltaban)
+    localStorage.setItem(dateKey,JSON.stringify({v:vals,w:wSave,id:wid,ep:estP,hp:hilP,cp:cajasP,ga:grpActs,aus:ausencias,saved:new Date().toISOString()}));
   } catch(e){ console.warn('[eBerry] localStorage lleno — historial no guardado:', e.message); }
 }
 
@@ -3684,7 +3687,13 @@ function saveQuiet(){
     p.textContent='✓ Guardado'; p.style.color='rgba(255,255,255,.95)';
     if(_asTimer2)clearTimeout(_asTimer2);
     _asTimer2=setTimeout(function(){ p.textContent='● Auto'; p.style.color='rgba(255,255,255,.45)'; },2000);
-  }catch(e){ console.warn('[eBerry] saveQuiet error:', e.message); }
+  }catch(e){
+    console.warn('[eBerry] saveQuiet error:', e.message);
+    // V17-FIX6: error VISIBLE — el surquero debe saber que no se guardó
+    var p=gEl('savepill');
+    if(p){ p.textContent='⚠️ ERROR'; p.style.color='#ff4444'; }
+    try{ toast('⚠️ Error al guardar — revisa espacio del teléfono'); }catch(e2){}
+  }
 }
 
 window.addEventListener('DOMContentLoaded',function(){
@@ -4467,7 +4476,7 @@ function addShift(wi,ai){
   a.showTime=true;
   var tg=gEl('tg'+wi+'_'+ai); if(tg)tg.classList.add('on');
   var tf=gEl('tf'+wi+'_'+ai); if(tf)tf.classList.add('on');
-  renderShifts(wi,ai); recalc(wi,ai);
+  renderShifts(wi,ai); recalc(wi,ai); autoSave(); // V17-FIX2: agregar turno debe guardar
 }
 
 function delShift(wi,ai,si){
@@ -5963,6 +5972,27 @@ function refreshDataBackground(){
 var _autoSaveTimer = setInterval(function(){ if(currentUser) saveQuiet(); }, 30000);
 window.addEventListener('pagehide', function(){ if(currentUser) saveQuiet(); });
 
+// V17-FIX8: limpieza automática de historial >14 días para no llenar localStorage
+(function(){
+  try{
+    var now=new Date(); var cutoff=new Date(now); cutoff.setDate(cutoff.getDate()-14);
+    var cutStr=cutoff.toISOString().split('T')[0];
+    var keys=Object.keys(localStorage);
+    for(var i=0;i<keys.length;i++){
+      var k=keys[i];
+      // Keys de historial diario: pr9_*_hist_YYYY-MM-DD
+      var m=k.match(/_hist_(\d{4}-\d{2}-\d{2})$/);
+      if(m && m[1]<cutStr){ localStorage.removeItem(k); }
+      // Keys semanales viejas: eb_semanal_v1_*_YYYY-MM-DD (>30 días)
+      var ms=k.match(/^eb_semanal_v1_.*_(\d{4}-\d{2}-\d{2})$/);
+      if(ms){
+        var cutSem=new Date(now); cutSem.setDate(cutSem.getDate()-30);
+        if(ms[1]<cutSem.toISOString().split('T')[0]){ localStorage.removeItem(k); }
+      }
+    }
+  }catch(e){ console.warn('[eBerry] Limpieza historial:', e.message); }
+})();
+
 // ════════════════════════════════════════════════════════════
 // 🧪 TEST FILL — datos ficticios para probar flujo completo
 // Quitar este bloque completo cuando ya no se necesite
@@ -7390,6 +7420,7 @@ function calcSemRow(wid){
   if(payEl) payEl.textContent = '$' + smartNum(pay);
 
   calcSemDayTotals();
+  saveSemData(); // V17-FIX4: qty de piezas semanales debe guardar
 }
 
 function calcSemDayTotals(){
