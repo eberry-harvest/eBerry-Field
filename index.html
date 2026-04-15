@@ -928,9 +928,7 @@ html.login-locked{overflow:hidden!important;height:100%!important}
     </div>
     <label>Notas del día</label>
     <textarea id="notas" data-save rows="2" placeholder="Observaciones..."></textarea>
-    <div style="margin-top:12px">
-      <button onclick="openNewDay()" style="width:100%;padding:12px;border:2px solid #3a7fd4;border-radius:8px;background:#eef4fd;color:#3a7fd4;font-family:DM Sans,sans-serif;font-size:14px;font-weight:700;cursor:pointer">🌅 Iniciar Nuevo Día</button>
-    </div>
+    <!-- V28-FIX-UI2: botón "Nuevo Día" eliminado de Parámetros — solo existe en Resumen -->
   </div>
   <!-- Rancho/finca/horario se mantienen como hidden para compatibilidad con data-save -->
   <input type="hidden" id="rancho" data-save value="">
@@ -1538,7 +1536,19 @@ function loginSuccess(user){
 
   updParam();
   load();
-  renderRanchBar(); // V22: mostrar barra multi-rancho para admin
+  renderRanchBar();
+  // V28-FIX-UI3+UI4: auto-expandir primer rancho + activar página
+  if(!_ranchos.length && gVal('rancho')){ _initRanchos(); renderRanchBar(); }
+  // V29-FIX3: solo expandir si NO está ya expandido (evita colapsar lo que renderRanchBar ya expandió)
+  if(_ranchos.length){
+    var _rc = gEl('ranchBlock_'+_activeRanchoIdx);
+    if(_rc && !_rc.classList.contains('expanded')){
+      toggleRanchBlock(_activeRanchoIdx);
+    } else if(_rc && _rc.classList.contains('expanded')){
+      // Ya está expandido por renderRanchBar — solo activar la página
+      go(pg > 0 ? pg : 2);
+    }
+  }
 
   // V8: Welcome modal SIEMPRE inmediato — foto es bonus, no bloquea
   if(!user.isAdmin){
@@ -2282,6 +2292,7 @@ function renderRanchBar(){
           +'<div id="hpill_'+i+'" style="background:var(--gp);border-radius:8px;padding:9px 12px;font-size:13px;font-weight:600;color:var(--g);margin-top:9px"></div>'
         +'</div>'
         +'<div class="ranch-tabs">'
+          +'<button class="ranch-tab'+(pg===0?' act':'')+'" onclick="goToParams('+i+')">\u2699\uFE0F Params</button>'
           +'<button class="ranch-tab'+(pg===1?' act':'')+'" onclick="goRanchTab('+i+',1)">\uD83D\uDCCA An\u00e1lisis</button>'
           +'<button class="ranch-tab'+(pg===2?' act':'')+'" onclick="goRanchTab('+i+',2)">\uD83D\uDC65 Trabajadores</button>'
           +'<button class="ranch-tab'+(pg===3?' act':'')+'" onclick="goRanchTab('+i+',3)">\uD83C\uDF3F Grupales</button>'
@@ -2371,7 +2382,8 @@ function toggleRanchBlock(idx){
     updParts(); updBanner();
     if(typeof renderGrpActs === 'function') renderGrpActs();
     if(typeof renderAusencias === 'function') renderAusencias();
-    go(pg);
+    // V28-FIX-UI4: si pg=0 (Parámetros), ir a Trabajadores por defecto al expandir
+    go(pg > 0 ? pg : 2);
     card.scrollIntoView({behavior:'smooth',block:'start'});
   }
 }
@@ -2386,9 +2398,27 @@ function goRanchTab(ranchIdx, tabN){
   var card = gEl('ranchBlock_'+ranchIdx);
   if(card){
     var tabs = card.querySelectorAll('.ranch-tab');
-    for(var i=0;i<tabs.length;i++) tabs[i].classList.toggle('act', (i+1)===tabN);
+    // V29-FIX1: i===tabN (antes era (i+1)===tabN que desplazaba 1 puesto)
+    for(var i=0;i<tabs.length;i++) tabs[i].classList.toggle('act', i===tabN);
   }
   go(tabN);
+}
+
+// V29-FIX2: ir a Parámetros — colapsa el bloque para que p0 no flote fuera
+function goToParams(ranchIdx){
+  // Guardar contexto del rancho
+  _saveRanchoCtx(ranchIdx);
+  if(currentUser) saveQuiet();
+  // Colapsar el bloque activo
+  var card = gEl('ranchBlock_'+ranchIdx);
+  if(card && card.classList.contains('expanded')){
+    card.classList.remove('expanded');
+    var slot = gEl('pagesSlot');
+    if(slot){ document.body.appendChild(slot); slot.style.display='none'; }
+  }
+  // Mostrar p0 (Parámetros) y scroll arriba
+  go(0);
+  window.scrollTo(0,0);
 }
 
 // Cambio de config dentro del bloque del rancho (finca, horarios)
@@ -3926,7 +3956,8 @@ function applyAutoFill(){
     if(adminSel) adminSel.style.display='none'; // ✅ siempre oculto para surqueros
     // Rancho — siempre del crew
     var crewBase = currentUser.crew.replace(/\s*\d+$/,'').trim();
-    var rEl = gEl('rancho'); if(rEl) rEl.value = crewBase;
+    // V28-FIX-UI3: no sobreescribir rancho si populateRanchoDropdown ya lo seteó
+    var rEl = gEl('rancho'); if(rEl && !rEl.value) rEl.value = crewBase;
   } else {
     // Admin — ocultar display, mostrar select con surqueros
     // ✅ Lambda fix: preservar surquero seleccionado al reconstruir dropdown
@@ -4025,7 +4056,8 @@ function go(n){
   var activeBlock=gEl('ranchBlock_'+_activeRanchoIdx);
   if(activeBlock){
     var rtabs=activeBlock.querySelectorAll('.ranch-tab');
-    for(var i=0;i<rtabs.length;i++) rtabs[i].classList.toggle('act',(i+1)===n);
+    // V28-FIX-UI1: tab "Params" es índice 0 (n===0), las demás son i===n (offset por el tab extra)
+    for(var i=0;i<rtabs.length;i++) rtabs[i].classList.toggle('act', i===n);
   }
   gEl('addbar').classList.toggle('on',n===2 && activeBlock && activeBlock.classList.contains('expanded'));
   var ausBar=gEl('ausBar'); if(ausBar) ausBar.style.display=(n===5?'block':'none');
