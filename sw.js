@@ -1,49 +1,52 @@
-/* ═══════════════════════════════════════════════════
-   eBerry Field — Service Worker v1.0
-   Cache-first for app shell, network-first for APIs
-   ═══════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════
+   eBerry Field — Service Worker v2.0
+   Estrategia: Network-First para HTML, Cache-First para CDN
+   ---------------------------------------------------------------
+   IMPORTANTE: Este archivo NUNCA necesita modificarse.
+   La detección de "HTML nuevo" se hace por hash de contenido,
+   no por versión del SW. Serafín solo toca index.html.
+   ═══════════════════════════════════════════════════════════════ */
 
-var CACHE_NAME = 'eberry-sw-v1';
+var CACHE_NAME = 'eberry-v2';
 
-// Recursos que forman el "app shell" — se pre-cachean al instalar
-var APP_SHELL = [
-  './',                        // la página principal (index.html)
-  'https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;600;700&display=swap',
-  'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js',
-  'https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js'
-];
-
-// Dominios que NUNCA se cachean (son datos dinámicos / APIs)
+// Dominios de API → NUNCA cachear (datos dinámicos)
 var API_DOMAINS = [
   'script.google.com',
   'script.googleusercontent.com'
 ];
 
-// ─── INSTALL: pre-cachear app shell ───
+// Dominios CDN → Cache-First (no cambian con deploys de Serafín)
+var CDN_DOMAINS = [
+  'fonts.googleapis.com',
+  'fonts.gstatic.com',
+  'unpkg.com',
+  'cdn.jsdelivr.net'
+];
+
+// ─────────────────────────────────────────────────────────────
+// INSTALL: cachear lo mínimo necesario para offline
+// NO llamamos skipWaiting() aquí — lo llamamos solo cuando el
+// usuario acepta la actualización desde el toast.
+// ─────────────────────────────────────────────────────────────
 self.addEventListener('install', function(e) {
-  console.log('[SW] Instalando v1...');
+  console.log('[SW] Instalando v2...');
+  // Pre-cachear solo el root. Los CDN se cachean on-demand.
   e.waitUntil(
     caches.open(CACHE_NAME).then(function(cache) {
-      console.log('[SW] Cacheando app shell...');
-      // addAll puede fallar si algún recurso CDN falla,
-      // así que cacheamos uno por uno con tolerancia
-      return Promise.all(
-        APP_SHELL.map(function(url) {
-          return cache.add(url).catch(function(err) {
-            console.warn('[SW] No se pudo cachear:', url, err.message);
-          });
-        })
-      );
-    }).then(function() {
-      // Activar inmediatamente sin esperar que cierren pestañas
-      return self.skipWaiting();
+      return cache.add('./').catch(function(err) {
+        console.warn('[SW] No se pudo pre-cachear root:', err.message);
+      });
     })
+    // Sin skipWaiting() aquí — el SW espera en estado "waiting"
+    // hasta que el usuario confirme la actualización.
   );
 });
 
-// ─── ACTIVATE: limpiar caches viejos ───
+// ─────────────────────────────────────────────────────────────
+// ACTIVATE: limpiar caches de versiones anteriores
+// ─────────────────────────────────────────────────────────────
 self.addEventListener('activate', function(e) {
-  console.log('[SW] Activado v1');
+  console.log('[SW] Activado v2');
   e.waitUntil(
     caches.keys().then(function(names) {
       return Promise.all(
@@ -55,95 +58,297 @@ self.addEventListener('activate', function(e) {
         })
       );
     }).then(function() {
-      // Tomar control de todas las pestañas abiertas
       return self.clients.claim();
     })
   );
 });
 
-// ─── FETCH: interceptar peticiones de red ───
-self.addEventListener('fetch', function(e) {
-  var url = new URL(e.request.url);
+// ─────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────
 
-  // 1) APIs de Google → SIEMPRE a la red (nunca cachear datos dinámicos)
+function isApiUrl(url) {
   for (var i = 0; i < API_DOMAINS.length; i++) {
-    if (url.hostname.indexOf(API_DOMAINS[i]) !== -1) {
-      return; // dejar que el browser haga el fetch normal
-    }
+    if (url.hostname.indexOf(API_DOMAINS[i]) !== -1) return true;
   }
+  return false;
+}
 
-  // 2) Solo cachear GET requests
-  if (e.request.method !== 'GET') return;
+function isCdnUrl(url) {
+  for (var i = 0; i < CDN_DOMAINS.length; i++) {
+    if (url.hostname.indexOf(CDN_DOMAINS[i]) !== -1) return true;
+  }
+  return false;
+}
 
-  // 3) Para todo lo demás: Cache First, Network Fallback
-  e.respondWith(
-    caches.match(e.request).then(function(cached) {
-      if (cached) {
-        // Tenemos copia en cache → servir inmediatamente
-        // Pero también actualizar en background (stale-while-revalidate)
-        var fetchPromise = fetch(e.request).then(function(networkResp) {
-          if (networkResp && networkResp.ok) {
-            var clone = networkResp.clone();
-            caches.open(CACHE_NAME).then(function(cache) {
-              cache.put(e.request, clone);
+function isHtmlRequest(request, url) {
+  // Petición de documento HTML: navegación o extensión .html
+  return (
+    request.destination === 'document' ||
+    request.mode === 'navigate' ||
+    url.pathname === '/' ||
+    url.pathname.endsWith('.html') ||
+    url.pathname.endsWith('/')
+  );
+}
+
+// Genera un hash simple (djb2) de un string.
+// Se usa para detectar si el HTML cambió sin guardar dos copias enteras.
+function hashString(str) {
+  var hash = 5381;
+  for (var i = 0; i < str.length; i++) {
+    hash = ((hash << 5) + hash) ^ str.charCodeAt(i);
+    hash = hash & hash; // forzar 32-bit
+  }
+  return hash >>> 0; // sin signo
+}
+
+// Notifica a TODAS las pestañas abiertas que hay actualización disponible.
+function notifyClients(type, payload) {
+  self.clients.matchAll({ type: 'window' }).then(function(clients) {
+    clients.forEach(function(client) {
+      client.postMessage(Object.assign({ type: type }, payload || {}));
+    });
+  });
+}
+
+// ─────────────────────────────────────────────────────────────
+// ESTRATEGIA 1 — HTML: Network-First con detección de cambio
+//
+// Flujo:
+//   1. Pedir a la red (timeout 5s para no congelar en 2G lento)
+//   2a. Si red responde: comparar hash con cache
+//       - Si es diferente → guardar en cache + notificar toast
+//       - Si es igual     → guardar en cache (actualiza ETag/fecha)
+//   2b. Si red falla (offline): servir del cache
+//   2c. Sin red Y sin cache: página offline de emergencia
+// ─────────────────────────────────────────────────────────────
+function strategyNetworkFirstHtml(request) {
+  // Clave canónica: siempre usamos './' para el root
+  var cacheKey = request;
+
+  var networkPromise = fetchWithTimeout(request, 5000).then(function(networkResp) {
+    if (!networkResp || !networkResp.ok) {
+      // Respuesta inválida → tratar como fallo de red
+      return caches.match(cacheKey).then(function(cached) {
+        return cached || networkResp;
+      });
+    }
+
+    // Clonar para poder leer el body Y guardarlo en cache
+    var respForCache = networkResp.clone();
+    var respForHash  = networkResp.clone();
+
+    return respForHash.text().then(function(newText) {
+      var newHash = hashString(newText);
+
+      return caches.open(CACHE_NAME).then(function(cache) {
+        return cache.match(cacheKey).then(function(oldCached) {
+
+          if (!oldCached) {
+            // Primera vez → solo guardar, sin toast
+            console.log('[SW] HTML cacheado por primera vez.');
+            cache.put(cacheKey, respForCache);
+            return new Response(newText, {
+              status: networkResp.status,
+              headers: networkResp.headers
             });
           }
-          return networkResp;
-        }).catch(function() {
-          // Sin red, no pasa nada — ya servimos del cache
+
+          // Comparar con lo que había en cache
+          return oldCached.clone().text().then(function(oldText) {
+            var oldHash = hashString(oldText);
+
+            if (newHash !== oldHash) {
+              console.log('[SW] HTML nuevo detectado (hash cambió). Notificando...');
+              // Guardar el HTML nuevo en cache
+              cache.put(cacheKey, respForCache);
+              // Avisar a la app: "hay versión nueva lista"
+              notifyClients('SW_UPDATE_READY');
+            } else {
+              // Mismo contenido — actualizar silenciosamente (refresca headers HTTP)
+              cache.put(cacheKey, respForCache);
+            }
+
+            return new Response(newText, {
+              status: networkResp.status,
+              headers: networkResp.headers
+            });
+          });
         });
+      });
+    });
+
+  }).catch(function() {
+    // Sin red → servir cache o página de emergencia
+    return caches.match(cacheKey).then(function(cached) {
+      if (cached) {
+        console.log('[SW] Offline — sirviendo HTML del cache.');
         return cached;
       }
+      return offlinePage();
+    });
+  });
 
-      // No está en cache → intentar la red
-      return fetch(e.request).then(function(networkResp) {
-        // Si la respuesta es válida, guardarla en cache para la próxima
-        if (networkResp && networkResp.ok) {
-          var clone = networkResp.clone();
-          caches.open(CACHE_NAME).then(function(cache) {
-            cache.put(e.request, clone);
-          });
-        }
-        return networkResp;
-      }).catch(function() {
-        // Sin red Y sin cache → página offline de emergencia
-        if (e.request.destination === 'document') {
-          return new Response(
-            '<!DOCTYPE html><html><head><meta charset="utf-8">' +
-            '<meta name="viewport" content="width=device-width,initial-scale=1">' +
-            '<title>eBerry - Sin conexión</title>' +
-            '<style>body{font-family:sans-serif;display:flex;align-items:center;' +
-            'justify-content:center;height:100vh;margin:0;background:#1a3a5c;color:#fff;' +
-            'text-align:center}div{padding:2rem}.icon{font-size:4rem}h2{margin:.5rem 0}' +
-            'p{opacity:.8}button{margin-top:1rem;padding:.8rem 2rem;border:none;' +
-            'border-radius:8px;background:#4CAF50;color:#fff;font-size:1rem;cursor:pointer}' +
-            '</style></head><body><div><div class="icon">🫐</div>' +
-            '<h2>eBerry Field</h2>' +
-            '<p>No hay conexión a internet.<br>Abre la app con señal al menos una vez ' +
-            'para que funcione sin conexión.</p>' +
-            '<button onclick="location.reload()">Reintentar</button>' +
-            '</div></body></html>',
-            { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
-          );
-        }
-      });
-    })
+  return networkPromise;
+}
+
+// ─────────────────────────────────────────────────────────────
+// ESTRATEGIA 2 — CDN: Cache-First con revalidación en background
+//
+// Las librerías CDN (face-api, html5-qrcode, fonts) son inmutables
+// en la práctica (versión fijada en la URL). Cache-First es lo
+// correcto: respuesta instantánea, actualización silenciosa.
+// ─────────────────────────────────────────────────────────────
+function strategyCacheFirstCdn(request) {
+  return caches.match(request).then(function(cached) {
+    var fetchPromise = fetch(request).then(function(networkResp) {
+      if (networkResp && networkResp.ok) {
+        caches.open(CACHE_NAME).then(function(cache) {
+          cache.put(request, networkResp.clone());
+        });
+      }
+      return networkResp;
+    }).catch(function() {
+      // Sin red — si ya teníamos cache, no importa
+    });
+
+    return cached || fetchPromise;
+  });
+}
+
+// ─────────────────────────────────────────────────────────────
+// ESTRATEGIA 3 — Assets locales (imágenes, manifesto, iconos)
+// Cache-First simple sin revalidación agresiva
+// ─────────────────────────────────────────────────────────────
+function strategyCacheFirstLocal(request) {
+  return caches.match(request).then(function(cached) {
+    if (cached) return cached;
+    return fetch(request).then(function(networkResp) {
+      if (networkResp && networkResp.ok) {
+        caches.open(CACHE_NAME).then(function(cache) {
+          cache.put(request, networkResp.clone());
+        });
+      }
+      return networkResp;
+    }).catch(function() {
+      return new Response('', { status: 503 });
+    });
+  });
+}
+
+// ─────────────────────────────────────────────────────────────
+// Fetch con timeout — evita que peticiones lentas en 2G
+// paralicen la app. Después del timeout, cae al cache.
+// ─────────────────────────────────────────────────────────────
+function fetchWithTimeout(request, ms) {
+  var controller = new AbortController();
+  var timer = setTimeout(function() { controller.abort(); }, ms);
+
+  // Crear nueva Request con signal de abort
+  var req = new Request(request, { signal: controller.signal });
+
+  return fetch(req).then(function(resp) {
+    clearTimeout(timer);
+    return resp;
+  }).catch(function(err) {
+    clearTimeout(timer);
+    throw err;
+  });
+}
+
+// ─────────────────────────────────────────────────────────────
+// Página offline de emergencia
+// ─────────────────────────────────────────────────────────────
+function offlinePage() {
+  return new Response(
+    '<!DOCTYPE html><html lang="es"><head>' +
+    '<meta charset="utf-8">' +
+    '<meta name="viewport" content="width=device-width,initial-scale=1">' +
+    '<title>eBerry - Sin conexión</title>' +
+    '<style>' +
+    'body{font-family:sans-serif;display:flex;align-items:center;' +
+    'justify-content:center;height:100vh;margin:0;background:#1a3a5c;color:#fff;text-align:center}' +
+    'div{padding:2rem}.icon{font-size:4rem}h2{margin:.5rem 0}p{opacity:.8;line-height:1.5}' +
+    'button{margin-top:1.5rem;padding:.8rem 2rem;border:none;border-radius:8px;' +
+    'background:#4CAF50;color:#fff;font-size:1rem;cursor:pointer;font-weight:bold}' +
+    '</style></head><body>' +
+    '<div>' +
+    '<div class="icon">🫐</div>' +
+    '<h2>eBerry Field</h2>' +
+    '<p>Sin conexión a internet.<br>' +
+    'Abre la app con señal al menos una vez<br>para que funcione sin conexión.</p>' +
+    '<button onclick="location.reload()">Reintentar</button>' +
+    '</div>' +
+    '</body></html>',
+    { headers: { 'Content-Type': 'text/html; charset=utf-8' } }
   );
+}
+
+// ─────────────────────────────────────────────────────────────
+// FETCH: enrutador principal
+// ─────────────────────────────────────────────────────────────
+self.addEventListener('fetch', function(e) {
+  var url;
+  try {
+    url = new URL(e.request.url);
+  } catch(err) {
+    return; // URL inválida, ignorar
+  }
+
+  // Solo GET
+  if (e.request.method !== 'GET') return;
+
+  // 1) APIs de Google → pasar directo a la red, sin tocar
+  if (isApiUrl(url)) return;
+
+  // 2) HTML (navegación principal) → Network-First con detección de cambio
+  if (isHtmlRequest(e.request, url)) {
+    e.respondWith(strategyNetworkFirstHtml(e.request));
+    return;
+  }
+
+  // 3) CDN (librerías, fonts) → Cache-First con SWR background
+  if (isCdnUrl(url)) {
+    e.respondWith(strategyCacheFirstCdn(e.request));
+    return;
+  }
+
+  // 4) Todo lo demás del mismo origen (iconos, manifest, etc.) → Cache-First local
+  if (url.origin === self.location.origin) {
+    e.respondWith(strategyCacheFirstLocal(e.request));
+    return;
+  }
+
+  // 5) Cualquier otro origen desconocido → red directa
 });
 
-// ─── MESSAGE: comunicación con la app ───
+// ─────────────────────────────────────────────────────────────
+// MESSAGE: comunicación con la app
+//
+// Mensajes que puede enviar la app:
+//   { action: 'skipWaiting' }  — usuario aceptó actualizar
+//   { action: 'getCacheStatus' } — diagnóstico
+// ─────────────────────────────────────────────────────────────
 self.addEventListener('message', function(e) {
-  if (e.data && e.data.action === 'skipWaiting') {
+  if (!e.data) return;
+
+  if (e.data.action === 'skipWaiting') {
+    // El usuario tocó "Actualizar ahora" en el toast
+    console.log('[SW] skipWaiting solicitado por la app.');
     self.skipWaiting();
   }
-  if (e.data && e.data.action === 'getCacheStatus') {
+
+  if (e.data.action === 'getCacheStatus') {
     caches.open(CACHE_NAME).then(function(cache) {
       return cache.keys();
     }).then(function(keys) {
-      e.ports[0].postMessage({
-        cached: keys.length,
-        version: CACHE_NAME
-      });
+      if (e.ports && e.ports[0]) {
+        e.ports[0].postMessage({
+          cached: keys.length,
+          version: CACHE_NAME
+        });
+      }
     });
   }
 });
