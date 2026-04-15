@@ -11,7 +11,6 @@
 <meta name="theme-color" content="#1a2b8c">
 <link rel="manifest" id="manifestLink">
 <script>
-  
 // V8-C2: Manifest PWA generado como Blob (sin href vacío)
 (function(){
   var manifest = {
@@ -7647,9 +7646,10 @@ function generateSemPDF(){
       groups[key].vals[w] = wd.days[d];
       groups[key].total += wd.days[d];
     }
+    // V16-FIX: días sin datos no generan columna en el PDF
     if(groupOrder.length === 0){
-      groupOrder.push('empty');
-      groups['empty'] = {sched:{ent:'',sal:'',lIni:'',lFin:''}, vals:{}, total:0};
+      dayColSpans.push(0);
+      continue;
     }
     dayColSpans.push(groupOrder.length);
     for(var g=0;g<groupOrder.length;g++){
@@ -7666,6 +7666,7 @@ function generateSemPDF(){
   html += '<table><thead>';
   html += '<tr><th rowspan="2">No</th><th rowspan="2">Emp #</th><th rowspan="2" style="min-width:100px">Nombre / Name</th>';
   for(var d=0;d<7;d++){
+    if(dayColSpans[d] === 0) continue; // V16: omitir días sin datos
     html += '<th colspan="'+dayColSpans[d]+'" style="border-bottom:'+(dayColSpans[d]>1?'1px solid #8899cc':'none')+'">'+SEM_DAYS[d]+'<br>'+dates[d]+'</th>';
   }
   html += '<th rowspan="2" style="background:#0f1a3d">TOTAL</th></tr>';
@@ -7710,7 +7711,8 @@ function generateSemPDF(){
   html += '<tr style="background:#f5f8ff"><td style="'+metaEmpty+'"></td><td style="'+metaEmpty+'"></td>'
     +'<td style="'+metaLabel+';color:#111">Labor</td>';
   for(var c=0;c<dayCols.length;c++){
-    html += '<td style="'+metaStyle+';color:#3a7fd4;font-size:9px">'+(gVal('semFinca')||'G.L')+'</td>';
+    // V16-FIX: finca vacía → celda en blanco (no "G.L")
+    html += '<td style="'+metaStyle+';color:#3a7fd4;font-size:9px">'+(gVal('semFinca')||'')+'</td>';
   }
   html += '<td style="'+metaEmpty+'"></td></tr>';
 
