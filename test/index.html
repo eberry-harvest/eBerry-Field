@@ -2291,8 +2291,8 @@ function renderRanchBar(){
       +'<div class="ranch-body">'
         +'<div class="ranch-config">'
           +'<div class="r2" style="margin-bottom:8px">'
+            +'<div><label>Rancho</label><select onchange="onRanchConfigChange('+i+',\'rancho\',this.value);_updRanchCardName('+i+',this.value)" style="width:100%;padding:8px 10px;border:1.5px solid var(--bd);border-radius:8px;font-size:14px;font-family:DM Sans,sans-serif">'+_buildRanchOpts(r.rancho, i)+'</select></div>'
             +'<div><label>Finca / Labor</label><input type="text" value="'+esc(r.finca||'')+'" onchange="onRanchConfigChange('+i+',\'finca\',this.value)" placeholder="Ej: Block 5"></div>'
-            +'<div></div>'
           +'</div>'
           +'<div class="r4">'
             +'<div><label>Entrada</label><input type="time" value="'+(r.hEnt||'')+'" step="1800" onchange="onRanchConfigChange('+i+',\'hEnt\',this.value)"></div>'
@@ -2432,8 +2432,35 @@ function goToParams(ranchIdx){
   window.scrollTo(0,0);
 }
 
+// V33: Helper para construir opciones del select de rancho dentro del bloque
+function _buildRanchOpts(currentRancho, blockIdx){
+  var ioe = currentUser ? (currentUser.ioe||'') : '';
+  var isAdm = currentUser && currentUser.isAdmin;
+  var list = getRanchoList(ioe, isAdm);
+  var h = '';
+  for(var ri=0; ri<list.length; ri++){
+    var rName = list[ri];
+    // Excluir ranchos ya usados en OTROS bloques (no en este)
+    var usedInOther = false;
+    for(var bi=0; bi<_ranchos.length; bi++){
+      if(bi !== blockIdx && (_ranchos[bi].rancho||'').toLowerCase() === rName.toLowerCase()){ usedInOther = true; break; }
+    }
+    if(usedInOther) continue;
+    var sel = (rName.toLowerCase() === (currentRancho||'').toLowerCase()) ? ' selected' : '';
+    h += '<option value="'+esc(rName)+'"'+sel+'>'+esc(rName)+'</option>';
+  }
+  return h;
+}
+
+// V33: Actualizar el nombre visual del bloque cuando se cambia el rancho
+function _updRanchCardName(idx, newName){
+  var card = gEl('ranchBlock_'+idx);
+  if(!card) return;
+  var nameEl = card.querySelector('.ranch-card-name');
+  if(nameEl) nameEl.textContent = (newName||'').toUpperCase();
+}
+
 // Cambio de config dentro del bloque del rancho (finca, horarios)
-// V26-FIX2+FIX8: whitelist de campos + filtrar ACTS al cambiar rancho
 function onRanchConfigChange(idx, field, value){
   var ALLOWED = {finca:1,hEnt:1,hSal:1,lIni:1,lFin:1,rancho:1};
   if(!ALLOWED[field]) return;
