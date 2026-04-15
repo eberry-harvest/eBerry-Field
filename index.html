@@ -2170,6 +2170,15 @@ function isHourAct(act){ return act && (!!act.hr || (act.tipo||'').toLowerCase()
 
 function t2m(t){ if(!t||t.indexOf(':')<0)return null; var p=t.split(':'); return parseInt(p[0],10)*60+parseInt(p[1],10); }
 
+// V18: Convierte "14:30" → "2:30 PM" para display. Internamente todo sigue en 24h.
+function to12h(t){
+  if(!t||t.indexOf(':')<0) return t||'';
+  var p=t.split(':'); var h=parseInt(p[0],10); var m=parseInt(p[1],10);
+  if(isNaN(h)||isNaN(m)) return t;
+  var ampm=h>=12?'PM':'AM'; h=h%12; if(h===0)h=12;
+  return h+':'+(m<10?'0':'')+m+' '+ampm;
+}
+
 // V15: Parser flexible de hora — acepta "20:00", "8:00 PM", "8pm", "8:00pm", "8 pm", "0800"
 function parseFlexTime(raw){
   if(!raw) return null;
@@ -2237,7 +2246,8 @@ function updParam(){
 }
 function updBanner(){
   var h=nh(gVal('hEnt'),gVal('hSal'));
-  gEl('banner').innerHTML='<div class="bi"><span class="bv">'+gVal('hEnt')+'</span><span class="bk">Entrada</span></div><div class="bi"><span class="bv">'+gVal('hSal')+'</span><span class="bk">Salida</span></div><div class="bi"><span class="bv">'+gVal('lIni')+'</span><span class="bk">Lonche ini</span></div><div class="bi"><span class="bv">'+gVal('lFin')+'</span><span class="bk">Lonche fin</span></div><div class="bi"><span class="bv" style="color:var(--g2)">'+(h?h+'h':'—')+'</span><span class="bk">Jornada</span></div>';
+  // V18: banner en 12h AM/PM
+  gEl('banner').innerHTML='<div class="bi"><span class="bv">'+to12h(gVal('hEnt'))+'</span><span class="bk">Entrada</span></div><div class="bi"><span class="bv">'+to12h(gVal('hSal'))+'</span><span class="bk">Salida</span></div><div class="bi"><span class="bv">'+to12h(gVal('lIni'))+'</span><span class="bk">Lonche ini</span></div><div class="bi"><span class="bv">'+to12h(gVal('lFin'))+'</span><span class="bk">Lonche fin</span></div><div class="bi"><span class="bv" style="color:var(--g2)">'+(h?h+'h':'—')+'</span><span class="bk">Jornada</span></div>';
 }
 
 // V11: highlight seguro — primero marca en texto plano, luego escapa solo fuera de <mark>
@@ -2873,11 +2883,11 @@ function updBadge(wi,ai){
       var p=[];
       for(var s=0;s<a_.shifts.length;s++){
         var sh=a_.shifts[s];
-        if(sh.ini&&sh.fin) p.push('T'+(s+1)+': '+sh.ini+'→'+sh.fin+' ('+nh(sh.ini,sh.fin)+'h)');
+        if(sh.ini&&sh.fin) p.push('T'+(s+1)+': '+to12h(sh.ini)+'→'+to12h(sh.fin)+' ('+nh(sh.ini,sh.fin)+'h)');
       }
       return p.join(' + ');
     }
-    return (a_.ini&&a_.fin?a_.ini+' → '+a_.fin:'');
+    return (a_.ini&&a_.fin?to12h(a_.ini)+' → '+to12h(a_.fin):'');
   }
   var pay=a.pay||0;
   if(act.hr){
@@ -3020,7 +3030,7 @@ function showTm(wi,ai,ini,fin){
   ptm={wi:wi,ai:ai,ini:ini,fin:fin};
   var w=getW(wi); if(!w)return;
   gEl('tmS').textContent='Para "'+ACTS[w.acts[ai].ai].es+'" ya hay un horario. ¿Usarlo para '+w.name+'?';
-  gEl('tmV').textContent=ini+' → '+fin+'  ('+nh(ini,fin)+' h)';
+  gEl('tmV').textContent=to12h(ini)+' → '+to12h(fin)+'  ('+nh(ini,fin)+' h)';
   gEl('tmOv').classList.add('on');
 }
 function okTime(){
@@ -3070,7 +3080,7 @@ function rndCpList(){
   for(var i=0;i<pcp.pat.length;i++){
     var a=pcp.pat[i]; var act=ACTS[a.ai];
     if(!act) continue;
-    var ts=a.ini&&a.fin?' | '+a.ini+'→'+a.fin:'';
+    var ts=a.ini&&a.fin?' | '+to12h(a.ini)+'→'+to12h(a.fin):'';
     var note=act.hr?'Horas'+ts:act.tipo+ts+' — captura cantidad después';
     var fincaTag = a.finca ? ' 📍<b>'+a.finca+'</b>' : '';
     var on=pcp.sel[i];
@@ -3135,7 +3145,7 @@ function buildSum(){
   }
   gEl('sg').innerHTML='<div class="sb2"><div class="sv">'+workers.length+'</div><div class="sl">Trabajadores</div></div><div class="sb2"><div class="sv am">$'+grand.toFixed(0)+'</div><div class="sl">💰 Total del día</div></div><div class="sb2"><div class="sv">'+function(){ var n=0; for(var i=0;i<workers.length;i++) n+=workers[i].acts.length; return n; }()+'</div><div class="sl">Actividades</div></div>';
   // V9: escapar datos de formulario
-  gEl('si').innerHTML='<div class="ir"><span class="ik">Fecha</span><span class="iv">'+esc(gVal('fecha'))+'</span></div><div class="ir"><span class="ik">Rancho</span><span class="iv">'+esc(gVal('rancho'))+'</span></div><div class="ir"><span class="ik">Surquero</span><span class="iv">'+esc(gVal('surquero'))+'</span></div><div class="ir"><span class="ik">Finca</span><span class="iv">'+esc(gVal('finca'))+'</span></div><div class="ir"><span class="ik">Horario</span><span class="iv">'+esc(gVal('hEnt'))+' → '+esc(gVal('hSal'))+'</span></div><div class="ir"><span class="ik">Lonche</span><span class="iv">'+esc(gVal('lIni'))+' – '+esc(gVal('lFin'))+'</span></div>';
+  gEl('si').innerHTML='<div class="ir"><span class="ik">Fecha</span><span class="iv">'+esc(gVal('fecha'))+'</span></div><div class="ir"><span class="ik">Rancho</span><span class="iv">'+esc(gVal('rancho'))+'</span></div><div class="ir"><span class="ik">Surquero</span><span class="iv">'+esc(gVal('surquero'))+'</span></div><div class="ir"><span class="ik">Finca</span><span class="iv">'+esc(gVal('finca'))+'</span></div><div class="ir"><span class="ik">Horario</span><span class="iv">'+esc(to12h(gVal('hEnt')))+' → '+esc(to12h(gVal('hSal')))+'</span></div><div class="ir"><span class="ik">Lonche</span><span class="iv">'+esc(to12h(gVal('lIni')))+' – '+esc(to12h(gVal('lFin')))+'</span></div>';
   var h='';
   for(var i=0;i<workers.length;i++){
     var w=workers[i]; var dets=[];
@@ -3143,7 +3153,7 @@ function buildSum(){
       var a=w.acts[j];
       var act=resolveAct(a, true); // V8
       if(!act){ dets.push((a.esName||'Act.#'+a.ai)+'($'+(a.pay||0).toFixed(2)+')'); continue; }
-      var u=act.hr?(a.ini&&a.fin?a.ini+'→'+a.fin+'('+nh(a.ini,a.fin)+'h)':'sin horario'):act.tipo==='$'?'$'+a.qty:a.qty+' '+act.tipo;
+      var u=act.hr?(a.ini&&a.fin?to12h(a.ini)+'→'+to12h(a.fin)+'('+nh(a.ini,a.fin)+'h)':'sin horario'):act.tipo==='$'?'$'+a.qty:a.qty+' '+act.tipo;
       dets.push(esc(act.es.split(' ').slice(0,2).join(' '))+'('+u+')'); // V9
     }
     var exD=grpPayDetail(w.id); var ex=exD.pay;
@@ -3312,14 +3322,14 @@ function buildAnalisis(){
 
 function mkReport(){
   var grand=0;
-  var lines=['🌿 *HOJA DE CAMPO — '+gVal('rancho')+'*','📅 '+gVal('fecha')+' | Bus: '+gVal('numBus'),'👷 Surquero: '+gVal('surquero'),'🌾 Finca: '+gVal('finca'),'⏰ '+gVal('hEnt')+'→'+gVal('hSal')+' | Lonche: '+gVal('lIni')+'–'+gVal('lFin'),'','*TRABAJADORES ('+workers.length+'):*'];
+  var lines=['🌿 *HOJA DE CAMPO — '+gVal('rancho')+'*','📅 '+gVal('fecha')+' | Bus: '+gVal('numBus'),'👷 Surquero: '+gVal('surquero'),'🌾 Finca: '+gVal('finca'),'⏰ '+to12h(gVal('hEnt'))+'→'+to12h(gVal('hSal'))+' | Lonche: '+to12h(gVal('lIni'))+'–'+to12h(gVal('lFin')),'','*TRABAJADORES ('+workers.length+'):*'];
   for(var i=0;i<workers.length;i++){
     var w=workers[i],tot=0,acts=[];
     for(var j=0;j<w.acts.length;j++){
       var a=w.acts[j],pay=a.pay||0; tot+=pay;
       var act=resolveAct(a, true); // V8
       if(!act){ acts.push((a.esName||'Act.#'+a.ai)+'(=$'+pay.toFixed(2)+')'); continue; }
-      var u=act.hr?(a.ini&&a.fin?a.ini+'→'+a.fin+'('+nh(a.ini,a.fin)+'h)':'sin horario')+'=$'+pay.toFixed(2):act.tipo==='$'?'$'+a.qty:a.qty+' '+act.tipo+'=$'+pay.toFixed(2);
+      var u=act.hr?(a.ini&&a.fin?to12h(a.ini)+'→'+to12h(a.fin)+'('+nh(a.ini,a.fin)+'h)':'sin horario')+'=$'+pay.toFixed(2):act.tipo==='$'?'$'+a.qty:a.qty+' '+act.tipo+'=$'+pay.toFixed(2);
       acts.push(act.es+'('+u+')');
     }
     var ex=grpPay(w.id); tot+=ex; grand+=tot;
@@ -4149,12 +4159,13 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
           if(!entLbl){
             if(act2.shifts&&act2.shifts.length>1){
               var eL=[],sL=[];
-              for(var si=0;si<act2.shifts.length;si++){ if(act2.shifts[si].ini)eL.push(act2.shifts[si].ini); if(act2.shifts[si].fin)sL.push(act2.shifts[si].fin); }
+              // V18: horarios en 12h AM/PM en PDF
+              for(var si=0;si<act2.shifts.length;si++){ if(act2.shifts[si].ini)eL.push(to12h(act2.shifts[si].ini)); if(act2.shifts[si].fin)sL.push(to12h(act2.shifts[si].fin)); }
               if(eL.length){ entLbl=eL.join('<br>'); salLbl=sL.join('<br>'); }
             } else if(act2.shifts&&act2.shifts.length===1&&(act2.shifts[0].ini||act2.shifts[0].fin)){
-              entLbl=act2.shifts[0].ini||''; salLbl=act2.shifts[0].fin||'';
+              entLbl=to12h(act2.shifts[0].ini||''); salLbl=to12h(act2.shifts[0].fin||'');
             } else if(act2.ini||act2.fin){
-              entLbl=act2.ini||''; salLbl=act2.fin||'';
+              entLbl=to12h(act2.ini||''); salLbl=to12h(act2.fin||'');
             }
           }
           if(unitPr&&entLbl&&laborLbl) break;
@@ -4191,8 +4202,8 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     trTotal+='<td style="text-align:center;font-weight:700;line-height:1.5;border:1px solid #ccc;border-top:3px solid #1a2b8c;color:#1a2b8c">'+totalCell_+'</td>';
     trPrice+='<td style="text-align:center;color:#c0392b;font-weight:700;border:1px solid #ddd">$'+gc_.precio.toFixed(2)+'</td>';
     trLabor+='<td style="text-align:center;border:1px solid #ddd;color:#3a7fd4;font-size:9px">'+gc_.finca+'</td>';
-    trEntry+='<td style="text-align:center;border:1px solid #ddd;color:#111">'+gc_.ini+'</td>';
-    trExit +='<td style="text-align:center;border:1px solid #ddd;color:#111">'+gc_.fin+'</td>';
+    trEntry+='<td style="text-align:center;border:1px solid #ddd;color:#111">'+to12h(gc_.ini)+'</td>';
+    trExit +='<td style="text-align:center;border:1px solid #ddd;color:#111">'+to12h(gc_.fin)+'</td>';
   }
   trTotal+='</tr>'; trPrice+='</tr>'; trLabor+='</tr>'; trEntry+='</tr>'; trExit+='</tr>';
   var metaRows=trTotal+trPrice+trLabor+trEntry+trExit;
@@ -7303,10 +7314,11 @@ function buildSemTable(){
       if(!isHrAct){
         tbody += '<input type="text" inputmode="decimal" class="sem-input" id="'+cellId+'_qty" onchange="calcSemRow(\''+wk.id+'\')" placeholder="0" style="width:50px;margin-bottom:4px;border:1.5px solid #1a2b8c;font-weight:700">';
       }
-      tbody += '<label>ENT</label><input type="text" inputmode="text" class="sem-input sem-time-txt" id="'+cellId+'_ini" placeholder="7:00" onblur="normTimeInput(this);calcSemHours(\''+wk.id+'\','+d+');semAutoFill(\''+wk.id+'\','+d+',\'ini\')">';
-      tbody += '<label>SAL</label><input type="text" inputmode="text" class="sem-input sem-time-txt" id="'+cellId+'_fin" placeholder="20:00" onblur="normTimeInput(this);calcSemHours(\''+wk.id+'\','+d+');semAutoFill(\''+wk.id+'\','+d+',\'fin\')">';
-      tbody += '<label>L.INI</label><input type="text" inputmode="text" class="sem-input sem-time-txt" id="'+cellId+'_li" placeholder="12:00" onblur="normTimeInput(this);calcSemHours(\''+wk.id+'\','+d+');semAutoFill(\''+wk.id+'\','+d+',\'li\')">';
-      tbody += '<label>L.FIN</label><input type="text" inputmode="text" class="sem-input sem-time-txt" id="'+cellId+'_lf" placeholder="12:30" onblur="normTimeInput(this);calcSemHours(\''+wk.id+'\','+d+');semAutoFill(\''+wk.id+'\','+d+',\'lf\')">';
+      // V18: placeholders en 12h AM/PM
+      tbody += '<label>ENT</label><input type="text" inputmode="text" class="sem-input sem-time-txt" id="'+cellId+'_ini" placeholder="7:00 AM" onblur="normTimeInput(this);calcSemHours(\''+wk.id+'\','+d+');semAutoFill(\''+wk.id+'\','+d+',\'ini\')">';
+      tbody += '<label>SAL</label><input type="text" inputmode="text" class="sem-input sem-time-txt" id="'+cellId+'_fin" placeholder="8:00 PM" onblur="normTimeInput(this);calcSemHours(\''+wk.id+'\','+d+');semAutoFill(\''+wk.id+'\','+d+',\'fin\')">';
+      tbody += '<label>L.INI</label><input type="text" inputmode="text" class="sem-input sem-time-txt" id="'+cellId+'_li" placeholder="12:00 PM" onblur="normTimeInput(this);calcSemHours(\''+wk.id+'\','+d+');semAutoFill(\''+wk.id+'\','+d+',\'li\')">';
+      tbody += '<label>L.FIN</label><input type="text" inputmode="text" class="sem-input sem-time-txt" id="'+cellId+'_lf" placeholder="12:30 PM" onblur="normTimeInput(this);calcSemHours(\''+wk.id+'\','+d+');semAutoFill(\''+wk.id+'\','+d+',\'lf\')">';
       tbody += '<div class="sem-hrs-val" id="'+cellId+'_hrs">0</div>';
       // Gamma2: Pago diario (solo visual)
       tbody += '<div id="'+cellId+'_dpay" style="font-size:9px;color:#1a6b3a;font-weight:700;margin-top:2px"></div>';
@@ -7751,7 +7763,8 @@ function generateSemPDF(){
   html += '<tr style="background:#f9f9f9"><td style="'+metaEmpty+'"></td><td style="'+metaEmpty+'"></td>'
     +'<td style="'+metaLabel+';color:#111">Entrada</td>';
   for(var c=0;c<dayCols.length;c++){
-    html += '<td style="'+metaStyle+'">'+dayCols[c].sched.ent+'</td>';
+    // V18: horarios en 12h AM/PM en PDF semanal
+    html += '<td style="'+metaStyle+'">'+to12h(dayCols[c].sched.ent)+'</td>';
   }
   html += '<td style="'+metaEmpty+'"></td></tr>';
 
@@ -7759,7 +7772,7 @@ function generateSemPDF(){
   html += '<tr style="background:#f9f9f9"><td style="'+metaEmpty+'"></td><td style="'+metaEmpty+'"></td>'
     +'<td style="'+metaLabel+';color:#111">Salida</td>';
   for(var c=0;c<dayCols.length;c++){
-    html += '<td style="'+metaStyle+'">'+dayCols[c].sched.sal+'</td>';
+    html += '<td style="'+metaStyle+'">'+to12h(dayCols[c].sched.sal)+'</td>';
   }
   html += '<td style="'+metaEmpty+'"></td></tr>';
 
@@ -7767,7 +7780,7 @@ function generateSemPDF(){
   html += '<tr style="background:#f9f9f9"><td style="'+metaEmpty+'"></td><td style="'+metaEmpty+'"></td>'
     +'<td style="'+metaLabel+';color:#111">L. Inicio</td>';
   for(var c=0;c<dayCols.length;c++){
-    html += '<td style="'+metaStyle+'">'+dayCols[c].sched.lIni+'</td>';
+    html += '<td style="'+metaStyle+'">'+to12h(dayCols[c].sched.lIni)+'</td>';
   }
   html += '<td style="'+metaEmpty+'"></td></tr>';
 
@@ -7775,7 +7788,7 @@ function generateSemPDF(){
   html += '<tr style="background:#f9f9f9;border-bottom:3px solid #1a2b8c"><td style="'+metaEmpty+'"></td><td style="'+metaEmpty+'"></td>'
     +'<td style="'+metaLabel+';color:#111">L. Fin</td>';
   for(var c=0;c<dayCols.length;c++){
-    html += '<td style="'+metaStyle+'">'+dayCols[c].sched.lFin+'</td>';
+    html += '<td style="'+metaStyle+'">'+to12h(dayCols[c].sched.lFin)+'</td>';
   }
   html += '<td style="'+metaEmpty+'"></td></tr>';
 
