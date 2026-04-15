@@ -23,33 +23,75 @@
 })();
 </script>
 <script>
-// Beta2: Service Worker registration
-// Solo registrar en GitHub Pages o localhost (no en previews de terceros)
+// V15: Service Worker registration v2 — Network-First + toast de actualización
 (function(){
   var host = location.hostname || '';
   var isDeployment = host.indexOf('github.io') !== -1
     || host === 'localhost'
     || host === '127.0.0.1'
     || host.indexOf('192.168.') === 0;
-  if('serviceWorker' in navigator && isDeployment){
-    window.addEventListener('load', function(){
-      navigator.serviceWorker.register('./sw.js').then(function(reg){
-        console.log('[eBerry] SW registrado, scope:', reg.scope);
-        // Si hay una versión nueva esperando, activarla
-        reg.addEventListener('updatefound', function(){
-          var nw = reg.installing;
-          if(nw) nw.addEventListener('statechange', function(){
-            if(nw.state==='installed' && navigator.serviceWorker.controller){
-              console.log('[eBerry] Nueva versión del SW disponible');
-              nw.postMessage({action:'skipWaiting'});
-            }
-          });
-        });
-      }).catch(function(err){
-        console.warn('[eBerry] SW no se pudo registrar:', err.message);
-      });
+  if(!('serviceWorker' in navigator) || !isDeployment) return;
+
+  // Toast de "nueva versión disponible"
+  function showUpdateToast(){
+    if(document.getElementById('sw-update-toast')) return;
+    var t = document.createElement('div');
+    t.id = 'sw-update-toast';
+    t.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#1a3a5c;color:#fff;padding:12px 18px;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,.4);z-index:9999;display:flex;align-items:center;gap:12px;font-family:DM Sans,sans-serif;font-size:.95rem;max-width:90vw';
+    t.innerHTML = '<span>\uD83E\uDED0 Nueva versi\u00f3n disponible</span>'
+      + '<button id="sw-update-btn" style="background:#4CAF50;color:#fff;border:none;padding:8px 16px;border-radius:6px;font-weight:700;cursor:pointer;font-size:.9rem;min-width:44px;min-height:44px">Actualizar</button>';
+    document.body.appendChild(t);
+    document.getElementById('sw-update-btn').addEventListener('click', function(){
+      t.remove();
+      if(navigator.serviceWorker.controller){
+        navigator.serviceWorker.controller.postMessage({action:'skipWaiting'});
+      }
     });
   }
+
+  window.addEventListener('load', function(){
+    navigator.serviceWorker.register('./sw.js').then(function(reg){
+      console.log('[eBerry] SW registrado, scope:', reg.scope);
+
+      // Verificar actualizaciones cada vez que la app vuelve al frente
+      document.addEventListener('visibilitychange', function(){
+        if(document.visibilityState === 'visible') reg.update();
+      });
+
+      // SW nuevo instalándose
+      reg.addEventListener('updatefound', function(){
+        var nw = reg.installing;
+        if(!nw) return;
+        nw.addEventListener('statechange', function(){
+          if(nw.state === 'installed' && navigator.serviceWorker.controller){
+            console.log('[eBerry] SW nuevo en waiting — mostrando toast');
+            showUpdateToast();
+          }
+        });
+      });
+
+      // SW ya tenía versión waiting al cargar
+      if(reg.waiting && navigator.serviceWorker.controller){
+        showUpdateToast();
+      }
+
+    }).catch(function(err){
+      console.warn('[eBerry] SW no se pudo registrar:', err.message);
+    });
+
+    // Cuando el SW nuevo tome control → recargar para usar HTML nuevo
+    navigator.serviceWorker.addEventListener('controllerchange', function(){
+      window.location.reload();
+    });
+
+    // SW detectó HTML nuevo via hash (postMessage SW_UPDATE_READY)
+    navigator.serviceWorker.addEventListener('message', function(ev){
+      if(ev.data && ev.data.type === 'SW_UPDATE_READY'){
+        console.log('[eBerry] HTML nuevo detectado por SW — mostrando toast');
+        showUpdateToast();
+      }
+    });
+  });
 })();
 </script>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@400;600;700&display=swap" rel="stylesheet">
@@ -1444,9 +1486,7 @@ function loginSuccess(user){
   var surqIOE = '';
   var surqName = user.isAdmin ? '' : user.name;
   if(surqName){
-    for(var si=0;si<ALL_WORKERS.length;si++){
-      if(ALL_WORKERS[si].name.toLowerCase()===surqName.toLowerCase()){ surqIOE=ALL_WORKERS[si].ioe||''; break; }
-    }
+    var _w=findInArr(ALL_WORKERS,surqName); surqIOE=_w?_w.ioe||'':''; // V12-FIX1
   }
   var crewBase = user.crew ? user.crew.replace(/\s*\d+$/,'').trim() : '';
   populateRanchoDropdown(surqIOE, crewBase, user.isAdmin);
@@ -1479,10 +1519,7 @@ function loginSuccess(user){
         var photoWrap = gEl('welcomePhotoWrap');
         var photoImg = gEl('welcomePhoto');
         if(photoWrap && photoImg && gEl('welcomeOv').classList.contains('on')){
-          var _empN = '';
-          for(var fi=0;fi<ALL_WORKERS.length;fi++){
-            if(ALL_WORKERS[fi].name.toLowerCase()===user.name.toLowerCase()){ _empN=ALL_WORKERS[fi].empNum||''; break; }
-          }
+          var _w2=findInArr(ALL_WORKERS,user.name); var _empN=_w2?_w2.empNum||'':''; // V12-FIX1
           if(_empN && faceThumbnailMap[_empN]){
             photoImg.src = 'data:image/jpeg;base64,' + faceThumbnailMap[_empN];
             photoWrap.style.display = 'block';
@@ -1499,29 +1536,22 @@ function loginSuccess(user){
 // ═══ Alpha2: Ranch Dropdown + Welcome Modal + Contract Validation ═══
 var _rejectedWorkers = []; // cache para detalle de no aceptados
 
-function populateRanchoDropdown(ioe, defaultRancho, isAdmin){
-  var sel = gEl('rancho');
-  if(!sel) return;
-  // Limpiar opciones anteriores
-  sel.innerHTML = '<option value="">— Selecciona un rancho —</option>';
-
+// V12-FIX4: helper compartido — devuelve array de ranchos según rol
+function getRanchoList(ioe, isAdmin){
   var ranchos = [];
   if(isAdmin){
-    // Admin: mostrar TODOS los ranchos únicos de TODOS los contratos
     var seen = {};
     for(var k in CONTRATOS){
       if(!CONTRATOS.hasOwnProperty(k)) continue;
       for(var ri=0;ri<CONTRATOS[k].length;ri++){
         var rn = CONTRATOS[k][ri];
-        if(!seen[rn.toLowerCase()]){ seen[rn.toLowerCase()]=true; ranchos.push(rn); }
+        if(rn && !seen[rn.toLowerCase()]){ seen[rn.toLowerCase()]=true; ranchos.push(rn); }
       }
     }
     ranchos.sort();
   } else if(ioe && CONTRATOS[ioe]){
-    // Surquero: solo ranchos de SU contrato
     ranchos = CONTRATOS[ioe].slice();
   } else {
-    // Sin IOE o sin datos de contrato: extraer ranchos únicos de ALL_ACTS como fallback
     var seen2 = {};
     for(var ai=0;ai<ALL_ACTS.length;ai++){
       var fn = ALL_ACTS[ai].farm || '';
@@ -1529,6 +1559,16 @@ function populateRanchoDropdown(ioe, defaultRancho, isAdmin){
     }
     ranchos.sort();
   }
+  return ranchos;
+}
+
+function populateRanchoDropdown(ioe, defaultRancho, isAdmin){
+  var sel = gEl('rancho');
+  if(!sel) return;
+  // Limpiar opciones anteriores
+  sel.innerHTML = '<option value="">— Selecciona un rancho —</option>';
+
+  var ranchos = getRanchoList(ioe, isAdmin); // V12-FIX4: usa helper compartido
 
   // Agregar opciones al select
   for(var i=0;i<ranchos.length;i++){
@@ -1607,10 +1647,7 @@ function showWelcomeModal(user, ioe, defaultRancho){
   // V2: Mostrar foto del surquero si tiene thumbnail
   var photoWrap = gEl('welcomePhotoWrap');
   var photoImg = gEl('welcomePhoto');
-  var surqEmpNum = '';
-  for(var si=0;si<ALL_WORKERS.length;si++){
-    if(ALL_WORKERS[si].name.toLowerCase()===user.name.toLowerCase()){ surqEmpNum=ALL_WORKERS[si].empNum||''; break; }
-  }
+  var _w3=findInArr(ALL_WORKERS,user.name); var surqEmpNum=_w3?_w3.empNum||'':''; // V12-FIX1
   if(surqEmpNum && faceThumbnailMap[surqEmpNum]){
     photoImg.src = 'data:image/jpeg;base64,' + faceThumbnailMap[surqEmpNum];
     photoWrap.style.display = 'block';
@@ -1654,10 +1691,7 @@ function showWelcomeModal(user, ioe, defaultRancho){
   _rejectedWorkers = [];
   var contratosLoaded = Object.keys(CONTRATOS).length > 0; // V8-C7: detectar si Sheets respondió
   for(var i=0;i<NAMES.length;i++){
-    var wk = null;
-    for(var j=0;j<ALL_WORKERS.length;j++){
-      if(ALL_WORKERS[j].name.toLowerCase()===NAMES[i].toLowerCase()){ wk=ALL_WORKERS[j]; break; }
-    }
+    var wk=findInArr(ALL_WORKERS,NAMES[i]); // V12-FIX1
     if(!wk) { accepted++; continue; }
     if(!wk.ioe){ _rejectedWorkers.push({name:wk.name,empNum:wk.empNum,reason:'Sin contrato IOE'}); rejected++; continue; }
     var allowed = CONTRATOS[wk.ioe];
@@ -1700,9 +1734,9 @@ function showRejectedDetail(){
     var item = '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:#fff;border-radius:8px;margin-bottom:6px;border:1.5px solid var(--r)">'
       +'<span style="font-size:18px;color:var(--r)">✗</span>'
       +'<div style="flex:1">'
-        +'<div style="font-weight:700;font-size:14px">'+escH(w.name)+'</div>'
-        +'<div style="font-size:11px;color:var(--gr)">Emp# '+escH(w.empNum)+'</div>'
-        +'<div style="font-size:11px;color:var(--r);margin-top:2px">'+escH(w.reason)+'</div>'
+        +'<div style="font-weight:700;font-size:14px">'+esc(w.name)+'</div>'
+        +'<div style="font-size:11px;color:var(--gr)">Emp# '+esc(w.empNum)+'</div>'
+        +'<div style="font-size:11px;color:var(--r);margin-top:2px">'+esc(w.reason)+'</div>'
       +'</div></div>';
     list.innerHTML += item;
   }
@@ -1725,10 +1759,7 @@ function onAdminSurqueroChange(name){
     filterDataForCrew(lider.crew);
     var crewBase = lider.crew.replace(/\s*\d+$/,'').trim();
     // Alpha2: Buscar IOE del lider para llenar dropdown
-    var liderIOE = '';
-    for(var li=0;li<ALL_WORKERS.length;li++){
-      if(ALL_WORKERS[li].name.toLowerCase()===name.toLowerCase()){ liderIOE=ALL_WORKERS[li].ioe||''; break; }
-    }
+    var _w5=findInArr(ALL_WORKERS,name); var liderIOE=_w5?_w5.ioe||'':''; // V12-FIX1
     populateRanchoDropdown(liderIOE, crewBase, false);
   } else {
     NAMES=ALL_WORKERS.map(function(w){return w.name;});
@@ -1764,7 +1795,7 @@ function adminCheckSession(name){
   _adminSessTimer = setTimeout(function(){ _adminSessTimer=null; }, 10000);
   panel.style.display='block';
   btn.style.display='none';
-  status.innerHTML='🔍 Consultando sesión de <b>'+escH(name.split(' ')[0])+'</b>...'; // Alpha2-fix2: escapar nombre
+  status.innerHTML='🔍 Consultando sesión de <b>'+esc(name.split(' ')[0])+'</b>...'; // Alpha2-fix2: escapar nombre
   sessionCall({cmd:'check', surquero:name}, function(err, data){
     if(_adminSessTarget !== name) return; // user changed selection
     if(err || !data){
@@ -1782,7 +1813,7 @@ function adminCheckSession(name){
     } else {
       panel.style.background='#f0f8f0';
       panel.style.borderColor='#28a745';
-      status.innerHTML='🟢 <b>Sin sesión activa</b> — '+escH(name.split(' ')[0])+' puede entrar sin problema'; // V9
+      status.innerHTML='🟢 <b>Sin sesión activa</b> — '+esc(name.split(' ')[0])+' puede entrar sin problema'; // V9
       btn.style.display='none';
     }
   });
@@ -1793,7 +1824,7 @@ function adminForceClose(){
   if(!name) return;
   var status = gEl('adminSessStatus');
   var btn = gEl('adminSessCloseBtn');
-  status.innerHTML='🔄 Cerrando sesión de <b>'+escH(name.split(' ')[0])+'</b>...'; // V9
+  status.innerHTML='🔄 Cerrando sesión de <b>'+esc(name.split(' ')[0])+'</b>...'; // V9
   btn.disabled = true;
   // Admin ya está autenticado — enviar force close sin pedir PIN extra
   sessionCall({cmd:'force', surquero:name, adminPin:currentUser.pin}, function(err, data){
@@ -1802,11 +1833,11 @@ function adminForceClose(){
       var panel = gEl('adminSessPanel');
       panel.style.background='#f0f8f0';
       panel.style.borderColor='#28a745';
-      status.innerHTML='✅ Sesión de <b>'+escH(name.split(' ')[0])+'</b> cerrada exitosamente. Ya puede volver a entrar.'; // V9
+      status.innerHTML='✅ Sesión de <b>'+esc(name.split(' ')[0])+'</b> cerrada exitosamente. Ya puede volver a entrar.'; // V9
       btn.style.display='none';
       toast('✅ Sesión remota cerrada para '+name.split(' ')[0]);
     } else {
-      status.innerHTML='❌ Error al cerrar: '+escH(data&&data.error||'sin conexión')+'. Intenta de nuevo.'; // V9
+      status.innerHTML='❌ Error al cerrar: '+esc(data&&data.error||'sin conexión')+'. Intenta de nuevo.'; // V9
     }
   });
 }
@@ -2214,8 +2245,8 @@ function safeHighlight(text, rx){
   var parts = text.replace(rx, '\x00$1\x01').split(/(\x00[^\x01]*\x01)/);
   var out = '';
   for(var i=0;i<parts.length;i++){
-    if(parts[i].charAt(0)==='\x00') out += '<mark>' + escH(parts[i].slice(1,-1)) + '</mark>';
-    else out += escH(parts[i]);
+    if(parts[i].charAt(0)==='\x00') out += '<mark>' + esc(parts[i].slice(1,-1)) + '</mark>';
+    else out += esc(parts[i]);
   }
   return out;
 }
@@ -2367,10 +2398,15 @@ if(typeof MutationObserver!=='undefined')(function(){
     for(var i=0;i<all.length;i++){ if(all[i].id!=='qrOv') return true; }
     return false;
   }
+  // V13-FIX1: Debounce overlay QR — evita doble-tap accidental
+  var _ovDebounce = null;
   var obs=new MutationObserver(function(){
     if(!qrActive)return;
-    if(anyOverlayOpen()) pauseQR();
-    else resumeQR();
+    if(_ovDebounce) return;
+    _ovDebounce = setTimeout(function(){
+      _ovDebounce = null;
+      if(anyOverlayOpen()) pauseQR(); else resumeQR();
+    }, 50);
   });
   // Observar body completo: detecta class changes y nodos nuevos (.ov dinámicos)
   obs.observe(document.body,{attributes:true,attributeFilter:['class'],subtree:true,childList:true});
@@ -2416,10 +2452,7 @@ function onQRSuccess(decoded){
   }
 
   // Buscar en ALL_WORKERS por empNum
-  var wkMatch = null;
-  for(var i=0; i<ALL_WORKERS.length; i++){
-    if(ALL_WORKERS[i].empNum === qrEmpNum){ wkMatch = ALL_WORKERS[i]; break; }
-  }
+  var wkMatch=findInArr(ALL_WORKERS,qrEmpNum,'empNum'); // V12-FIX1
   var officialName = wkMatch ? wkMatch.name : qrName;
 
   // Re-verificar duplicado con nombre oficial
@@ -2469,10 +2502,7 @@ function checkContrato(name){
   var rancho = (gVal('rancho')||'').trim().toLowerCase();
   if(!rancho) return null; // sin rancho configurado, no validar
   // Buscar worker en ALL_WORKERS para obtener su IOE
-  var wk = null;
-  for(var i=0;i<ALL_WORKERS.length;i++){
-    if(ALL_WORKERS[i].name.toLowerCase()===name.toLowerCase()){ wk=ALL_WORKERS[i]; break; }
-  }
+  var wk=findInArr(ALL_WORKERS,name); // V12-FIX1
   if(!wk) return null; // no está en DB, dejar pasar (manual entry)
   // 🚫 Sin número de contrato IOE — bloquear
   if(!wk.ioe) return { noIoe: true, rancho: gVal('rancho').trim() };
@@ -2506,10 +2536,7 @@ function showIoeBlock(info, name){
   // Psi: show thumbnail in IOE block modal
   var ioeWrap = gEl('ioeThumbWrap');
   var ioeImg = gEl('ioeThumb');
-  var empN = '';
-  for(var j=0;j<ALL_WORKERS.length;j++){
-    if(ALL_WORKERS[j].name.toLowerCase()===name.toLowerCase()){ empN=ALL_WORKERS[j].empNum||''; break; }
-  }
+  var _w7=findInArr(ALL_WORKERS,name); var empN=_w7?_w7.empNum||'':''; // V12-FIX1
   if(empN && faceThumbnailMap[empN]){
     ioeImg.src = 'data:image/jpeg;base64,' + faceThumbnailMap[empN];
     ioeWrap.style.display = '';
@@ -2563,10 +2590,7 @@ function showUnkThumb(name){
   var wrap = gEl('unkThumbWrap');
   var img = gEl('unkThumb');
   // Find empNum for this name
-  var empNum = '';
-  for(var i=0;i<ALL_WORKERS.length;i++){
-    if(ALL_WORKERS[i].name.toLowerCase()===name.toLowerCase()){ empNum=ALL_WORKERS[i].empNum||''; break; }
-  }
+  var _w8=findInArr(ALL_WORKERS,name); var empNum=_w8?_w8.empNum||'':''; // V12-FIX1
   if(empNum && faceThumbnailMap[empNum]){
     img.src = 'data:image/jpeg;base64,' + faceThumbnailMap[empNum];
     wrap.style.display = '';
@@ -2589,14 +2613,7 @@ function okUnk(){
 function noUnk(){ pendingUnk=null; gEl('unkOv').classList.remove('on'); if(qrActive) resumeQR(); }
 function doAddConfirmed(name){
   // Buscar empNum y contractRate del worker en ALL_WORKERS
-  var _empNum = '', _cRate = 0;
-  for(var _aw=0;_aw<ALL_WORKERS.length;_aw++){
-    if(ALL_WORKERS[_aw].name.toLowerCase()===name.toLowerCase()){
-      _empNum=ALL_WORKERS[_aw].empNum||'';
-      _cRate=ALL_WORKERS[_aw].contractRate||0;
-      break;
-    }
-  }
+  var _w9=findInArr(ALL_WORKERS,name); var _empNum=_w9?_w9.empNum||'':''; var _cRate=_w9?_w9.contractRate||0:0; // V12-FIX1
   var w={id:wid++,name:name,empNum:_empNum,contractRate:_cRate,open:true,acts:[],totalPay:0};
   workers.push(w);
   gEl('srch').value='';
@@ -2830,7 +2847,8 @@ function recalc(wi,ai){
   var w=getW(wi); if(!w||!w.acts[ai])return;
   var a=w.acts[ai]; var act=ACTS[a.ai]; var pay=0;
   if(!act) return;
-  if(act.hr){ pay=totalShiftHours(a)*getHRate(w,act); }
+  // V13-FIX2: isHourAct() en vez de act.hr — cubre tipo='hora' sin act.hr=true
+  if(isHourAct(act)){ pay=totalShiftHours(a)*getHRate(w,act); }
   else if(act.tipo==='$'){ pay=parseFloat(a.qty)||0; }
   // Tau: Daywork usa contractRate si existe (misma lógica que Hours)
   else { pay=(parseFloat(a.qty)||0)*act.p; }  // Daywork, Pieces, Cajas — todos usan act.p
@@ -3115,7 +3133,7 @@ function buildSum(){
   }
   gEl('sg').innerHTML='<div class="sb2"><div class="sv">'+workers.length+'</div><div class="sl">Trabajadores</div></div><div class="sb2"><div class="sv am">$'+grand.toFixed(0)+'</div><div class="sl">💰 Total del día</div></div><div class="sb2"><div class="sv">'+function(){ var n=0; for(var i=0;i<workers.length;i++) n+=workers[i].acts.length; return n; }()+'</div><div class="sl">Actividades</div></div>';
   // V9: escapar datos de formulario
-  gEl('si').innerHTML='<div class="ir"><span class="ik">Fecha</span><span class="iv">'+escH(gVal('fecha'))+'</span></div><div class="ir"><span class="ik">Rancho</span><span class="iv">'+escH(gVal('rancho'))+'</span></div><div class="ir"><span class="ik">Surquero</span><span class="iv">'+escH(gVal('surquero'))+'</span></div><div class="ir"><span class="ik">Finca</span><span class="iv">'+escH(gVal('finca'))+'</span></div><div class="ir"><span class="ik">Horario</span><span class="iv">'+escH(gVal('hEnt'))+' → '+escH(gVal('hSal'))+'</span></div><div class="ir"><span class="ik">Lonche</span><span class="iv">'+escH(gVal('lIni'))+' – '+escH(gVal('lFin'))+'</span></div>';
+  gEl('si').innerHTML='<div class="ir"><span class="ik">Fecha</span><span class="iv">'+esc(gVal('fecha'))+'</span></div><div class="ir"><span class="ik">Rancho</span><span class="iv">'+esc(gVal('rancho'))+'</span></div><div class="ir"><span class="ik">Surquero</span><span class="iv">'+esc(gVal('surquero'))+'</span></div><div class="ir"><span class="ik">Finca</span><span class="iv">'+esc(gVal('finca'))+'</span></div><div class="ir"><span class="ik">Horario</span><span class="iv">'+esc(gVal('hEnt'))+' → '+esc(gVal('hSal'))+'</span></div><div class="ir"><span class="ik">Lonche</span><span class="iv">'+esc(gVal('lIni'))+' – '+esc(gVal('lFin'))+'</span></div>';
   var h='';
   for(var i=0;i<workers.length;i++){
     var w=workers[i]; var dets=[];
@@ -3124,7 +3142,7 @@ function buildSum(){
       var act=resolveAct(a, true); // V8
       if(!act){ dets.push((a.esName||'Act.#'+a.ai)+'($'+(a.pay||0).toFixed(2)+')'); continue; }
       var u=act.hr?(a.ini&&a.fin?a.ini+'→'+a.fin+'('+nh(a.ini,a.fin)+'h)':'sin horario'):act.tipo==='$'?'$'+a.qty:a.qty+' '+act.tipo;
-      dets.push(escH(act.es.split(' ').slice(0,2).join(' '))+'('+u+')'); // V9
+      dets.push(esc(act.es.split(' ').slice(0,2).join(' '))+'('+u+')'); // V9
     }
     var exD=grpPayDetail(w.id); var ex=exD.pay;
     h+='<div class="sr"><span class="sn">'+(i+1)+'. '+esc(w.name)+'</span><span class="sd">'+(dets.join(' + ')||'—')+(ex>0?' +Grp('+exD.label+')':'')+
@@ -3378,10 +3396,15 @@ function _serializeState(){
   }
   return {vals:vals, wSave:wSave};
 }
+// V13-FIX3: try/catch separados — si historial falla por storage lleno, estado principal sí se guarda
 function _persistState(vals, wSave){
-  localStorage.setItem(getUserKey(),JSON.stringify({v:vals,w:wSave,id:wid,ep:estP,hp:hilP,cp:cajasP,ga:grpActs,aus:ausencias}));
-  var dateKey=getUserHistKey(vals.fecha||new Date().toISOString().split('T')[0]);
-  localStorage.setItem(dateKey,JSON.stringify({v:vals,w:wSave,id:wid,ep:estP,hp:hilP,cp:cajasP,saved:new Date().toISOString()}));
+  try {
+    localStorage.setItem(getUserKey(),JSON.stringify({v:vals,w:wSave,id:wid,ep:estP,hp:hilP,cp:cajasP,ga:grpActs,aus:ausencias}));
+  } catch(e){ console.warn('[eBerry] Error guardando estado:', e.message); return; }
+  try {
+    var dateKey=getUserHistKey(vals.fecha||new Date().toISOString().split('T')[0]);
+    localStorage.setItem(dateKey,JSON.stringify({v:vals,w:wSave,id:wid,ep:estP,hp:hilP,cp:cajasP,saved:new Date().toISOString()}));
+  } catch(e){ console.warn('[eBerry] localStorage lleno — historial no guardado:', e.message); }
 }
 
 function save(){
@@ -3461,13 +3484,8 @@ function load(){
     // Tau: recuperar empNum y contractRate de ALL_WORKERS si faltan (datos legacy)
     for(var ei=0;ei<workers.length;ei++){
       if(!workers[ei].empNum || !workers[ei].contractRate){
-        for(var ej=0;ej<ALL_WORKERS.length;ej++){
-          if(ALL_WORKERS[ej].name.toLowerCase()===workers[ei].name.toLowerCase()){
-            if(!workers[ei].empNum) workers[ei].empNum=ALL_WORKERS[ej].empNum||'';
-            if(!workers[ei].contractRate) workers[ei].contractRate=ALL_WORKERS[ej].contractRate||0;
-            break;
-          }
-        }
+        var _w10=findInArr(ALL_WORKERS,workers[ei].name); // V12-FIX1
+        if(_w10){ if(!workers[ei].empNum) workers[ei].empNum=_w10.empNum||''; if(!workers[ei].contractRate) workers[ei].contractRate=_w10.contractRate||0; }
       }
     }
     updParam(); updParts();
@@ -3601,7 +3619,8 @@ function showEmptyState(){
 }
 
 function go(n){
-  if(n===1) buildAnalisis();
+  // V13-FIX4: Guard — evita análisis vacío si workers no ha cargado aún
+  if(n===1){ if(workers && workers.length) buildAnalisis(); else setTimeout(buildAnalisis,200); }
   if(n===2){updBanner(); setTimeout(function(){ for(var i=0;i<workers.length;i++) updTot(workers[i].id); },50);}
   if(n===3){updParts();renderGrpActs();}
   if(n===4)buildSum();
@@ -3631,8 +3650,7 @@ function updNav(){
   else { nn.textContent='Siguiente →'; nn.onclick=next; }
 }
 function toast(msg){ var t=gEl('toast'); t.textContent=msg; t.classList.add('on'); setTimeout(function(){ t.classList.remove('on'); },2500); }
-// Alpha2-fix2: helper para escapar HTML y evitar romper DOM con nombres raros
-function escH(s){ var d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+// V12-FIX2: esc() eliminada — usar esc() global (más completa: escapa & < > ")
 // Psi: toast with face photo thumbnail
 function toastWithPhoto(msg, thumbB64){
   // V6-C2: usar DOM en vez de innerHTML para evitar XSS via thumbB64
@@ -3763,8 +3781,8 @@ function showHistory(){
       var surquero=info.v?info.v.surquero:'';
       h+='<div style="display:flex;align-items:center;justify-content:space-between;padding:11px 13px;background:#fff;border-radius:8px;margin-bottom:8px;border:1.5px solid var(--bd);cursor:pointer" data-hkey="'+dedupKeys[i]+'" onclick="loadDay(this.dataset.hkey)">'
         +'<div>'
-          +'<div style="font-weight:700;font-size:15px;color:var(--dk)">'+escH(date)+'</div>'
-          +'<div style="font-size:12px;color:var(--gr)">'+escH(rancho)+(surquero?' · '+escH(surquero.split(' ')[0]):'')+' · '+wCount+' trabajadores</div>'
+          +'<div style="font-weight:700;font-size:15px;color:var(--dk)">'+esc(date)+'</div>'
+          +'<div style="font-size:12px;color:var(--gr)">'+esc(rancho)+(surquero?' · '+esc(surquero.split(' ')[0]):'')+' · '+wCount+' trabajadores</div>'
         +'</div>'
         +'<div style="display:flex;gap:8px;align-items:center">'
           +'<button data-pkey="'+dedupKeys[i]+'" onclick="event.stopPropagation();genPDFFromKey(this.dataset.pkey)" style="background:var(--r);color:#fff;border:none;border-radius:6px;padding:10px 12px;font-size:12px;font-weight:700;cursor:pointer;min-height:44px">📄 PDF</button>'
@@ -3788,11 +3806,7 @@ function loadDay(key){
     // Tau: recuperar contractRate en datos de historial
     for(var ri=0;ri<workers.length;ri++){
       if(!workers[ri].contractRate){
-        for(var rj=0;rj<ALL_WORKERS.length;rj++){
-          if(ALL_WORKERS[rj].name.toLowerCase()===workers[ri].name.toLowerCase()){
-            workers[ri].contractRate=ALL_WORKERS[rj].contractRate||0; break;
-          }
-        }
+        var _w11=findInArr(ALL_WORKERS,workers[ri].name); if(_w11) workers[ri].contractRate=_w11.contractRate||0; // V12-FIX1
       }
     }
     for(var i=0;i<workers.length;i++){
@@ -3845,9 +3859,9 @@ function deleteDay(key){
   ov.innerHTML = '<div style="background:#fff;border-radius:14px;padding:24px;max-width:340px;width:90%;text-align:center;box-shadow:0 8px 30px rgba(0,0,0,.3)">'
     +'<div style="font-size:36px;margin-bottom:8px">🚨</div>'
     +'<div style="font-size:16px;font-weight:700;color:#c0392b;margin-bottom:10px">¿Estás seguro que deseas eliminar este día?</div>'
-    +'<div style="font-size:18px;color:#333;margin-bottom:6px;font-weight:700">📅 '+escH(fecha)+'</div>'
-    +(rancho ? '<div style="font-size:13px;color:#555;margin-bottom:6px">📍 '+escH(rancho)+'</div>' : '')
-    +'<div style="font-size:13px;color:#333;margin-bottom:12px;background:#fff3f3;padding:8px 12px;border-radius:8px;border:1px solid #f5c6cb">'+escH(detalle)+'</div>'
+    +'<div style="font-size:18px;color:#333;margin-bottom:6px;font-weight:700">📅 '+esc(fecha)+'</div>'
+    +(rancho ? '<div style="font-size:13px;color:#555;margin-bottom:6px">📍 '+esc(rancho)+'</div>' : '')
+    +'<div style="font-size:13px;color:#333;margin-bottom:12px;background:#fff3f3;padding:8px 12px;border-radius:8px;border:1px solid #f5c6cb">'+esc(detalle)+'</div>'
     +'<div style="font-size:12px;color:#c0392b;font-weight:700;margin-bottom:18px">⚠️ ¡La información ya no se va a poder recuperar!</div>'
     +'<div style="display:flex;gap:10px;justify-content:center">'
     +'<button onclick="document.getElementById(\'delDayOv\').remove()" style="background:#eee;color:#555;border:none;padding:12px 24px;border-radius:8px;font-size:14px;cursor:pointer">Cancelar</button>'
@@ -4069,26 +4083,26 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
   }
 
   // ── Filas de cabecera: TOTAL / Pago Unit. / Labor / Entrada / Salida ──
-  var trTotal='<tr style="background:#d0d8ff;font-weight:700;font-size:10px">'
-    +'<td style="border:1px solid #aab;border-top:3px solid #1a2b8c"></td>'
-    +'<td style="border:1px solid #aab;border-top:3px solid #1a2b8c"></td>'
-    +'<td style="text-align:right;padding:5px 7px;border:1px solid #aab;border-top:3px solid #1a2b8c;border-right:3px solid #1a2b8c;color:#1a2b8c;font-size:10px;font-weight:900">TOTAL</td>';
-  var trPrice='<tr style="font-size:10px;background:#fff">'
+  var trTotal='<tr style="background:#d0d8ff;font-weight:700;font-size:9px">'
+    +'<td style="border:1px solid #aab;border-top:2px solid #1a2b8c"></td>'
+    +'<td style="border:1px solid #aab;border-top:2px solid #1a2b8c"></td>'
+    +'<td style="text-align:right;padding:2px 4px;border:1px solid #aab;border-top:2px solid #1a2b8c;border-right:2px solid #1a2b8c;color:#1a2b8c;font-size:9px;font-weight:900">TOTAL</td>';
+  var trPrice='<tr style="font-size:9px;background:#fff">'
     +'<td style="border:1px solid #ddd"></td>'
     +'<td style="border:1px solid #ddd"></td>'
-    +'<td style="text-align:right;padding:4px 7px;border:1px solid #ddd;border-right:3px solid #1a2b8c;color:#111;font-weight:600">Pago Unit.</td>';
-  var trLabor='<tr style="font-size:10px;background:#f5f8ff">'
+    +'<td style="text-align:right;padding:2px 4px;border:1px solid #ddd;border-right:2px solid #1a2b8c;color:#111;font-weight:600">Pago Unit.</td>';
+  var trLabor='<tr style="font-size:9px;background:#f5f8ff">'
     +'<td style="border:1px solid #ddd"></td>'
     +'<td style="border:1px solid #ddd"></td>'
-    +'<td style="text-align:right;padding:4px 7px;border:1px solid #ddd;border-right:3px solid #1a2b8c;color:#111;font-weight:600">Labor</td>';
-  var trEntry='<tr style="font-size:10px;background:#f9f9f9">'
+    +'<td style="text-align:right;padding:2px 4px;border:1px solid #ddd;border-right:2px solid #1a2b8c;color:#111;font-weight:600">Labor</td>';
+  var trEntry='<tr style="font-size:9px;background:#f9f9f9">'
     +'<td style="border:1px solid #ddd"></td>'
     +'<td style="border:1px solid #ddd"></td>'
-    +'<td style="text-align:right;padding:4px 7px;border:1px solid #ddd;border-right:3px solid #1a2b8c;color:#111">Entrada</td>';
-  var trExit='<tr class="meta-last" style="font-size:10px;background:#f9f9f9">'
+    +'<td style="text-align:right;padding:2px 4px;border:1px solid #ddd;border-right:2px solid #1a2b8c;color:#111">Entrada</td>';
+  var trExit='<tr class="meta-last" style="font-size:9px;background:#f9f9f9">'
     +'<td style="border:1px solid #ddd"></td>'
     +'<td style="border:1px solid #ddd"></td>'
-    +'<td style="text-align:right;padding:4px 7px;border:1px solid #ddd;border-right:3px solid #1a2b8c;color:#111">Salida</td>';
+    +'<td style="text-align:right;padding:2px 4px;border:1px solid #ddd;border-right:2px solid #1a2b8c;color:#111">Salida</td>';
 
   for(i=0;i<actCols.length;i++){
     var col4=actCols[i];
@@ -4199,8 +4213,10 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
   var rows='';
   for(i=0;i<sortedWks.length;i++){
     var w=sortedWks[i];
-    var empCell = '<td style="text-align:center;font-size:8px;color:#444">'+(w.empNum?esc(w.empNum):'')+'</td>';
-    var td='<td class="numcol">'+(i+1)+'</td>'+empCell+'<td class="namecol" style="border-right:3px solid #1a2b8c;line-height:1.1;padding:2px 4px">'+esc(w.name)+'</td>';
+    var _empN12 = w.empNum || '';
+    if(!_empN12){ var _awM=findInArr(ALL_WORKERS,w.name); if(_awM) _empN12=_awM.empNum||''; }
+    var empCell = '<td style="text-align:center;font-size:8px;color:#444">'+(_empN12?esc(_empN12):'')+'</td>';
+    var td='<td class="numcol">'+(i+1)+'</td>'+empCell+'<td class="namecol" style="border-right:2px solid #1a2b8c;line-height:1.05;padding:1px 3px;font-size:9px">'+esc(w.name)+'</td>';
     for(j=0;j<actCols.length;j++){
       var col2=actCols[j];
       // Alpha2-fix5: eliminado dead code (wid siempre es null)
@@ -4252,51 +4268,35 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
   var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Payroll '+vals.rancho+' '+vals.fecha+'</title>'
     +'<style>'
     +'*{box-sizing:border-box;margin:0;padding:0}'
-    +'body{font-family:Arial,sans-serif;font-size:11px;padding:12px;color:#111}'
-    +'.hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;border-bottom:3px solid #1a2b8c;padding-bottom:8px}'
-    +'table{width:100%;border-collapse:collapse;font-size:10px;border:3px solid #1a2b8c}'
-    +'th{padding:5px 4px;text-align:center;font-size:9px;font-weight:700;border:1px solid #4a5bbc;background:#1a2b8c;color:#fff;line-height:1.3}'
-    +'td{padding:4px 5px;border:1px solid #ddd;vertical-align:middle;text-align:center}'
+    +'body{font-family:Arial,sans-serif;font-size:10px;padding:6px 8px;color:#111}'
+    +'.hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;border-bottom:2px solid #1a2b8c;padding-bottom:4px}'
+    +'table{width:100%;border-collapse:collapse;font-size:9px;border:2px solid #1a2b8c}'
+    +'th{padding:2px 3px;text-align:center;font-size:8px;font-weight:700;border:1px solid #4a5bbc;background:#1a2b8c;color:#fff;line-height:1.2}'
+    +'td{padding:2px 3px;border:1px solid #ddd;vertical-align:middle;text-align:center}'
     +'.namecol{text-align:left!important;font-weight:600}'
-    +'.numcol{text-align:center!important;color:#8b0000;font-weight:700;font-size:9px}'
-    +'.meta-last td{border-bottom:3px solid #1a2b8c!important}'
-    +'.ft{font-size:8px;color:#333;text-align:center;margin-top:6px;border-top:1px solid #ddd;padding-top:5px}'
-    +'@media print{.nopr{display:none}thead{display:table-header-group}@page{margin:7mm;size:letter landscape}}'
+    +'.numcol{text-align:center!important;color:#8b0000;font-weight:700;font-size:8px}'
+    +'.meta-last td{border-bottom:2px solid #1a2b8c!important}'
+    +'.ft{font-size:7px;color:#333;text-align:center;margin-top:3px;border-top:1px solid #ddd;padding-top:3px}'
+    +'@media print{.nopr{display:none}thead{display:table-header-group}@page{margin:5mm;size:letter landscape}}'
     +'</style></head><body>'
     +'<div class="hdr">'
     +'<div style="display:flex;align-items:center;gap:10px">'
-    +'<img src="'+EBERRY_LOGO+'" style="height:55px;width:auto" alt="eBerry">'
+    +'<img src="'+EBERRY_LOGO+'" style="height:40px;width:auto" alt="eBerry">'
     +'<div>'
-    +'<div style="font-size:16px;font-weight:700;color:#1a2b8c;line-height:1.1">eberry harvest company llc</div>'
-    +'<div style="font-size:13px;font-weight:900;letter-spacing:.5px">DAILY PAYROLL SHEET</div>'
-    +'<div style="font-size:10px;color:#111;margin-top:2px">Farm: '+vals.rancho+' &nbsp;|&nbsp; Bus #'+vals.numBus+' &nbsp;|&nbsp; '+(currentUser&&currentUser.isAdmin?'ADM':vals.surquero)+' &nbsp;|&nbsp; Lunch: '+lunchMin+' min</div>'
+    +'<div style="font-size:13px;font-weight:700;color:#1a2b8c;line-height:1.1">eberry harvest company llc</div>'
+    +'<div style="font-size:11px;font-weight:900;letter-spacing:.5px">DAILY PAYROLL SHEET</div>'
+    +'<div style="font-size:9px;color:#111;margin-top:1px">Farm: '+vals.rancho+' &nbsp;|&nbsp; Bus #'+vals.numBus+' &nbsp;|&nbsp; '+(currentUser&&currentUser.isAdmin?'ADM':vals.surquero)+' &nbsp;|&nbsp; Lunch: '+lunchMin+' min</div>'
     +'</div></div>'
     +'<div style="text-align:right">'
-    +'<div style="font-size:8px;font-weight:700;color:#333;text-transform:uppercase;letter-spacing:1px">DATE / FECHA</div>'
-    +'<div style="font-size:22px;font-weight:900;color:#1a2b8c;letter-spacing:1px">'+vals.fecha+'</div>'
+    +'<div style="font-size:7px;font-weight:700;color:#333;text-transform:uppercase;letter-spacing:1px">DATE / FECHA</div>'
+    +'<div style="font-size:18px;font-weight:900;color:#1a2b8c;letter-spacing:1px">'+vals.fecha+'</div>'
     +'</div>'
     +'</div>'
     +'<table>'
     +'<thead><tr style="background:#1a2b8c;color:#fff">'+th+'</tr></thead>'
     +'<tbody>'+metaRows+rows+'</tbody>'
     +'</table>'
-    // ── Bloque de ausencias en el PDF ──
-    +(ausencias_.length ? (function(){
-      var motLabel = {'cambio':'🔄 Cambio de rancho','enfermedad':'🤒 Enfermedad','injustificada':'❌ Falta injustificada','notrabajo':'🚫 No hubo trabajo','':'Sin motivo'};
-      var rows2 = ausencias_.map(function(a,i){
-        return '<tr style="'+(i%2?'background:#fafafa':'')+'">'
-          +'<td style="padding:4px 8px;border:1px solid #eee;font-size:10px;font-weight:600">'+esc(a.name)+'</td>'
-          +'<td style="padding:4px 8px;border:1px solid #eee;font-size:10px;color:var(--gr)">'+( a.empNum?'#'+a.empNum:'')+'</td>'
-          +'<td style="padding:4px 8px;border:1px solid #eee;font-size:10px">'+( motLabel[a.motivo]||a.motivo||'<span style="color:#c00">Sin motivo</span>')+'</td>'
-          +'</tr>';
-      }).join('');
-      return '<div style="margin-top:14px;border:1.5px solid #1a2b8c;border-radius:8px;overflow:hidden">'
-        +'<div style="background:#1a2b8c;color:#fff;padding:7px 12px;font-weight:700;font-size:11px">🚫 AUSENCIAS DEL DÍA &mdash; '+ausencias_.length+' persona(s)</div>'
-        +'<table style="width:100%;border-collapse:collapse">'
-        +'<tr style="background:#eef1ff"><th style="padding:4px 8px;font-size:9px;text-align:left;border:1px solid #ccd">Nombre</th><th style="padding:4px 8px;font-size:9px;text-align:left;border:1px solid #ccd"># Empleado</th><th style="padding:4px 8px;font-size:9px;text-align:left;border:1px solid #ccd">Motivo</th></tr>'
-        +rows2
-        +'</table></div>';
-    })() : '')
+    // V12-FIX: Ausencias removidas del PDF (solo van a Google Sheets)
     // ── V5: Bloque de Análisis de Rendimiento en el PDF ──
     +(function(){
       var globalH = nh(vals.hEnt||'',vals.hSal||'');
@@ -4344,8 +4344,9 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
         }
       }
       if(!anRows) return '';
-      return '<div style="margin-top:14px;border:2px solid #c00;border-radius:8px;overflow:hidden;page-break-inside:avoid">'
-        +'<div style="background:#c00;color:#fff;padding:7px 12px;font-weight:700;font-size:11px;display:flex;justify-content:space-between">'
+      // V14-FIX: Quitado overflow:hidden + page-break-inside:avoid — causaban salto de página innecesario
+      return '<div style="margin-top:14px;border:2px solid #c00;border-radius:8px">'
+        +'<div style="background:#c00;color:#fff;padding:7px 12px;font-weight:700;font-size:11px;display:flex;justify-content:space-between;border-radius:6px 6px 0 0">'
         +'<span>&#x1F4C9; AN&Aacute;LISIS DE RENDIMIENTO &mdash; P&Eacute;RDIDAS</span>'
         +'<span>'+wLoss+' trabajador(es) &bull; Total: -$'+totalLoss.toFixed(2)+'</span></div>'
         +'<table style="width:100%;border-collapse:collapse">'
@@ -4724,7 +4725,7 @@ function sendToSheets() {
         hLFin:      gVal('lFin') || ''
       });
     }
-    payload.workers.push(wOut);
+    if(wOut.acts.length) payload.workers.push(wOut); // V12-BUG3: no enviar workers sin actividades (filas fantasma)
   }
 
   // ── Ausencias como "workers" con actividad tipo Ausencia ──
@@ -4794,7 +4795,7 @@ function sendToSheets() {
         if (payload.workers[pw].name === w.name) { found = payload.workers[pw]; break; }
       }
       if (!found) {
-        found = { name: w.name, acts: [] };
+        found = { name: w.name, empNum: w.empNum||'', acts: [] }; // V12-BUG1: antes faltaba empNum en workers solo-grupales
         payload.workers.push(found);
       }
 
@@ -4805,7 +4806,11 @@ function sendToSheets() {
         unitPrice:  unitP,
         qty:        Math.round(qtyPerPerson * 100) / 100,
         totalHours: ct === 'hora' ? qtyPerPerson : '',
-        finca:      g.vars.labor || gVal('finca')
+        finca:      g.vars.labor || gVal('finca'),
+        hEnt:       g.vars.ini || '',   // V12-BUG2: horarios grupales (antes no se enviaban)
+        hSal:       g.vars.fin || '',
+        hLIni:      gVal('lIni') || '',
+        hLFin:      gVal('lFin') || ''
       });
       grpSent++;
     }
@@ -4840,7 +4845,7 @@ function sendToSheets() {
       toast(msg);
       if(btn){ btn.textContent='✅ Enviado'; btn.style.background='#2d7a2d'; btn.disabled=false;
         setTimeout(function(){ btn.textContent='📊 Enviar a Payroll Field Master'; btn.style.background='#1a3a5c'; },5000); }
-    }, 15000,
+    }, 30000, // V12-BUG: 15s→30s — cuadrillas grandes necesitan más tiempo
     function(){ // onTimeout
       addToOfflineQueue(payload);
       if(btn){ btn.textContent='📥 Timeout — guardado offline'; btn.style.background='#ff9800'; btn.disabled=false;
@@ -4907,8 +4912,8 @@ function showGrpPicker(){
              : 'Cantidad ÷ personas × $'+act.p+'/'+act.tipo;
     var btn = document.createElement('button');
     btn.style.cssText='background:var(--ap);border:1.5px solid var(--a);border-radius:10px;padding:14px;text-align:left;cursor:pointer;font-family:\'DM Sans\',sans-serif;width:100%';
-    btn.innerHTML='<div style="font-size:15px;font-weight:700;color:var(--dk)">'+(icons[ct]||'🌿')+' '+escH(act.es)+'</div>'
-      +'<div style="font-size:11px;color:var(--gr);margin-top:3px">'+escH(desc)+'</div>'; // V9
+    btn.innerHTML='<div style="font-size:15px;font-weight:700;color:var(--dk)">'+(icons[ct]||'🌿')+' '+esc(act.es)+'</div>'
+      +'<div style="font-size:11px;color:var(--gr);margin-top:3px">'+esc(desc)+'</div>'; // V9
     (function(idx){ btn.addEventListener('click',function(){ addGrpAct(idx); }); })(i);
     list.appendChild(btn);
   }
@@ -5650,7 +5655,7 @@ function onAusAC(v){
   for(var k=0;k<res.length;k++){
     var d = document.createElement("div"); d.className="di";
     (function(nm, en){
-      d.innerHTML = escH(nm) + (en ? " <span style=\"font-size:10px;color:var(--gr)\">#"+escH(en)+"</span>" : ""); // V9
+      d.innerHTML = esc(nm) + (en ? " <span style=\"font-size:10px;color:var(--gr)\">#"+esc(en)+"</span>" : ""); // V9
       d.addEventListener("mousedown", function(){ addAusenciaConfirmed(nm, en); gEl("ausSearch").value=""; dr.classList.remove("on"); });
     })(res[k].name, res[k].empNum||"");
     dr.appendChild(d);
@@ -5846,7 +5851,10 @@ function _showFallbackBanner(msg){
   ban.appendChild(btn);
   document.body.appendChild(ban);
   // Ajustar body padding para que no tape contenido
-  document.body.style.paddingTop = (ban.offsetHeight + 2) + 'px';
+  // V13-FIX5: rAF evita layout thrashing en Android
+  requestAnimationFrame(function(){
+    document.body.style.paddingTop = (ban.offsetHeight + 2) + 'px';
+  });
 }
 function _hideFallbackBanner(){
   var old = document.getElementById('fallbackBanner');
@@ -6258,7 +6266,7 @@ function renderFaceList(filter){
       : '<div class="fi-status ' + (isReg ? 'done' : 'pending') + '">' + (isReg ? '✅' : '⬤') + '</div>';
     html += '<div class="faceItem" onclick="selectFaceWorker(\'' + w.name.replace(/'/g,"\\'") + '\',\'' + w.empNum + '\')">'
       + thumbHtml
-      + '<div class="fi-info"><div class="fi-name">' + escH(w.name) + '</div><div class="fi-emp">#' + escH(w.empNum) + '</div></div>'
+      + '<div class="fi-info"><div class="fi-name">' + esc(w.name) + '</div><div class="fi-emp">#' + esc(w.empNum) + '</div></div>'
       + '<div class="fi-arrow">›</div></div>';
   }
   container.innerHTML = html;
@@ -6522,10 +6530,10 @@ function refreshInvoiceAuto(){
   for(var i=0; i<autoData.length; i++){
     var r = autoData[i];
     container.innerHTML += '<div class="inv-auto-row">'
-      + '<div class="inv-a-prod">' + escH(r.product) + ' · ' + escH(r.equipment) + '</div>'
-      + (r.units ? '<div style="font-size:12px;color:var(--gr)">' + escH(r.units) + '</div>' : '')
-      + '<div class="inv-a-val">' + escH(r.field) + '</div>'
-      + '<div style="font-size:11px;color:var(--gr)">' + escH(r.blockNum) + '</div>'
+      + '<div class="inv-a-prod">' + esc(r.product) + ' · ' + esc(r.equipment) + '</div>'
+      + (r.units ? '<div style="font-size:12px;color:var(--gr)">' + esc(r.units) + '</div>' : '')
+      + '<div class="inv-a-val">' + esc(r.field) + '</div>'
+      + '<div style="font-size:11px;color:var(--gr)">' + esc(r.blockNum) + '</div>'
       + '</div>';
   }
 }
@@ -6673,13 +6681,13 @@ function renderInvManualRows(){
     container.innerHTML +=
       '<div class="inv-row">'
       + '<button class="inv-del" onclick="delInvRow('+r.id+')">✕</button>'
-      + '<div><label>Product</label><input id="'+pre+'prod" type="text" placeholder="Ej: Jumbo Pepper" value="'+escH(r.product||'')+'"></div>'
-      + '<div><label>Equipment</label><input id="'+pre+'equip" type="text" placeholder="Ej: Pepper" value="'+escH(r.equipment||'')+'"></div>'
-      + '<div><label>Units</label><input id="'+pre+'units" type="text" inputmode="numeric" placeholder="Ej: 1674" value="'+escH(r.units||'')+'"></div>'
-      + '<div><label>Field</label><input id="'+pre+'field" type="text" placeholder="Ej: Cajas" value="'+escH(r.field||'')+'"></div>'
-      + '<div><label>Block Numbers</label><input id="'+pre+'block" type="text" placeholder="Ej: A1, B2" value="'+escH(r.blockNum||'')+'"></div>'
-      + '<div><label>Misc.</label><input id="'+pre+'misc" type="text" placeholder="" value="'+escH(r.misc||'')+'"></div>'
-      + '<div class="inv-full"><label>Total</label><input id="'+pre+'total" type="text" placeholder="" value="'+escH(r.total||'')+'"></div>'
+      + '<div><label>Product</label><input id="'+pre+'prod" type="text" placeholder="Ej: Jumbo Pepper" value="'+esc(r.product||'')+'"></div>'
+      + '<div><label>Equipment</label><input id="'+pre+'equip" type="text" placeholder="Ej: Pepper" value="'+esc(r.equipment||'')+'"></div>'
+      + '<div><label>Units</label><input id="'+pre+'units" type="text" inputmode="numeric" placeholder="Ej: 1674" value="'+esc(r.units||'')+'"></div>'
+      + '<div><label>Field</label><input id="'+pre+'field" type="text" placeholder="Ej: Cajas" value="'+esc(r.field||'')+'"></div>'
+      + '<div><label>Block Numbers</label><input id="'+pre+'block" type="text" placeholder="Ej: A1, B2" value="'+esc(r.blockNum||'')+'"></div>'
+      + '<div><label>Misc.</label><input id="'+pre+'misc" type="text" placeholder="" value="'+esc(r.misc||'')+'"></div>'
+      + '<div class="inv-full"><label>Total</label><input id="'+pre+'total" type="text" placeholder="" value="'+esc(r.total||'')+'"></div>'
       + '</div>';
   }
 }
@@ -7056,10 +7064,7 @@ function handleFaceIDMatch(matched, needsConfirm){
 
   // 4. Other crew, low confidence, or NAMES not loaded → show confirmation modal
   stopFaceID();
-  var wkMatch = null;
-  for(var i=0; i<ALL_WORKERS.length; i++){
-    if(ALL_WORKERS[i].name.toLowerCase() === officialName.toLowerCase()){ wkMatch = ALL_WORKERS[i]; break; }
-  }
+  var wkMatch=findInArr(ALL_WORKERS,officialName); // V12-FIX1
   var otherCrew = wkMatch ? wkMatch.crew : '';
   pendingUnk = officialName;
 
@@ -7115,33 +7120,14 @@ var SEM_DAYS = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
 var SEM_DAYS_FULL = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
 
 function initSemTab(){
-  // V4: Poblar dropdown de ranchos (mismo que Parámetros, desde CONTRATOS)
+  // V12-FIX4: usa getRanchoList() compartido (antes era lógica duplicada de populateRanchoDropdown)
   var ranchoSel = gEl('semRancho');
   if(ranchoSel && ranchoSel.options.length <= 1){
-    var allRanchos = {};
-    if(currentUser && currentUser.isAdmin){
-      // Admin: todos los ranchos de todas las columnas IOE
-      for(var k in CONTRATOS){
-        if(!CONTRATOS.hasOwnProperty(k)) continue;
-        for(var ri=0;ri<CONTRATOS[k].length;ri++){
-          var rn = CONTRATOS[k][ri];
-          if(rn) allRanchos[rn] = true;
-        }
-      }
-    } else {
-      // Surquero: solo ranchos de su IOE
-      var surqName = currentUser ? currentUser.name : '';
-      var surqIOE = '';
-      for(var si=0;si<ALL_WORKERS.length;si++){
-        if(ALL_WORKERS[si].name.toLowerCase()===surqName.toLowerCase()){ surqIOE=ALL_WORKERS[si].ioe||''; break; }
-      }
-      if(surqIOE && CONTRATOS[surqIOE]){
-        for(var ri2=0;ri2<CONTRATOS[surqIOE].length;ri2++){
-          allRanchos[CONTRATOS[surqIOE][ri2]] = true;
-        }
-      }
+    var surqIOE = '';
+    if(currentUser && !currentUser.isAdmin){
+      var _sw=findInArr(ALL_WORKERS,currentUser.name); surqIOE=_sw?_sw.ioe||'':''; // V12-FIX1+FIX4
     }
-    var sorted = Object.keys(allRanchos).sort();
+    var sorted = getRanchoList(surqIOE, currentUser && currentUser.isAdmin);
     for(var i=0;i<sorted.length;i++){
       var opt = document.createElement('option');
       opt.value = sorted[i];
@@ -7277,7 +7263,7 @@ function buildSemTable(){
     var rowId = 'sem_' + wk.id;
     tbody += '<tr>';
     tbody += '<td class="sem-td" style="font-size:11px;color:#888">' + (w+1) + '</td>';
-    tbody += '<td class="sem-name sem-td">' + escH(wk.name) + '</td>';
+    tbody += '<td class="sem-name sem-td">' + esc(wk.name) + '</td>';
 
     for(var d=0;d<7;d++){
       var cellId = rowId + '_d' + d;
@@ -7660,9 +7646,10 @@ function generateSemPDF(){
       groups[key].vals[w] = wd.days[d];
       groups[key].total += wd.days[d];
     }
+    // V16-FIX: días sin datos no generan columna en el PDF
     if(groupOrder.length === 0){
-      groupOrder.push('empty');
-      groups['empty'] = {sched:{ent:'',sal:'',lIni:'',lFin:''}, vals:{}, total:0};
+      dayColSpans.push(0);
+      continue;
     }
     dayColSpans.push(groupOrder.length);
     for(var g=0;g<groupOrder.length;g++){
@@ -7679,6 +7666,7 @@ function generateSemPDF(){
   html += '<table><thead>';
   html += '<tr><th rowspan="2">No</th><th rowspan="2">Emp #</th><th rowspan="2" style="min-width:100px">Nombre / Name</th>';
   for(var d=0;d<7;d++){
+    if(dayColSpans[d] === 0) continue; // V16: omitir días sin datos
     html += '<th colspan="'+dayColSpans[d]+'" style="border-bottom:'+(dayColSpans[d]>1?'1px solid #8899cc':'none')+'">'+SEM_DAYS[d]+'<br>'+dates[d]+'</th>';
   }
   html += '<th rowspan="2" style="background:#0f1a3d">TOTAL</th></tr>';
@@ -7723,7 +7711,8 @@ function generateSemPDF(){
   html += '<tr style="background:#f5f8ff"><td style="'+metaEmpty+'"></td><td style="'+metaEmpty+'"></td>'
     +'<td style="'+metaLabel+';color:#111">Labor</td>';
   for(var c=0;c<dayCols.length;c++){
-    html += '<td style="'+metaStyle+';color:#3a7fd4;font-size:9px">'+(gVal('semFinca')||'G.L')+'</td>';
+    // V16-FIX: finca vacía → celda en blanco (no "G.L")
+    html += '<td style="'+metaStyle+';color:#3a7fd4;font-size:9px">'+(gVal('semFinca')||'')+'</td>';
   }
   html += '<td style="'+metaEmpty+'"></td></tr>';
 
@@ -7764,7 +7753,7 @@ function generateSemPDF(){
     var wd = workerData[w];
     html += '<tr><td>'+(w+1)+'</td>'
       +'<td style="color:#8b0000;font-weight:700;font-size:9px">'+(wd.wk.empNum?'#'+wd.wk.empNum:'')+'</td>'
-      +'<td class="name">'+escH(wd.wk.name)+'</td>';
+      +'<td class="name">'+esc(wd.wk.name)+'</td>';
     for(var c=0;c<dayCols.length;c++){
       var colVal = dayCols[c].vals[w];
       html += '<td>'+(colVal && colVal > 0 ? smartNum(colVal) : '')+'</td>';
@@ -7829,15 +7818,27 @@ function sendSemToSheets(){
 
     for(var d=0;d<7;d++){
       var cellId = 'sem_' + wk.id + '_d' + d;
-      // Gamma2-V6: SIEMPRE enviar reloj + hrs calculadas + qty si no es Hora
-      var hrsEl = gEl(cellId+'_hrs');
-      var hrs = parseFloat(hrsEl ? hrsEl.textContent : '0') || 0;
+      var ini = gVal(cellId+'_ini');
+      var fin = gVal(cellId+'_fin');
+      var lIni = gVal(cellId+'_li');
+      var lFin = gVal(cellId+'_lf');
+      // V12-SEMFIX: recalcular hrs directamente desde inputs (no depender de _hrs DOM que puede estar desactualizado)
+      var hrs = 0;
+      var _e = t2m(ini), _s = t2m(fin);
+      if(_e !== null && _s !== null){
+        if(_s <= _e) _s += 1440;
+        var _mins = _s - _e;
+        var _li = t2m(lIni), _lf = t2m(lFin);
+        if(_li !== null && _lf !== null){ if(_lf <= _li) _lf += 1440; _mins -= (_lf - _li); }
+        if(_mins < 0) _mins = 0;
+        hrs = Math.round(_mins / 15) * 15 / 60; // redondear a cuartos de hora
+      }
       var dayObj = {
         hrs: hrs,
-        ini: gVal(cellId+'_ini'),
-        fin: gVal(cellId+'_fin'),
-        lIni: gVal(cellId+'_li'),
-        lFin: gVal(cellId+'_lf')
+        ini: ini,
+        fin: fin,
+        lIni: lIni,
+        lFin: lFin
       };
       if(!isHour){
         dayObj.qty = parseFloat(gVal(cellId+'_qty')) || 0;
@@ -7863,7 +7864,7 @@ function sendSemToSheets(){
   // V8: usa submitViaIframe unificado
   submitViaIframe(SHEETS_URL, payload,
     function(){ recordLastSend(); toast('✅ ' + payload.workers.length + ' trabajador(es) semanal enviado a Sheets'); },
-    15000,
+    30000, // V12-SEMFIX: 15s→30s (7 días × N workers necesita más tiempo)
     function(){ addToOfflineQueue(payload); toast('📦 Timeout — semanal guardado en cola offline'); },
     '_gsSemFrame');
 }
