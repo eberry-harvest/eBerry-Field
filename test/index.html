@@ -108,9 +108,32 @@ header{background:var(--g);color:#fff;padding:12px 14px 0;position:sticky;top:0;
 .dpill{background:rgba(255,255,255,.18);border-radius:20px;padding:4px 11px;font-size:13px;font-weight:500}
 .tabs{display:flex;gap:5px;overflow-x:auto;padding-bottom:8px;scrollbar-width:none}
 .tabs::-webkit-scrollbar{display:none}
-.tab{flex-shrink:0;background:rgba(255,255,255,.1);color:rgba(255,255,255,.5);border:none;border-radius:20px;padding:5px 12px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}
+.tab{flex-shrink:0;background:rgba(255,255,255,.1);color:rgba(255,255,255,.85);border:none;border-radius:20px;padding:5px 12px;min-height:44px;display:inline-flex;align-items:center;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}
 .tab.act{background:var(--a);color:var(--dk)}
 .tab.done{background:var(--g2);color:#fff}
+/* V25: Bloques de rancho con tabs embebidas */
+.ranch-card{position:relative;background:#fff;border:2px solid var(--bd);border-radius:14px;margin-bottom:12px;overflow:hidden;transition:border-color .2s,box-shadow .2s}
+.ranch-card.expanded{border-color:var(--g);box-shadow:0 4px 20px rgba(26,43,140,.12)}
+.ranch-card-header{width:100%;display:flex;align-items:center;gap:10px;padding:14px 16px;background:none;border:none;cursor:pointer;font-family:'DM Sans',sans-serif;text-align:left;min-height:56px;-webkit-tap-highlight-color:transparent}
+.ranch-card.expanded .ranch-card-header{background:var(--gp);border-bottom:2px solid var(--g)}
+.ranch-arrow{font-size:13px;color:var(--gr);transition:transform .25s;flex-shrink:0}
+.ranch-card.expanded .ranch-arrow{transform:rotate(90deg);color:var(--g)}
+.ranch-card-name{font-family:'Bebas Neue',sans-serif;font-size:20px;letter-spacing:1.5px;color:var(--dk);flex:1}
+.ranch-card.expanded .ranch-card-name{color:var(--g)}
+.ranch-wcount{font-size:11px;font-weight:700;color:var(--gr);background:#fff;border:1.5px solid var(--bd);border-radius:12px;padding:3px 10px;white-space:nowrap;flex-shrink:0}
+.ranch-card.expanded .ranch-wcount{background:var(--g);border-color:var(--g);color:#fff}
+.ranch-body{display:none}
+.ranch-card.expanded .ranch-body{display:block}
+.ranch-config{padding:12px 14px;border-bottom:1px solid var(--bd)}
+.r4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px}
+@media(max-width:500px){.r4{grid-template-columns:1fr 1fr}}
+/* V31-FIX1: touch-action para que los tabs respondan en móvil */
+.ranch-tabs{display:flex;gap:5px;overflow-x:scroll;padding:10px 13px 6px;scrollbar-width:none;background:var(--lt);border-bottom:1px solid var(--bd);touch-action:pan-x;-webkit-overflow-scrolling:touch}
+.ranch-tabs::-webkit-scrollbar{display:none}
+.ranch-tab{flex-shrink:0;background:#fff;color:var(--gr);border:1.5px solid var(--bd);border-radius:20px;padding:8px 13px;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;min-height:44px;display:flex;align-items:center;touch-action:manipulation;-webkit-tap-highlight-color:rgba(0,0,0,.1);transition:background .15s,color .15s}
+.ranch-tab.act{background:var(--g);color:#fff;border-color:var(--g)}
+.ranch-remove{position:absolute;top:10px;right:10px;width:32px;height:32px;background:#ffeaea;color:var(--r);border:none;border-radius:50%;font-size:13px;font-weight:700;cursor:pointer;display:none;align-items:center;justify-content:center;z-index:5}
+.ranch-card.expanded .ranch-remove{display:flex}
 .pg{display:none;padding:13px}
 .pg.on{display:block}
 .card{background:#fff;border-radius:12px;padding:14px;margin-bottom:11px;border:1px solid var(--bd)}
@@ -480,17 +503,20 @@ html.login-locked{overflow:hidden!important;height:100%!important}
       <button id="logoutBtn" onclick="logoutUser()" style="display:none;background:rgba(204,34,34,.75);border:none;border-radius:20px;padding:4px 10px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">🚪 Salir</button>
     </div>
   </div>
-  <div class="tabs">
-    <button class="tab act" onclick="go(0)">① Parámetros</button>
-    <button class="tab" onclick="go(1)">② Análisis</button>
-    <button class="tab" onclick="go(2)">③ Trabajadores</button>
-    <button class="tab" onclick="go(3)">④ Act. Grupales</button>
-    <button class="tab" onclick="go(4)">⑤ Resumen</button>
-    <button class="tab" onclick="go(5)">⑥ Ausencias</button>
-    <button class="tab" onclick="go(6)">⑦ Invoice</button>
-    <button class="tab" onclick="go(7)">⑧ Semanal</button>
-  </div>
+  <!-- V25: tabs eliminados del header — ahora viven dentro de cada bloque de rancho -->
 </header>
+
+<!-- V25: Modal rancho duplicado -->
+<div class="ov" id="ranchDupOv">
+  <div class="md">
+    <div class="mt">⚠️ Rancho Duplicado</div>
+    <div class="ms">No puedes tener el mismo rancho en el mismo día. Intenta con otro.</div>
+    <div class="mbs">
+      <button class="mca" style="width:100%" onclick="gEl('ranchDupOv').classList.remove('on')">Entendido</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── LOGIN SCREEN ── -->
 <div id="loginScreen">
   <div class="login-logo">eBerry <em>Field</em></div>
@@ -879,14 +905,10 @@ html.login-locked{overflow:hidden!important;height:100%!important}
   </div>
 </div>
 
-<!-- PAGE 0 -->
+<!-- V25: PAGE 0 — PARÁMETROS GLOBALES (sin rancho/finca/horario — eso va dentro de cada bloque rancho) -->
 <div class="pg on" id="p0">
   <div class="card">
-    <div class="ct">📋 Operación</div>
-    <label>Rancho</label>
-    <select id="rancho" data-save onchange="onRanchoChange()">
-      <option value="">— Selecciona un rancho —</option>
-    </select>
+    <div class="ct">📋 Parámetros del Día</div>
     <div class="r2">
       <div><label>Fecha</label><input type="date" id="fecha" data-save onchange="updDate()"></div>
       <div><label># Bus</label><input type="text" id="numBus" data-save placeholder="951"></div>
@@ -899,39 +921,47 @@ html.login-locked{overflow:hidden!important;height:100%!important}
           <option value="">— Selecciona un surquero —</option>
         </select>
         <input type="hidden" id="surquero" data-save value="">
-        <!-- Upsilon2: Admin session panel -->
         <div id="adminSessPanel" style="display:none;margin-top:6px;padding:8px 10px;border-radius:8px;font-size:13px;border:1.5px solid var(--bd);background:#fafafa">
           <div id="adminSessStatus" style="margin-bottom:4px">—</div>
           <button id="adminSessCloseBtn" onclick="adminForceClose()" style="display:none;background:#cc2222;color:#fff;border:none;padding:6px 14px;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer">🔒 Cerrar sesión remota</button>
         </div>
       </div>
     </div>
-    <label>Finca / Labor</label><input type="text" id="finca" data-save placeholder="Ej: Block 5 Norte">
-  </div>
-  <div class="card">
-    <div class="ct">⏰ Horario Base del Grupo</div>
-    <p style="font-size:12px;color:var(--gr);margin-bottom:9px">Cada actividad puede tener su propio horario.</p>
-    <div class="r2">
-      <div><label>Entrada</label><input type="time" id="hEnt" data-save step="1800" onchange="updParam()"></div>
-      <div><label>Salida</label><input type="time" id="hSal" data-save step="1800" onchange="updParam()"></div>
-    </div>
-    <div class="r2">
-      <div><label>Inicio Lonche</label><input type="time" id="lIni" data-save step="1800" onchange="updParam()"></div>
-      <div><label>Fin Lonche</label><input type="time" id="lFin" data-save step="1800" onchange="updParam()"></div>
-    </div>
-    <div id="hpill"></div>
-  </div>
-  <div class="card">
-    <div class="ct">📝 Notas</div>
     <label>Notas del día</label>
     <textarea id="notas" data-save rows="2" placeholder="Observaciones..."></textarea>
-    <div style="margin-top:12px">
-      <button onclick="openNewDay()" style="width:100%;padding:12px;border:2px solid #3a7fd4;border-radius:8px;background:#eef4fd;color:#3a7fd4;font-family:DM Sans,sans-serif;font-size:14px;font-weight:700;cursor:pointer">🌅 Iniciar Nuevo Día</button>
-    </div>
+    <!-- V28-FIX-UI2: botón "Nuevo Día" eliminado de Parámetros — solo existe en Resumen -->
   </div>
+  <!-- Rancho/finca/horario se mantienen como hidden para compatibilidad con data-save -->
+  <input type="hidden" id="rancho" data-save value="">
+  <input type="hidden" id="finca" data-save value="">
+  <input type="hidden" id="hEnt" data-save value="">
+  <input type="hidden" id="hSal" data-save value="">
+  <input type="hidden" id="lIni" data-save value="">
+  <input type="hidden" id="lFin" data-save value="">
   <input type="hidden" id="payH" data-save value="16.23">
   <input type="hidden" id="payMin" data-save value="16.23">
 </div>
+
+<!-- V25: SECCIÓN DE RANCHOS — bloques con tabs embebidas -->
+<div id="ranchesSection" style="padding:0 13px 13px">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+    <span style="font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--g);letter-spacing:1px">🏡 Ranchos del Día</span>
+    <span id="ranchCountLabel" style="font-size:11px;font-weight:700;color:var(--gr);background:var(--gp);border-radius:12px;padding:3px 10px">0 ranchos</span>
+  </div>
+  <!-- Lista de bloques de rancho (generada por JS) -->
+  <div id="ranchBlockList"></div>
+  <!-- Agregar rancho -->
+  <div id="ranchAddBar" style="display:flex;gap:8px;align-items:stretch;margin-top:4px">
+    <select id="ranchAddSel" style="flex:1;padding:11px 12px;border:2px dashed var(--g2);border-radius:10px;font-family:'DM Sans',sans-serif;font-size:15px;color:var(--dk);background:var(--lt);outline:none;min-height:48px">
+      <option value="">— Selecciona un rancho —</option>
+    </select>
+    <button onclick="addRanchBlock()" style="background:var(--g);color:#fff;border:none;border-radius:10px;padding:12px 18px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:700;cursor:pointer;flex-shrink:0;min-height:48px;display:flex;align-items:center;gap:5px"><span style="font-size:18px">+</span> Agregar</button>
+  </div>
+  <div style="text-align:center;margin-top:8px;font-size:11px;color:var(--gr)">Máximo 3 ranchos por día</div>
+</div>
+
+<!-- V25: Contenedor donde se teletransportan las páginas al rancho activo -->
+<div id="pagesSlot" style="display:none">
 
 <!-- PAGE 1 — ANÁLISIS -->
 <div class="pg" id="p1an">
@@ -999,8 +1029,12 @@ html.login-locked{overflow:hidden!important;height:100%!important}
     <button class="btn bg" onclick="save()"><span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#1a7a4a;color:#fff;font-weight:900;font-size:12px;margin-right:6px">1</span>💾 Guardar</button>
     <p style="font-size:11px;color:var(--gr);text-align:center">Guardado localmente en el dispositivo</p>
     <!-- ── PAYROLL FIELD MASTER BUTTON ── -->
-    <button id="sheetsSendBtn" class="btn" style="background:#1a3a5c;color:#fff" onclick="sendToSheets()"><span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#1a7a4a;color:#fff;font-weight:900;font-size:12px;margin-right:6px">2</span>📊 Enviar a Payroll Field Master</button>
-    <button class="btn pdf" onclick="genPDF()"><span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#1a7a4a;color:#fff;font-weight:900;font-size:12px;margin-right:6px">3</span>📄 Generar PDF para Payroll</button>
+    <button id="sheetsSendBtn" class="btn" style="background:#1a3a5c;color:#fff" onclick="sendToSheets()"><span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#1a7a4a;color:#fff;font-weight:900;font-size:12px;margin-right:6px">2</span>📊 Enviar Rancho Actual</button>
+    <!-- V23: Botón enviar TODOS los ranchos (solo admin multi-rancho) -->
+    <button id="sheetsAllBtn" class="btn" style="background:#0f1a3d;color:#fff;display:none" onclick="sendAllRanchosToSheets()">📊 Enviar TODOS los Ranchos</button>
+    <button class="btn pdf" onclick="genPDF()"><span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#1a7a4a;color:#fff;font-weight:900;font-size:12px;margin-right:6px">3</span>📄 PDF Rancho Actual</button>
+    <!-- V23: Botón PDF de TODOS los ranchos (solo admin multi-rancho) -->
+    <button id="pdfAllBtn" class="btn pdf" style="display:none" onclick="genPDFAllRanchos()">📄 PDF TODOS los Ranchos</button>
     <button class="btn bw" style="display:none" onclick="sendWA()">📲 Enviar PDF por WhatsApp</button>
     <button class="btn" style="background:#3a7fd4;color:#fff" onclick="openNewDay()"><span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#1a7a4a;color:#fff;font-weight:900;font-size:12px;margin-right:6px">4</span>🌅 Nuevo Día</button>
     <div style="height:1px;background:var(--bd);margin:10px 0"></div>
@@ -1142,6 +1176,9 @@ html.login-locked{overflow:hidden!important;height:100%!important}
     <div class="qrCount" id="qrCount" style="display:none"></div>
   </div>
 </div>
+
+<!-- V25: cierre del pagesSlot (las páginas se teletransportan al rancho activo) -->
+</div><!-- /pagesSlot -->
 
 <!-- STICKY BOTTOM -->
 <div class="btm">
@@ -1488,6 +1525,8 @@ function loginSuccess(user){
   if(surqName){
     var _w=findInArr(ALL_WORKERS,surqName); surqIOE=_w?_w.ioe||'':''; // V12-FIX1
   }
+  // V30-FIX: guardar IOE en currentUser para que populateRanchAddSel lo use
+  currentUser.ioe = surqIOE;
   var crewBase = user.crew ? user.crew.replace(/\s*\d+$/,'').trim() : '';
   populateRanchoDropdown(surqIOE, crewBase, user.isAdmin);
 
@@ -1498,8 +1537,22 @@ function loginSuccess(user){
   // 👤 Mostrar botón registro facial si es admin
   showFaceRegBtn();
 
-  updParam();
   load();
+  renderRanchBar();
+  // V30-FIX: updParam DESPUÉS de renderRanchBar (antes crasheaba porque hpill no existía)
+  updParam();
+  // V28-FIX-UI3+UI4: auto-expandir primer rancho + activar página
+  if(!_ranchos.length && gVal('rancho')){ _initRanchos(); renderRanchBar(); }
+  // V29-FIX3: solo expandir si NO está ya expandido (evita colapsar lo que renderRanchBar ya expandió)
+  if(_ranchos.length){
+    var _rc = gEl('ranchBlock_'+_activeRanchoIdx);
+    if(_rc && !_rc.classList.contains('expanded')){
+      toggleRanchBlock(_activeRanchoIdx);
+    } else if(_rc && _rc.classList.contains('expanded')){
+      // Ya está expandido por renderRanchBar — solo activar la página
+      go(pg > 0 ? pg : 2);
+    }
+  }
 
   // V8: Welcome modal SIEMPRE inmediato — foto es bonus, no bloquea
   if(!user.isAdmin){
@@ -1562,68 +1615,59 @@ function getRanchoList(ioe, isAdmin){
   return ranchos;
 }
 
+// V26-FIX1: reescrita para hidden input (ya no es <select>)
 function populateRanchoDropdown(ioe, defaultRancho, isAdmin){
-  var sel = gEl('rancho');
-  if(!sel) return;
-  // Limpiar opciones anteriores
-  sel.innerHTML = '<option value="">— Selecciona un rancho —</option>';
+  var hiddenRancho = gEl('rancho');
+  if(!hiddenRancho) return;
 
-  var ranchos = getRanchoList(ioe, isAdmin); // V12-FIX4: usa helper compartido
+  var ranchos = getRanchoList(ioe, isAdmin);
 
-  // Agregar opciones al select
-  for(var i=0;i<ranchos.length;i++){
-    var opt = document.createElement('option');
-    opt.value = ranchos[i];
-    opt.textContent = ranchos[i];
-    sel.appendChild(opt);
-  }
-
-  // Pre-seleccionar rancho por defecto (crew base)
+  // Pre-seleccionar rancho por defecto (crew base) en el hidden input
+  var matched = '';
   if(defaultRancho){
-    var found = false;
-    for(var j=0;j<sel.options.length;j++){
-      if(sel.options[j].value.toLowerCase() === defaultRancho.toLowerCase()){
-        sel.selectedIndex = j; found = true; break;
-      }
+    var defLow = defaultRancho.toLowerCase();
+    for(var j=0;j<ranchos.length;j++){
+      if(ranchos[j].toLowerCase() === defLow){ matched = ranchos[j]; break; }
     }
-    // Si no encontró match exacto, buscar partial match
-    if(!found){
-      for(var j2=0;j2<sel.options.length;j2++){
-        if(sel.options[j2].value.toLowerCase().indexOf(defaultRancho.toLowerCase())===0){
-          sel.selectedIndex = j2; break;
-        }
+    if(!matched){
+      for(var j2=0;j2<ranchos.length;j2++){
+        if(ranchos[j2].toLowerCase().indexOf(defLow)===0){ matched = ranchos[j2]; break; }
       }
     }
   }
-  // Disparar filtrado de actividades
-  onRanchoChange();
+  if(matched) hiddenRancho.value = matched;
+
+  // Poblar el selector de "Agregar Rancho"
+  populateRanchAddSel();
+
+  // Filtrar ACTS para el rancho seleccionado
+  _filterActsForRancho(gVal('rancho'));
 }
 
-function onRanchoChange(){
-  var rancho = gVal('rancho');
+// V26: Helper para filtrar ACTS por rancho — reutilizable
+function _filterActsForRancho(rancho){
   if(!rancho) return;
-
-  // Re-filtrar actividades para el rancho seleccionado
-  ACTS = [];
-  GRUPAL_ACTS = [];
+  ACTS = []; GRUPAL_ACTS = [];
   for(var i=0;i<ALL_ACTS.length;i++){
     var farm = (ALL_ACTS[i].farm||'').toLowerCase();
     if(farm === rancho.toLowerCase()){
-      if((ALL_ACTS[i].modo||'Individual').toLowerCase() === 'grupal'){
-        GRUPAL_ACTS.push(ALL_ACTS[i]);
-      } else {
-        ACTS.push(ALL_ACTS[i]);
-      }
+      if((ALL_ACTS[i].modo||'Individual').toLowerCase() === 'grupal') GRUPAL_ACTS.push(ALL_ACTS[i]);
+      else ACTS.push(ALL_ACTS[i]);
     }
   }
   if(!ACTS.length) ACTS = FALLBACK_ACTS.filter(function(a){ return a.modo !== 'Grupal'; });
   if(!GRUPAL_ACTS.length) GRUPAL_ACTS = FALLBACK_GRUPAL_ACTS;
-
-  // V7: Filtrar workers por rancho usando helper centralizado
-  if(currentUser && currentUser.isAdmin && !gVal('surquero')){
+  // V30-FIX: actualizar NAMES para TODOS los usuarios al cambiar rancho (antes solo admin)
+  if(currentUser){
     var ranchoWorkers = getWorkersForRancho();
-    NAMES = ranchoWorkers.map(function(w){ return w.name; });
+    if(ranchoWorkers.length) NAMES = ranchoWorkers.map(function(w){ return w.name; });
   }
+}
+
+function onRanchoChange(){
+  if(currentUser) saveQuiet();
+  var rancho = gVal('rancho');
+  _filterActsForRancho(rancho);
 
   // Gamma2: Sincronizar rancho → Semanal tab en tiempo real
   var semRanchoSel = gEl('semRancho');
@@ -1634,8 +1678,7 @@ function onRanchoChange(){
     semRanchoSel.title = 'Rancho tomado de Parámetros';
     if(typeof onSemRanchoChange === 'function') onSemRanchoChange();
   }
-
-  autoSave();
+  // V20: autoSave removido aquí — ya se guardó ANTES de re-filtrar ACTS (línea 1603)
 }
 
 var _welcomeBlocked = false; // V2: true si el surquero no tiene IOE → logout al cerrar
@@ -2103,12 +2146,356 @@ var pcp = null;              // pending copy pattern
 var pendingUnk = null;       // pending unknown worker confirm
 var _delPending = null;      // pending delete confirm
 
+// V21: Multi-rancho — swap de contexto
+// Cada rancho tiene su propio estado aislado. Las ~205 funciones siguen usando
+// las globales (workers, grpActs, etc.) — el swap las intercambia al cambiar rancho.
+var _ranchos = [];           // [{rancho:'Pennrose', workers:[], wid:0, grpActs:[], ausencias:[], estP:[], hilP:[], cajasP:[], finca:'', hEnt:'', hSal:'', lIni:'', lFin:''}]
+var _activeRanchoIdx = 0;    // índice del rancho activo en _ranchos[]
+var MAX_RANCHOS = 3;         // tope por día
+
+// V21: Guardar el estado actual de las globales en _ranchos[idx]
+// V24-FIX4: guardar TODOS los campos por rancho (antes faltaban notas, cajas, est, hil)
+function _saveRanchoCtx(idx){
+  if(idx < 0 || idx >= _ranchos.length) return;
+  _ranchos[idx].workers = workers;
+  _ranchos[idx].wid = wid;
+  _ranchos[idx].grpActs = grpActs;
+  _ranchos[idx].ausencias = ausencias;
+  _ranchos[idx].estP = estP;
+  _ranchos[idx].hilP = hilP;
+  _ranchos[idx].cajasP = cajasP;
+  _ranchos[idx].rancho = gVal('rancho') || '';
+  _ranchos[idx].finca = gVal('finca') || '';
+  _ranchos[idx].hEnt = gVal('hEnt') || '';
+  _ranchos[idx].hSal = gVal('hSal') || '';
+  _ranchos[idx].lIni = gVal('lIni') || '';
+  _ranchos[idx].lFin = gVal('lFin') || '';
+  _ranchos[idx].notas = gVal('notas') || '';
+  _ranchos[idx].cajasTotal = gVal('cajasTotal') || '';
+  _ranchos[idx].cajasPrecio = gVal('cajasPrecio') || '';
+  _ranchos[idx].cajasIni = gVal('cajasIni') || '';
+  _ranchos[idx].cajasFin = gVal('cajasFin') || '';
+  _ranchos[idx].estAcres = gVal('estAcres') || '';
+  _ranchos[idx].estAncho = gVal('estAncho') || '';
+  _ranchos[idx].estIni = gVal('estIni') || '';
+  _ranchos[idx].estFin = gVal('estFin') || '';
+  _ranchos[idx].hilAcres = gVal('hilAcres') || '';
+  _ranchos[idx].hilAncho = gVal('hilAncho') || '';
+  _ranchos[idx].hilIni = gVal('hilIni') || '';
+  _ranchos[idx].hilFin = gVal('hilFin') || '';
+}
+
+// V24-FIX4: Cargar TODOS los campos por rancho
+function _loadRanchoCtx(idx){
+  if(idx < 0 || idx >= _ranchos.length) return;
+  var r = _ranchos[idx];
+  workers = r.workers || [];
+  wid = r.wid || 0;
+  grpActs = r.grpActs || [];
+  ausencias = r.ausencias || [];
+  estP = r.estP || [];
+  hilP = r.hilP || [];
+  cajasP = r.cajasP || [];
+  // Restaurar campos del form
+  var _f = function(id,v){ var e=gEl(id); if(e) e.value=v||''; };
+  // V31-FIX2: para surqueros normales, el rancho viene del contrato (IOE), no del localStorage
+  // Solo admin puede restaurar rancho desde datos guardados
+  if(!currentUser || currentUser.isAdmin) _f('rancho',r.rancho);
+  _f('finca',r.finca);
+  _f('hEnt',r.hEnt); _f('hSal',r.hSal); _f('lIni',r.lIni); _f('lFin',r.lFin);
+  _f('notas',r.notas);
+  _f('cajasTotal',r.cajasTotal); _f('cajasPrecio',r.cajasPrecio);
+  _f('cajasIni',r.cajasIni); _f('cajasFin',r.cajasFin);
+  _f('estAcres',r.estAcres); _f('estAncho',r.estAncho);
+  _f('estIni',r.estIni); _f('estFin',r.estFin);
+  _f('hilAcres',r.hilAcres); _f('hilAncho',r.hilAncho);
+  _f('hilIni',r.hilIni); _f('hilFin',r.hilFin);
+}
+
+// V21: Cambiar de rancho activo (swap)
+function switchRancho(newIdx){
+  if(newIdx === _activeRanchoIdx) return;
+  if(newIdx < 0 || newIdx >= _ranchos.length) return;
+  // Guardar contexto actual
+  _saveRanchoCtx(_activeRanchoIdx);
+  // Cambiar índice
+  _activeRanchoIdx = newIdx;
+  // Cargar nuevo contexto
+  _loadRanchoCtx(newIdx);
+  // V27-FIXC: usar helper centralizado en vez de duplicar lógica de filtrado
+  _filterActsForRancho(gVal('rancho'));
+  // Sincronizar semRancho
+  var semSel = gEl('semRancho');
+  if(semSel && gVal('rancho')){ semSel.value = gVal('rancho'); }
+  updParam(); updBanner();
+}
+
+// V21: Validar que un rancho no esté duplicado
+function _isRanchoDuplicado(nombre){
+  var slug = (nombre||'').toLowerCase().trim();
+  for(var i=0;i<_ranchos.length;i++){
+    if((_ranchos[i].rancho||'').toLowerCase().trim() === slug) return true;
+  }
+  return false;
+}
+
+// V21: Inicializar el primer rancho al cargar (migración invisible)
+function _initRanchos(){
+  if(_ranchos.length === 0){
+    // V27-FIXB: fallback a crew del surquero si hidden rancho está vacío (migración formato viejo)
+    var _initR = gVal('rancho') || (currentUser && !currentUser.isAdmin ? (currentUser.crew||'').replace(/\s*\d+$/,'').trim() : '');
+    _ranchos.push({
+      rancho: _initR, finca: gVal('finca')||'',
+      hEnt: gVal('hEnt')||'', hSal: gVal('hSal')||'',
+      lIni: gVal('lIni')||'', lFin: gVal('lFin')||'',
+      workers: workers, wid: wid, grpActs: grpActs,
+      ausencias: ausencias, estP: estP, hilP: hilP, cajasP: cajasP
+    });
+    _activeRanchoIdx = 0;
+  }
+}
+
+// ── V25: UI Multi-Rancho — Bloques con tabs embebidas ──────
+
+// Renderizar la lista de bloques de rancho
+function renderRanchBar(){
+  // V26-FIX6: solo inicializar si hay rancho seleccionado (evita bloque "SIN RANCHO")
+  if(!_ranchos.length){
+    var rVal = gVal('rancho');
+    if(rVal) _initRanchos();
+    else return; // Sin rancho aún — mostrar solo el selector de "Agregar"
+  }
+  var list = gEl('ranchBlockList');
+  if(!list) return;
+  list.innerHTML = '';
+  for(var i=0; i<_ranchos.length; i++){
+    var r = _ranchos[i];
+    var name = r.rancho || 'Sin rancho';
+    var count = (r.workers||[]).length;
+    var isActive = (i === _activeRanchoIdx);
+    var card = document.createElement('div');
+    card.className = 'ranch-card' + (isActive ? ' expanded' : '');
+    card.id = 'ranchBlock_'+i;
+    card.dataset.ranchIdx = i;
+    card.innerHTML =
+      '<button class="ranch-card-header" onclick="toggleRanchBlock('+i+')">'
+        +'<span class="ranch-arrow">\u25B6</span>'
+        +'<span class="ranch-card-name">'+esc(name.toUpperCase())+'</span>'
+        +'<span class="ranch-wcount">'+count+' workers</span>'
+      +'</button>'
+      +'<button class="ranch-remove" onclick="event.stopPropagation();removeRanchBlock('+i+')">\u2715</button>'
+      +'<div class="ranch-body">'
+        +'<div class="ranch-config">'
+          +'<div class="r2" style="margin-bottom:8px">'
+            +'<div><label>Finca / Labor</label><input type="text" value="'+esc(r.finca||'')+'" onchange="onRanchConfigChange('+i+',\'finca\',this.value)" placeholder="Ej: Block 5"></div>'
+            +'<div></div>'
+          +'</div>'
+          +'<div class="r4">'
+            +'<div><label>Entrada</label><input type="time" value="'+(r.hEnt||'')+'" step="1800" onchange="onRanchConfigChange('+i+',\'hEnt\',this.value)"></div>'
+            +'<div><label>Salida</label><input type="time" value="'+(r.hSal||'')+'" step="1800" onchange="onRanchConfigChange('+i+',\'hSal\',this.value)"></div>'
+            +'<div><label>L.Ini</label><input type="time" value="'+(r.lIni||'')+'" step="1800" onchange="onRanchConfigChange('+i+',\'lIni\',this.value)"></div>'
+            +'<div><label>L.Fin</label><input type="time" value="'+(r.lFin||'')+'" step="1800" onchange="onRanchConfigChange('+i+',\'lFin\',this.value)"></div>'
+          +'</div>'
+          +'<div id="hpill_'+i+'" style="background:var(--gp);border-radius:8px;padding:9px 12px;font-size:13px;font-weight:600;color:var(--g);margin-top:9px"></div>'
+        +'</div>'
+        +'<div class="ranch-tabs">'
+          +'<button class="ranch-tab'+(pg===0?' act':'')+'" onclick="goToParams('+i+')">\u2699\uFE0F Params</button>'
+          +'<button class="ranch-tab'+(pg===1?' act':'')+'" onclick="goRanchTab('+i+',1)">\uD83D\uDCCA An\u00e1lisis</button>'
+          +'<button class="ranch-tab'+(pg===2?' act':'')+'" onclick="goRanchTab('+i+',2)">\uD83D\uDC65 Trabajadores</button>'
+          +'<button class="ranch-tab'+(pg===3?' act':'')+'" onclick="goRanchTab('+i+',3)">\uD83C\uDF3F Grupales</button>'
+          +'<button class="ranch-tab'+(pg===4?' act':'')+'" onclick="goRanchTab('+i+',4)">\uD83D\uDCCB Resumen</button>'
+          +'<button class="ranch-tab'+(pg===5?' act':'')+'" onclick="goRanchTab('+i+',5)">\uD83D\uDEAB Ausencias</button>'
+          +'<button class="ranch-tab'+(pg===6?' act':'')+'" onclick="goRanchTab('+i+',6)">\uD83E\uDDFE Invoice</button>'
+          +'<button class="ranch-tab'+(pg===7?' act':'')+'" onclick="goRanchTab('+i+',7)">\uD83D\uDCC5 Semanal</button>'
+        +'</div>'
+        +'<div class="ranch-pages-target" id="ranchPages_'+i+'"></div>'
+      +'</div>';
+    list.appendChild(card);
+    // Si es el activo, teletransportar las páginas aquí
+    if(isActive){
+      var slot = gEl('pagesSlot');
+      var target = card.querySelector('.ranch-pages-target');
+      if(slot && target){ target.appendChild(slot); slot.style.display=''; }
+    }
+  }
+  // Actualizar contador
+  var countLabel = gEl('ranchCountLabel');
+  if(countLabel) countLabel.textContent = _ranchos.length+' rancho'+(_ranchos.length!==1?'s':'');
+  // Ocultar botón agregar si ya hay 3
+  var addBar = gEl('ranchAddBar');
+  if(addBar) addBar.style.display = _ranchos.length >= MAX_RANCHOS ? 'none' : 'flex';
+  // Poblar select de ranchos disponibles
+  populateRanchAddSel();
+  // Mostrar/ocultar botones multi-rancho
+  var allSendBtn = gEl('sheetsAllBtn');
+  var allPdfBtn = gEl('pdfAllBtn');
+  var multi = _ranchos.length > 1;
+  if(allSendBtn) allSendBtn.style.display = multi ? 'block' : 'none';
+  if(allPdfBtn) allPdfBtn.style.display = multi ? 'block' : 'none';
+}
+
+// Poblar el select de "Agregar Rancho" excluyendo duplicados
+function populateRanchAddSel(){
+  var sel = gEl('ranchAddSel');
+  if(!sel) return;
+  sel.innerHTML = '<option value="">— Selecciona un rancho —</option>';
+  var ioe = currentUser ? (currentUser.ioe||'') : '';
+  var isAdm = currentUser && currentUser.isAdmin;
+  var ranchoList = getRanchoList(ioe, isAdm);
+  for(var i=0;i<ranchoList.length;i++){
+    if(!_isRanchoDuplicado(ranchoList[i])){
+      var opt = document.createElement('option');
+      opt.value = ranchoList[i];
+      opt.textContent = ranchoList[i];
+      sel.appendChild(opt);
+    }
+  }
+}
+
+// Toggle expandir/colapsar un bloque de rancho
+function toggleRanchBlock(idx){
+  var card = gEl('ranchBlock_'+idx);
+  if(!card) return;
+  var wasExpanded = card.classList.contains('expanded');
+  if(wasExpanded){
+    // Colapsar — devolver páginas al parking
+    card.classList.remove('expanded');
+    var slot = gEl('pagesSlot');
+    if(slot){ document.body.appendChild(slot); slot.style.display='none'; }
+    _saveRanchoCtx(idx);
+    if(currentUser) saveQuiet();
+  } else {
+    // Guardar rancho anterior
+    if(_activeRanchoIdx !== idx){
+      _saveRanchoCtx(_activeRanchoIdx);
+      if(currentUser) saveQuiet();
+    }
+    // Colapsar todos los demás
+    for(var i=0;i<_ranchos.length;i++){
+      var c = gEl('ranchBlock_'+i);
+      if(c && i !== idx) c.classList.remove('expanded');
+    }
+    // Expandir este
+    card.classList.add('expanded');
+    // Swap de contexto
+    switchRancho(idx);
+    // Teletransportar páginas
+    var slot2 = gEl('pagesSlot');
+    var target = gEl('ranchPages_'+idx);
+    if(slot2 && target){ target.appendChild(slot2); slot2.style.display=''; }
+    // Re-render contenido
+    var wlist = gEl('wlist'); if(wlist) wlist.innerHTML='';
+    for(var w=0;w<workers.length;w++) wlist.appendChild(mkCard(workers[w],w));
+    updParts(); updBanner();
+    if(typeof renderGrpActs === 'function') renderGrpActs();
+    if(typeof renderAusencias === 'function') renderAusencias();
+    // V28-FIX-UI4: si pg=0 (Parámetros), ir a Trabajadores por defecto al expandir
+    go(pg > 0 ? pg : 2);
+    card.scrollIntoView({behavior:'smooth',block:'start'});
+  }
+}
+
+// Cambiar tab DENTRO de un bloque de rancho
+function goRanchTab(ranchIdx, tabN){
+  // Si el rancho no es el activo, hacer swap primero
+  if(ranchIdx !== _activeRanchoIdx){
+    toggleRanchBlock(ranchIdx);
+  }
+  // Actualizar tabs visuales del bloque
+  var card = gEl('ranchBlock_'+ranchIdx);
+  if(card){
+    var tabs = card.querySelectorAll('.ranch-tab');
+    // V29-FIX1: i===tabN (antes era (i+1)===tabN que desplazaba 1 puesto)
+    for(var i=0;i<tabs.length;i++) tabs[i].classList.toggle('act', i===tabN);
+  }
+  go(tabN);
+}
+
+// V29-FIX2: ir a Parámetros — colapsa el bloque para que p0 no flote fuera
+function goToParams(ranchIdx){
+  // Guardar contexto del rancho
+  _saveRanchoCtx(ranchIdx);
+  if(currentUser) saveQuiet();
+  // Colapsar el bloque activo
+  var card = gEl('ranchBlock_'+ranchIdx);
+  if(card && card.classList.contains('expanded')){
+    card.classList.remove('expanded');
+    var slot = gEl('pagesSlot');
+    if(slot){ document.body.appendChild(slot); slot.style.display='none'; }
+  }
+  // Mostrar p0 (Parámetros) y scroll arriba
+  go(0);
+  window.scrollTo(0,0);
+}
+
+// Cambio de config dentro del bloque del rancho (finca, horarios)
+// V26-FIX2+FIX8: whitelist de campos + filtrar ACTS al cambiar rancho
+function onRanchConfigChange(idx, field, value){
+  var ALLOWED = {finca:1,hEnt:1,hSal:1,lIni:1,lFin:1,rancho:1};
+  if(!ALLOWED[field]) return;
+  if(idx < 0 || idx >= _ranchos.length) return;
+  _ranchos[idx][field] = value;
+  if(idx === _activeRanchoIdx){
+    var el = gEl(field);
+    if(el) el.value = value;
+    if(field === 'rancho') _filterActsForRancho(value);
+    updParam();
+  }
+  autoSave();
+}
+
+// Agregar un bloque de rancho nuevo
+function addRanchBlock(){
+  if(_ranchos.length >= MAX_RANCHOS){ toast('\u26A0\uFE0F M\u00e1ximo '+MAX_RANCHOS+' ranchos por d\u00eda'); return; }
+  var sel = gEl('ranchAddSel');
+  var nombre = sel ? sel.value : '';
+  if(!nombre){ toast('\u26A0\uFE0F Selecciona un rancho'); return; }
+  if(_isRanchoDuplicado(nombre)){ gEl('ranchDupOv').classList.add('on'); return; }
+  // Guardar contexto actual
+  _saveRanchoCtx(_activeRanchoIdx);
+  if(currentUser) saveQuiet();
+  // Crear rancho vacío
+  var newIdx = _ranchos.length;
+  _ranchos.push({
+    rancho:nombre, finca:'', hEnt:'', hSal:'', lIni:'', lFin:'',
+    workers:[], wid:0, grpActs:[], ausencias:[], estP:[], hilP:[], cajasP:[],
+    notas:'', cajasTotal:'', cajasPrecio:'', cajasIni:'', cajasFin:'',
+    estAcres:'', estAncho:'', estIni:'', estFin:'',
+    hilAcres:'', hilAncho:'', hilIni:'', hilFin:''
+  });
+  // Re-render y expandir el nuevo
+  renderRanchBar();
+  toggleRanchBlock(newIdx);
+  toast('\u2705 Rancho '+nombre+' agregado');
+}
+
+// V26-FIX5: Remover bloque — reindexación correcta
+function removeRanchBlock(idx){
+  if(_ranchos.length <= 1){ toast('\u26A0\uFE0F Debe haber al menos 1 rancho'); return; }
+  var name = _ranchos[idx].rancho || 'Sin nombre';
+  if(!confirm('\u00BFEliminar rancho "'+name+'" y todos sus datos del d\u00eda?')) return;
+  // Devolver páginas al parking antes de destruir bloques
+  var slot = gEl('pagesSlot');
+  if(slot){ document.body.appendChild(slot); slot.style.display='none'; }
+  _ranchos.splice(idx, 1);
+  // Recalcular activeIdx correctamente
+  if(idx < _activeRanchoIdx) _activeRanchoIdx--;
+  else if(idx === _activeRanchoIdx) _activeRanchoIdx = 0;
+  if(_activeRanchoIdx >= _ranchos.length) _activeRanchoIdx = _ranchos.length - 1;
+  switchRancho(_activeRanchoIdx);
+  renderRanchBar();
+  toggleRanchBlock(_activeRanchoIdx);
+  autoSave();
+}
+
 // Iota: reset limpio de todo el estado (útil para Nuevo Día)
 function resetState(){
   pg=0; workers=[]; wid=0; grpActs=[];
   estP=[]; hilP=[]; cajasP=[];
   ausencias=[];
   ptm=null; pcp=null; pendingUnk=null; _delPending=null;
+  // V21: resetear multi-rancho
+  _ranchos=[]; _activeRanchoIdx=0;
 }
 
 // Iota: ver estado completo en consola (debug en tablet)
@@ -2169,6 +2556,15 @@ function resolveAct(a, assign){
 function isHourAct(act){ return act && (!!act.hr || (act.tipo||'').toLowerCase()==='hora'); }
 
 function t2m(t){ if(!t||t.indexOf(':')<0)return null; var p=t.split(':'); return parseInt(p[0],10)*60+parseInt(p[1],10); }
+
+// V18: Convierte "14:30" → "2:30 PM" para display. Internamente todo sigue en 24h.
+function to12h(t){
+  if(!t||t.indexOf(':')<0) return t||'';
+  var p=t.split(':'); var h=parseInt(p[0],10); var m=parseInt(p[1],10);
+  if(isNaN(h)||isNaN(m)) return t;
+  var ampm=h>=12?'PM':'AM'; h=h%12; if(h===0)h=12;
+  return h+':'+(m<10?'0':'')+m+' '+ampm;
+}
 
 // V15: Parser flexible de hora — acepta "20:00", "8:00 PM", "8pm", "8:00pm", "8 pm", "0800"
 function parseFlexTime(raw){
@@ -2232,12 +2628,18 @@ function updParam(){
   updDate();
   var h=nh(gVal('hEnt'),gVal('hSal'));
   var li=t2m(gVal('lIni')),lf=t2m(gVal('lFin')),lm=(li!==null&&lf!==null)?Math.max(0,lf-li):0;
-  gEl('hpill').innerHTML=h?'<div class="hpill">⏱️ Jornada base: <b>'+h+' h</b> <span style="font-size:12px;font-weight:400;color:var(--gr)">(lonche: '+lm+' min)</span></div>':'';
+  // V30-FIX: hpill ahora es por rancho (hpill_0, hpill_1, etc.)
+  var hpillEl=gEl('hpill_'+_activeRanchoIdx);
+  if(hpillEl) hpillEl.innerHTML=h?'<div class="hpill">⏱️ Jornada base: <b>'+h+' h</b> <span style="font-size:12px;font-weight:400;color:var(--gr)">(lonche: '+lm+' min)</span></div>':'';
   updBanner();
 }
 function updBanner(){
   var h=nh(gVal('hEnt'),gVal('hSal'));
-  gEl('banner').innerHTML='<div class="bi"><span class="bv">'+gVal('hEnt')+'</span><span class="bk">Entrada</span></div><div class="bi"><span class="bv">'+gVal('hSal')+'</span><span class="bk">Salida</span></div><div class="bi"><span class="bv">'+gVal('lIni')+'</span><span class="bk">Lonche ini</span></div><div class="bi"><span class="bv">'+gVal('lFin')+'</span><span class="bk">Lonche fin</span></div><div class="bi"><span class="bv" style="color:var(--g2)">'+(h?h+'h':'—')+'</span><span class="bk">Jornada</span></div>';
+  // V30-FIX: surquero visible en banner + guard contra banner null
+  var surq=gVal('surquero')||(currentUser&&!currentUser.isAdmin?currentUser.name:'')||(currentUser&&currentUser.isAdmin?'ADM':'');
+  var banEl=gEl('banner');
+  if(!banEl) return;
+  banEl.innerHTML='<div class="bi"><span class="bv" style="font-size:13px;color:#fff">'+esc(surq)+'</span><span class="bk">Surquero</span></div><div class="bi"><span class="bv">'+to12h(gVal('hEnt'))+'</span><span class="bk">Entrada</span></div><div class="bi"><span class="bv">'+to12h(gVal('hSal'))+'</span><span class="bk">Salida</span></div><div class="bi"><span class="bv">'+to12h(gVal('lIni'))+'</span><span class="bk">Lonche ini</span></div><div class="bi"><span class="bv">'+to12h(gVal('lFin'))+'</span><span class="bk">Lonche fin</span></div><div class="bi"><span class="bv" style="color:var(--g2)">'+(h?h+'h':'—')+'</span><span class="bk">Jornada</span></div>';
 }
 
 // V11: highlight seguro — primero marca en texto plano, luego escapa solo fuera de <mark>
@@ -2829,7 +3231,8 @@ function onIndField(inp){
 }
 
 // V7: sanitizar qty como número antes de guardar
-function onQty(wi,ai,v){ var w=getW(wi); if(!w||!w.acts[ai])return; var n=parseFloat(v); w.acts[ai].qty=isFinite(n)?v:0; recalc(wi,ai); autoSave(); }
+// V19-FIX2: guardar número, no string
+function onQty(wi,ai,v){ var w=getW(wi); if(!w||!w.acts[ai])return; var n=parseFloat(v); w.acts[ai].qty=isFinite(n)?n:0; recalc(wi,ai); autoSave(); }
 function onIni(wi,ai,v){ var w=getW(wi); if(!w||!w.acts[ai])return; w.acts[ai].ini=v; w.acts[ai].showTime=true; recalc(wi,ai); autoSave(); }
 function onFin(wi,ai,v){ var w=getW(wi); if(!w||!w.acts[ai])return; w.acts[ai].fin=v; w.acts[ai].showTime=true; recalc(wi,ai); autoSave(); }
 
@@ -2873,11 +3276,11 @@ function updBadge(wi,ai){
       var p=[];
       for(var s=0;s<a_.shifts.length;s++){
         var sh=a_.shifts[s];
-        if(sh.ini&&sh.fin) p.push('T'+(s+1)+': '+sh.ini+'→'+sh.fin+' ('+nh(sh.ini,sh.fin)+'h)');
+        if(sh.ini&&sh.fin) p.push('T'+(s+1)+': '+to12h(sh.ini)+'→'+to12h(sh.fin)+' ('+nh(sh.ini,sh.fin)+'h)');
       }
       return p.join(' + ');
     }
-    return (a_.ini&&a_.fin?a_.ini+' → '+a_.fin:'');
+    return (a_.ini&&a_.fin?to12h(a_.ini)+' → '+to12h(a_.fin):'');
   }
   var pay=a.pay||0;
   if(act.hr){
@@ -3020,7 +3423,7 @@ function showTm(wi,ai,ini,fin){
   ptm={wi:wi,ai:ai,ini:ini,fin:fin};
   var w=getW(wi); if(!w)return;
   gEl('tmS').textContent='Para "'+ACTS[w.acts[ai].ai].es+'" ya hay un horario. ¿Usarlo para '+w.name+'?';
-  gEl('tmV').textContent=ini+' → '+fin+'  ('+nh(ini,fin)+' h)';
+  gEl('tmV').textContent=to12h(ini)+' → '+to12h(fin)+'  ('+nh(ini,fin)+' h)';
   gEl('tmOv').classList.add('on');
 }
 function okTime(){
@@ -3070,11 +3473,12 @@ function rndCpList(){
   for(var i=0;i<pcp.pat.length;i++){
     var a=pcp.pat[i]; var act=ACTS[a.ai];
     if(!act) continue;
-    var ts=a.ini&&a.fin?' | '+a.ini+'→'+a.fin:'';
+    var ts=a.ini&&a.fin?' | '+to12h(a.ini)+'→'+to12h(a.fin):'';
     var note=act.hr?'Horas'+ts:act.tipo+ts+' — captura cantidad después';
-    var fincaTag = a.finca ? ' 📍<b>'+a.finca+'</b>' : '';
+    // V19-FIX7: escape en finca y act.es
+    var fincaTag = a.finca ? ' 📍<b>'+esc(a.finca)+'</b>' : '';
     var on=pcp.sel[i];
-    h+='<div class="ci'+(on?' on':'')+'" onclick="togCp('+i+')"><div class="cbox">✓</div><div><div class="cn">'+act.es+fincaTag+'</div><div class="cd">$'+act.p+'/'+act.tipo+' · '+note+'</div></div></div>';
+    h+='<div class="ci'+(on?' on':'')+'" onclick="togCp('+i+')"><div class="cbox">✓</div><div><div class="cn">'+esc(act.es)+fincaTag+'</div><div class="cd">$'+act.p+'/'+act.tipo+' · '+note+'</div></div></div>';
   }
   gEl('cpL').innerHTML=h;
 }
@@ -3134,8 +3538,16 @@ function buildSum(){
     w.totalPay=t+grpPay(w.id); grand+=w.totalPay;
   }
   gEl('sg').innerHTML='<div class="sb2"><div class="sv">'+workers.length+'</div><div class="sl">Trabajadores</div></div><div class="sb2"><div class="sv am">$'+grand.toFixed(0)+'</div><div class="sl">💰 Total del día</div></div><div class="sb2"><div class="sv">'+function(){ var n=0; for(var i=0;i<workers.length;i++) n+=workers[i].acts.length; return n; }()+'</div><div class="sl">Actividades</div></div>';
-  // V9: escapar datos de formulario
-  gEl('si').innerHTML='<div class="ir"><span class="ik">Fecha</span><span class="iv">'+esc(gVal('fecha'))+'</span></div><div class="ir"><span class="ik">Rancho</span><span class="iv">'+esc(gVal('rancho'))+'</span></div><div class="ir"><span class="ik">Surquero</span><span class="iv">'+esc(gVal('surquero'))+'</span></div><div class="ir"><span class="ik">Finca</span><span class="iv">'+esc(gVal('finca'))+'</span></div><div class="ir"><span class="ik">Horario</span><span class="iv">'+esc(gVal('hEnt'))+' → '+esc(gVal('hSal'))+'</span></div><div class="ir"><span class="ik">Lonche</span><span class="iv">'+esc(gVal('lIni'))+' – '+esc(gVal('lFin'))+'</span></div>';
+  // V30-FIX: fallback a _ranchos si hidden inputs vacíos + surquero de currentUser
+  var _r = (_ranchos && _ranchos[_activeRanchoIdx]) || {};
+  var _rancho = gVal('rancho') || _r.rancho || '—';
+  var _finca  = gVal('finca')  || _r.finca  || '—';
+  var _hEnt   = gVal('hEnt')   || _r.hEnt   || '';
+  var _hSal   = gVal('hSal')   || _r.hSal   || '';
+  var _lIni   = gVal('lIni')   || _r.lIni   || '';
+  var _lFin   = gVal('lFin')   || _r.lFin   || '';
+  var _surq   = gVal('surquero') || (currentUser && !currentUser.isAdmin ? currentUser.name : '') || '—';
+  gEl('si').innerHTML='<div class="ir"><span class="ik">Fecha</span><span class="iv">'+esc(gVal('fecha'))+'</span></div><div class="ir"><span class="ik">Rancho</span><span class="iv">'+esc(_rancho)+'</span></div><div class="ir"><span class="ik">Surquero</span><span class="iv">'+esc(_surq)+'</span></div><div class="ir"><span class="ik">Finca</span><span class="iv">'+esc(_finca)+'</span></div><div class="ir"><span class="ik">Horario</span><span class="iv">'+esc(to12h(_hEnt))+' → '+esc(to12h(_hSal))+'</span></div><div class="ir"><span class="ik">Lonche</span><span class="iv">'+esc(to12h(_lIni))+' – '+esc(to12h(_lFin))+'</span></div>';
   var h='';
   for(var i=0;i<workers.length;i++){
     var w=workers[i]; var dets=[];
@@ -3143,7 +3555,7 @@ function buildSum(){
       var a=w.acts[j];
       var act=resolveAct(a, true); // V8
       if(!act){ dets.push((a.esName||'Act.#'+a.ai)+'($'+(a.pay||0).toFixed(2)+')'); continue; }
-      var u=act.hr?(a.ini&&a.fin?a.ini+'→'+a.fin+'('+nh(a.ini,a.fin)+'h)':'sin horario'):act.tipo==='$'?'$'+a.qty:a.qty+' '+act.tipo;
+      var u=act.hr?(a.ini&&a.fin?to12h(a.ini)+'→'+to12h(a.fin)+'('+nh(a.ini,a.fin)+'h)':'sin horario'):act.tipo==='$'?'$'+a.qty:a.qty+' '+act.tipo;
       dets.push(esc(act.es.split(' ').slice(0,2).join(' '))+'('+u+')'); // V9
     }
     var exD=grpPayDetail(w.id); var ex=exD.pay;
@@ -3312,14 +3724,14 @@ function buildAnalisis(){
 
 function mkReport(){
   var grand=0;
-  var lines=['🌿 *HOJA DE CAMPO — '+gVal('rancho')+'*','📅 '+gVal('fecha')+' | Bus: '+gVal('numBus'),'👷 Surquero: '+gVal('surquero'),'🌾 Finca: '+gVal('finca'),'⏰ '+gVal('hEnt')+'→'+gVal('hSal')+' | Lonche: '+gVal('lIni')+'–'+gVal('lFin'),'','*TRABAJADORES ('+workers.length+'):*'];
+  var lines=['🌿 *HOJA DE CAMPO — '+gVal('rancho')+'*','📅 '+gVal('fecha')+' | Bus: '+gVal('numBus'),'👷 Surquero: '+gVal('surquero'),'🌾 Finca: '+gVal('finca'),'⏰ '+to12h(gVal('hEnt'))+'→'+to12h(gVal('hSal'))+' | Lonche: '+to12h(gVal('lIni'))+'–'+to12h(gVal('lFin')),'','*TRABAJADORES ('+workers.length+'):*'];
   for(var i=0;i<workers.length;i++){
     var w=workers[i],tot=0,acts=[];
     for(var j=0;j<w.acts.length;j++){
       var a=w.acts[j],pay=a.pay||0; tot+=pay;
       var act=resolveAct(a, true); // V8
       if(!act){ acts.push((a.esName||'Act.#'+a.ai)+'(=$'+pay.toFixed(2)+')'); continue; }
-      var u=act.hr?(a.ini&&a.fin?a.ini+'→'+a.fin+'('+nh(a.ini,a.fin)+'h)':'sin horario')+'=$'+pay.toFixed(2):act.tipo==='$'?'$'+a.qty:a.qty+' '+act.tipo+'=$'+pay.toFixed(2);
+      var u=act.hr?(a.ini&&a.fin?to12h(a.ini)+'→'+to12h(a.fin)+'('+nh(a.ini,a.fin)+'h)':'sin horario')+'=$'+pay.toFixed(2):act.tipo==='$'?'$'+a.qty:a.qty+' '+act.tipo+'=$'+pay.toFixed(2);
       acts.push(act.es+'('+u+')');
     }
     var ex=grpPay(w.id); tot+=ex; grand+=tot;
@@ -3385,8 +3797,19 @@ function _serializeState(){
     var ws={id:workers[si].id,name:workers[si].name,empNum:workers[si].empNum||'',contractRate:workers[si].contractRate||0,open:workers[si].open,totalPay:workers[si].totalPay,acts:[]};
     for(var sj=0;sj<workers[si].acts.length;sj++){
       var sa=workers[si].acts[sj];
-      var sact=sa.ai>=0&&sa.ai<ACTS.length?ACTS[sa.ai]:null;
-      var actSv={ai:sa.ai,esName:sact?sact.es:'',tipo:sact?sact.tipo:'',qty:sa.qty,ini:sa.ini,fin:sa.fin,showTime:sa.showTime,pay:sa.pay,shifts:sa.shifts,finca:sa.finca||''};
+      // V20-FIX1: buscar en ALL_ACTS por esName+tipo (estable entre ranchos)
+      // ACTS filtrado puede tener índices diferentes al cambiar rancho → corrupción
+      var sact=null;
+      if(sa.esName){
+        for(var _si2=0;_si2<ALL_ACTS.length;_si2++){
+          if(ALL_ACTS[_si2].es===sa.esName && (!sa.tipo || ALL_ACTS[_si2].tipo===sa.tipo)){ sact=ALL_ACTS[_si2]; break; }
+        }
+        if(!sact){ for(var _si3=0;_si3<ALL_ACTS.length;_si3++){
+          if(ALL_ACTS[_si3].es===sa.esName){ sact=ALL_ACTS[_si3]; break; }
+        }}
+      }
+      if(!sact && sa.ai>=0 && sa.ai<ACTS.length) sact=ACTS[sa.ai];
+      var actSv={ai:sa.ai,esName:sact?sact.es:(sa.esName||''),tipo:sact?sact.tipo:(sa.tipo||''),qty:sa.qty,ini:sa.ini,fin:sa.fin,showTime:sa.showTime,pay:sa.pay,shifts:sa.shifts,finca:sa.finca||''};
       if(sa.surcos&&sa.surcos.length) actSv.surcos=sa.surcos;
       if(sa.anchoCama) actSv.anchoCama=sa.anchoCama;
       if(sa.indPies) actSv.indPies=sa.indPies;
@@ -3399,14 +3822,16 @@ function _serializeState(){
   return {vals:vals, wSave:wSave};
 }
 // V13-FIX3: try/catch separados — si historial falla por storage lleno, estado principal sí se guarda
+// V21: guarda _ranchos[] completo para multi-rancho
 function _persistState(vals, wSave){
+  // Sincronizar el contexto activo antes de guardar
+  _saveRanchoCtx(_activeRanchoIdx);
   try {
-    localStorage.setItem(getUserKey(),JSON.stringify({v:vals,w:wSave,id:wid,ep:estP,hp:hilP,cp:cajasP,ga:grpActs,aus:ausencias}));
+    localStorage.setItem(getUserKey(),JSON.stringify({v:vals,w:wSave,id:wid,ep:estP,hp:hilP,cp:cajasP,ga:grpActs,aus:ausencias,_ranchos:_ranchos,_activeRanchoIdx:_activeRanchoIdx}));
   } catch(e){ console.warn('[eBerry] Error guardando estado:', e.message); return; }
   try {
     var dateKey=getUserHistKey(vals.fecha||new Date().toISOString().split('T')[0]);
-    // V17-FIX7: ausencias incluidas en historial (antes faltaban)
-    localStorage.setItem(dateKey,JSON.stringify({v:vals,w:wSave,id:wid,ep:estP,hp:hilP,cp:cajasP,ga:grpActs,aus:ausencias,saved:new Date().toISOString()}));
+    localStorage.setItem(dateKey,JSON.stringify({v:vals,w:wSave,id:wid,ep:estP,hp:hilP,cp:cajasP,ga:grpActs,aus:ausencias,_ranchos:_ranchos,saved:new Date().toISOString()}));
   } catch(e){ console.warn('[eBerry] localStorage lleno — historial no guardado:', e.message); }
 }
 
@@ -3484,6 +3909,20 @@ function load(){
     if(d.w)workers=d.w; if(d.id)wid=d.id;
     if(d.ep)estP=d.ep; if(d.hp)hilP=d.hp; if(d.cp)cajasP=d.cp; if(d.ga)grpActs=d.ga;
     if(d.aus)ausencias=d.aus;
+    // V21: restaurar multi-rancho si existe, o migrar formato viejo
+    if(d._ranchos && d._ranchos.length){
+      _ranchos = d._ranchos;
+      _activeRanchoIdx = d._activeRanchoIdx || 0;
+      _loadRanchoCtx(_activeRanchoIdx);
+      // V31-FIX3: para surqueros, sincronizar _ranchos[0].rancho con el rancho del contrato
+      if(currentUser && !currentUser.isAdmin && _ranchos.length){
+        var _correctRancho = gVal('rancho');
+        if(_correctRancho) _ranchos[_activeRanchoIdx].rancho = _correctRancho;
+      }
+    } else {
+      // Migración: formato viejo sin _ranchos → crear ranchos[0] con datos actuales
+      _initRanchos();
+    }
     // Tau: recuperar empNum y contractRate de ALL_WORKERS si faltan (datos legacy)
     for(var ei=0;ei<workers.length;ei++){
       if(!workers[ei].empNum || !workers[ei].contractRate){
@@ -3542,7 +3981,8 @@ function applyAutoFill(){
     if(adminSel) adminSel.style.display='none'; // ✅ siempre oculto para surqueros
     // Rancho — siempre del crew
     var crewBase = currentUser.crew.replace(/\s*\d+$/,'').trim();
-    var rEl = gEl('rancho'); if(rEl) rEl.value = crewBase;
+    // V28-FIX-UI3: no sobreescribir rancho si populateRanchoDropdown ya lo seteó
+    var rEl = gEl('rancho'); if(rEl && !rEl.value) rEl.value = crewBase;
   } else {
     // Admin — ocultar display, mostrar select con surqueros
     // ✅ Lambda fix: preservar surquero seleccionado al reconstruir dropdown
@@ -3637,13 +4077,23 @@ function go(n){
   if(n===6) refreshInvoiceAuto();
   if(n===7) initSemTab();
   var pgs=document.querySelectorAll('.pg'); for(var i=0;i<pgs.length;i++) pgs[i].classList.toggle('on',i===n);
-  var tabs=document.querySelectorAll('.tab'); for(var i=0;i<tabs.length;i++){ tabs[i].classList.remove('act','done'); if(i===n)tabs[i].classList.add('act'); else if(i<n)tabs[i].classList.add('done'); }
-  gEl('addbar').classList.toggle('on',n===2);
+  // V26-FIX3: actualizar ranch-tabs del bloque activo (ya no hay .tab en header)
+  var activeBlock=gEl('ranchBlock_'+_activeRanchoIdx);
+  if(activeBlock){
+    var rtabs=activeBlock.querySelectorAll('.ranch-tab');
+    // V28-FIX-UI1: tab "Params" es índice 0 (n===0), las demás son i===n (offset por el tab extra)
+    for(var i=0;i<rtabs.length;i++) rtabs[i].classList.toggle('act', i===n);
+  }
+  gEl('addbar').classList.toggle('on',n===2 && activeBlock && activeBlock.classList.contains('expanded'));
   var ausBar=gEl('ausBar'); if(ausBar) ausBar.style.display=(n===5?'block':'none');
-  pg=n; updNav(); window.scrollTo(0,0);
+  pg=n; updNav();
+  // V26-FIX7: scroll al bloque activo, no al tope
+  if(activeBlock) activeBlock.scrollIntoView({behavior:'smooth',block:'start'});
+  else window.scrollTo(0,0);
 }
 function next(){ if(pg<7)go(pg+1); }
-function prev(){ if(pg>0)go(pg-1); }
+// V27-FIXA: prev no debe llegar a go(0) si hay bloque expandido — pg=1 es el mínimo dentro de un rancho
+function prev(){ if(pg>1)go(pg-1); else if(pg===1 && !_ranchos.length) go(0); }
 function updNav(){
   gEl('np').style.display=pg===0?'none':'';
   var nn=gEl('nn');
@@ -3696,28 +4146,7 @@ function saveQuiet(){
   }
 }
 
-window.addEventListener('DOMContentLoaded',function(){
-  // Save pill
-  var htop=document.querySelector('.htop');
-  if(htop){
-    var pill=document.createElement('div');
-    pill.id='savepill';
-    pill.style.cssText='background:rgba(255,255,255,.12);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;color:rgba(255,255,255,.45);margin-left:5px;white-space:nowrap';
-    pill.textContent='● Auto';
-    var dpill=htop.querySelector('.dpill');
-    if(dpill&&dpill.parentNode){ dpill.parentNode.insertBefore(pill,dpill.nextSibling); }
-    else { htop.appendChild(pill); }
-  }
-  var ids=['rancho','fecha','numBus','numCam','surquero','finca','notas','hEnt','hSal','lIni','lFin'];
-  for(var i=0;i<ids.length;i++){
-    (function(id){
-      var el=gEl(id); if(!el)return;
-      el.addEventListener('change',autoSave);
-      el.addEventListener('input',autoSave);
-    })(ids[i]);
-  }
-  window.addEventListener('visibilitychange',function(){ if(document.visibilityState==='hidden'&&currentUser) saveQuiet(); });
-});
+// V30: bloque DOMContentLoaded duplicado eliminado — el principal está en línea ~6457
 
 function showHistory(){
   var keys=[], i;
@@ -3899,6 +4328,62 @@ function genPDF(){
   // Theta: usa collectSaveFields para recoger todos los campos automáticamente
   var vals=collectSaveFields();
   buildPDFWindow(vals, workers, estP, hilP, cajasP, ausencias, grpActs);
+}
+
+// V24-FIX2+FIX6: Generar PDFs de TODOS los ranchos — secuencial con delay para popup blocker
+function genPDFAllRanchos(){
+  if(!currentUser || !currentUser.isAdmin || _ranchos.length <= 1){
+    genPDF(); return;
+  }
+  _saveRanchoCtx(_activeRanchoIdx);
+  var originalIdx = _activeRanchoIdx;
+  var total = _ranchos.length;
+  var ri = 0;
+  function _genNext(){
+    if(ri >= total){
+      // Restaurar contexto original — directo, sin guard de switchRancho
+      _activeRanchoIdx = originalIdx;
+      _loadRanchoCtx(originalIdx);
+      // Re-filtrar ACTS para el rancho original
+      var rOrig = _ranchos[originalIdx].rancho || '';
+      if(rOrig){
+        ACTS=[]; GRUPAL_ACTS=[];
+        for(var ai2=0;ai2<ALL_ACTS.length;ai2++){
+          var f2=(ALL_ACTS[ai2].farm||'').toLowerCase();
+          if(f2===rOrig.toLowerCase()){
+            if((ALL_ACTS[ai2].modo||'Individual').toLowerCase()==='grupal') GRUPAL_ACTS.push(ALL_ACTS[ai2]);
+            else ACTS.push(ALL_ACTS[ai2]);
+          }
+        }
+        if(!ACTS.length) ACTS=FALLBACK_ACTS.filter(function(a){return a.modo!=='Grupal';});
+        if(!GRUPAL_ACTS.length) GRUPAL_ACTS=FALLBACK_GRUPAL_ACTS;
+      }
+      updParam(); updBanner(); renderRanchBar();
+      toast('✅ '+total+' PDFs generados');
+      return;
+    }
+    _activeRanchoIdx = ri;
+    _loadRanchoCtx(ri);
+    var rn = _ranchos[ri].rancho || '';
+    if(rn){
+      ACTS=[]; GRUPAL_ACTS=[];
+      for(var ai=0;ai<ALL_ACTS.length;ai++){
+        var farm=(ALL_ACTS[ai].farm||'').toLowerCase();
+        if(farm===rn.toLowerCase()){
+          if((ALL_ACTS[ai].modo||'Individual').toLowerCase()==='grupal') GRUPAL_ACTS.push(ALL_ACTS[ai]);
+          else ACTS.push(ALL_ACTS[ai]);
+        }
+      }
+      if(!ACTS.length) ACTS=FALLBACK_ACTS.filter(function(a){return a.modo!=='Grupal';});
+      if(!GRUPAL_ACTS.length) GRUPAL_ACTS=FALLBACK_GRUPAL_ACTS;
+    }
+    var vals=collectSaveFields();
+    buildPDFWindow(vals, workers, estP, hilP, cajasP, ausencias, grpActs);
+    ri++;
+    // Delay 500ms entre cada PDF para evitar popup blocker en Chrome móvil
+    setTimeout(_genNext, 500);
+  }
+  _genNext();
 }
 
 function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
@@ -4149,12 +4634,13 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
           if(!entLbl){
             if(act2.shifts&&act2.shifts.length>1){
               var eL=[],sL=[];
-              for(var si=0;si<act2.shifts.length;si++){ if(act2.shifts[si].ini)eL.push(act2.shifts[si].ini); if(act2.shifts[si].fin)sL.push(act2.shifts[si].fin); }
+              // V18: horarios en 12h AM/PM en PDF
+              for(var si=0;si<act2.shifts.length;si++){ if(act2.shifts[si].ini)eL.push(to12h(act2.shifts[si].ini)); if(act2.shifts[si].fin)sL.push(to12h(act2.shifts[si].fin)); }
               if(eL.length){ entLbl=eL.join('<br>'); salLbl=sL.join('<br>'); }
             } else if(act2.shifts&&act2.shifts.length===1&&(act2.shifts[0].ini||act2.shifts[0].fin)){
-              entLbl=act2.shifts[0].ini||''; salLbl=act2.shifts[0].fin||'';
+              entLbl=to12h(act2.shifts[0].ini||''); salLbl=to12h(act2.shifts[0].fin||'');
             } else if(act2.ini||act2.fin){
-              entLbl=act2.ini||''; salLbl=act2.fin||'';
+              entLbl=to12h(act2.ini||''); salLbl=to12h(act2.fin||'');
             }
           }
           if(unitPr&&entLbl&&laborLbl) break;
@@ -4191,8 +4677,8 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     trTotal+='<td style="text-align:center;font-weight:700;line-height:1.5;border:1px solid #ccc;border-top:3px solid #1a2b8c;color:#1a2b8c">'+totalCell_+'</td>';
     trPrice+='<td style="text-align:center;color:#c0392b;font-weight:700;border:1px solid #ddd">$'+gc_.precio.toFixed(2)+'</td>';
     trLabor+='<td style="text-align:center;border:1px solid #ddd;color:#3a7fd4;font-size:9px">'+gc_.finca+'</td>';
-    trEntry+='<td style="text-align:center;border:1px solid #ddd;color:#111">'+gc_.ini+'</td>';
-    trExit +='<td style="text-align:center;border:1px solid #ddd;color:#111">'+gc_.fin+'</td>';
+    trEntry+='<td style="text-align:center;border:1px solid #ddd;color:#111">'+to12h(gc_.ini)+'</td>';
+    trExit +='<td style="text-align:center;border:1px solid #ddd;color:#111">'+to12h(gc_.fin)+'</td>';
   }
   trTotal+='</tr>'; trPrice+='</tr>'; trLabor+='</tr>'; trEntry+='</tr>'; trExit+='</tr>';
   var metaRows=trTotal+trPrice+trLabor+trEntry+trExit;
@@ -4644,6 +5130,9 @@ function getWeekNumber(dateStr){
 function submitViaIframe(url, payload, onDone, timeoutMs, onTimeout, frameId){
   frameId = frameId || '_postFrame';
   timeoutMs = timeoutMs || 15000;
+  // V19-FIX1: _done/_to declarados FUERA del try para que el catch siempre los vea
+  var _done = false;
+  var _to = null;
   try {
     var oldFr = document.getElementById(frameId);
     if(oldFr) oldFr.parentNode.removeChild(oldFr);
@@ -4666,8 +5155,7 @@ function submitViaIframe(url, payload, onDone, timeoutMs, onTimeout, frameId){
     fm.appendChild(inp);
     document.body.appendChild(fm);
 
-    var _done = false;
-    var _to = setTimeout(function(){
+    _to = setTimeout(function(){
       if(_done) return; _done = true;
       if(typeof onTimeout === 'function') onTimeout(payload);
     }, timeoutMs);
@@ -4684,9 +5172,79 @@ function submitViaIframe(url, payload, onDone, timeoutMs, onTimeout, frameId){
   }
 }
 
-function sendToSheets() {
+// V24-FIX3: Enviar TODOS los ranchos secuencialmente con frameId único por rancho
+function sendAllRanchosToSheets(){
+  if(!currentUser || !currentUser.isAdmin || _ranchos.length <= 1){
+    sendToSheets(); return;
+  }
+  _saveRanchoCtx(_activeRanchoIdx);
+  var originalIdx = _activeRanchoIdx;
+  // Construir cola de ranchos con datos
+  var queue = [];
+  for(var ri=0; ri<_ranchos.length; ri++){
+    if(_ranchos[ri].workers && _ranchos[ri].workers.length) queue.push(ri);
+  }
+  if(!queue.length){ toast('⚠️ No hay datos para enviar'); return; }
+  var total = queue.length;
+  var sent = 0;
+
+  function _sendNext(qi){
+    if(qi >= queue.length){
+      // Restaurar contexto original
+      _activeRanchoIdx = originalIdx;
+      _loadRanchoCtx(originalIdx);
+      var rOrig = _ranchos[originalIdx].rancho || '';
+      if(rOrig){
+        ACTS=[]; GRUPAL_ACTS=[];
+        for(var ai2=0;ai2<ALL_ACTS.length;ai2++){
+          var f2=(ALL_ACTS[ai2].farm||'').toLowerCase();
+          if(f2===rOrig.toLowerCase()){
+            if((ALL_ACTS[ai2].modo||'Individual').toLowerCase()==='grupal') GRUPAL_ACTS.push(ALL_ACTS[ai2]);
+            else ACTS.push(ALL_ACTS[ai2]);
+          }
+        }
+        if(!ACTS.length) ACTS=FALLBACK_ACTS.filter(function(a){return a.modo!=='Grupal';});
+        if(!GRUPAL_ACTS.length) GRUPAL_ACTS=FALLBACK_GRUPAL_ACTS;
+      }
+      updParam(); updBanner(); renderRanchBar();
+      toast('📤 '+sent+' de '+total+' ranchos enviados');
+      return;
+    }
+    var rIdx = queue[qi];
+    _activeRanchoIdx = rIdx;
+    _loadRanchoCtx(rIdx);
+    var rn = _ranchos[rIdx].rancho || '';
+    if(rn){
+      ACTS=[]; GRUPAL_ACTS=[];
+      for(var ai=0;ai<ALL_ACTS.length;ai++){
+        var farm=(ALL_ACTS[ai].farm||'').toLowerCase();
+        if(farm===rn.toLowerCase()){
+          if((ALL_ACTS[ai].modo||'Individual').toLowerCase()==='grupal') GRUPAL_ACTS.push(ALL_ACTS[ai]);
+          else ACTS.push(ALL_ACTS[ai]);
+        }
+      }
+      if(!ACTS.length) ACTS=FALLBACK_ACTS.filter(function(a){return a.modo!=='Grupal';});
+      if(!GRUPAL_ACTS.length) GRUPAL_ACTS=FALLBACK_GRUPAL_ACTS;
+    }
+    toast('📤 Enviando rancho '+(qi+1)+' de '+total+': '+rn+'...');
+    // Construir payload manualmente (mismo código que sendToSheets pero con callback)
+    sendToSheets('_gsFrame_r'+rIdx);
+    sent++;
+    // Esperar 2s antes del siguiente envío para que el iframe anterior termine
+    setTimeout(function(){ _sendNext(qi+1); }, 2000);
+  }
+  _sendNext(0);
+}
+
+// V24-FIX3: sendToSheets acepta frameId opcional para multi-rancho
+function sendToSheets(customFrameId) {
   if (!workers.length && !ausencias.length) { toast('⚠️ No hay trabajadores ni ausencias'); return; }
   if (!gVal('fecha'))  { toast('⚠️ Ingresa la fecha primero'); return; }
+  // V23: confirmación visual del rancho al enviar
+  if(_ranchos.length > 1){
+    var rn = gVal('rancho')||'Sin rancho';
+    console.log('[eBerry] Enviando rancho: '+rn+' ('+workers.length+' workers)');
+  }
 
   // Mapeo motivo → etiquetas ES/EN para ausencias
   var _motLabels = {
@@ -4713,7 +5271,8 @@ function sendToSheets() {
     var wOut = { name: w.name, empNum: w.empNum||'', acts: [] };
     for (var j = 0; j < w.acts.length; j++) {
       var a   = w.acts[j];
-      var act = ACTS[a.ai];
+      // V26-FIX4: usar resolveAct en vez de ACTS[a.ai] — evita omitir actividades si ACTS fue re-filtrado
+      var act = resolveAct(a, false) || (a.ai>=0 && a.ai<ACTS.length ? ACTS[a.ai] : null);
       if (!act) continue;
       var totalH = act.hr ? totalShiftHours(a) : 0;
       // Tau: solo Hours usa contractRate; todo lo demás usa act.p
@@ -4859,7 +5418,7 @@ function sendToSheets() {
       addToOfflineQueue(payload);
       if(btn){ btn.textContent='📥 Timeout — guardado offline'; btn.style.background='#ff9800'; btn.disabled=false;
         setTimeout(function(){ btn.textContent='📊 Enviar a Payroll Field Master'; btn.style.background='#1a3a5c'; },4000); }
-    }, '_gsFrame');
+    }, customFrameId || '_gsFrame'); // V24-FIX3: frameId personalizable para multi-rancho
 }
 
 // ── GROUP ACTIVITY SYSTEM (dinámico desde GRUPAL_ACTS) ──
@@ -4961,7 +5520,7 @@ function renderGrpActs(){
     // ── HEADER clickable (siempre visible) ──
     var headHtml = '<div class="gaHead" data-gi="'+gi+'" onclick="togGrpCard(parseInt(this.dataset.gi))">'
       +'<div class="gaSum">'
-      +'<div class="gat">🌿 '+act.es+'</div>'
+      +'<div class="gat">🌿 '+esc(act.es)+'</div>'
       +'<div class="gaPreview" id="gaPrev'+gi+'"></div>'
       +'</div>'
       +'<span class="gaTot" id="gaTot'+gi+'"></span>'
@@ -7190,6 +7749,8 @@ function initSemTab(){
 
 // Gamma2-V5: Mostrar TODAS las actividades individuales del rancho (no solo Hora)
 function onSemRanchoChange(){
+  // V20-FIX5: guardar datos semanales ANTES de cambiar rancho semanal
+  saveSemData();
   var rancho = gVal('semRancho');
   var sel = gEl('semActivity');
   sel.innerHTML = '<option value="">— Selecciona actividad —</option>';
@@ -7228,6 +7789,8 @@ function onSemRanchoChange(){
 }
 
 function onSemWeekChange(){
+  // V20-FIX3: guardar datos semanales ANTES de cambiar semana
+  saveSemData();
   var dateStr = gVal('semWeekStart');
   if(!dateStr) return;
   // Ajustar al lunes de esa semana
@@ -7242,6 +7805,8 @@ function onSemWeekChange(){
 }
 
 function onSemActivityChange(){
+  // V20-FIX4: guardar datos semanales ANTES de cambiar actividad
+  saveSemData();
   buildSemTable();
 }
 
@@ -7303,10 +7868,11 @@ function buildSemTable(){
       if(!isHrAct){
         tbody += '<input type="text" inputmode="decimal" class="sem-input" id="'+cellId+'_qty" onchange="calcSemRow(\''+wk.id+'\')" placeholder="0" style="width:50px;margin-bottom:4px;border:1.5px solid #1a2b8c;font-weight:700">';
       }
-      tbody += '<label>ENT</label><input type="text" inputmode="text" class="sem-input sem-time-txt" id="'+cellId+'_ini" placeholder="7:00" onblur="normTimeInput(this);calcSemHours(\''+wk.id+'\','+d+');semAutoFill(\''+wk.id+'\','+d+',\'ini\')">';
-      tbody += '<label>SAL</label><input type="text" inputmode="text" class="sem-input sem-time-txt" id="'+cellId+'_fin" placeholder="20:00" onblur="normTimeInput(this);calcSemHours(\''+wk.id+'\','+d+');semAutoFill(\''+wk.id+'\','+d+',\'fin\')">';
-      tbody += '<label>L.INI</label><input type="text" inputmode="text" class="sem-input sem-time-txt" id="'+cellId+'_li" placeholder="12:00" onblur="normTimeInput(this);calcSemHours(\''+wk.id+'\','+d+');semAutoFill(\''+wk.id+'\','+d+',\'li\')">';
-      tbody += '<label>L.FIN</label><input type="text" inputmode="text" class="sem-input sem-time-txt" id="'+cellId+'_lf" placeholder="12:30" onblur="normTimeInput(this);calcSemHours(\''+wk.id+'\','+d+');semAutoFill(\''+wk.id+'\','+d+',\'lf\')">';
+      // V18: placeholders en 12h AM/PM
+      tbody += '<label>ENT</label><input type="text" inputmode="text" class="sem-input sem-time-txt" id="'+cellId+'_ini" placeholder="7:00 AM" onblur="normTimeInput(this);calcSemHours(\''+wk.id+'\','+d+');semAutoFill(\''+wk.id+'\','+d+',\'ini\')">';
+      tbody += '<label>SAL</label><input type="text" inputmode="text" class="sem-input sem-time-txt" id="'+cellId+'_fin" placeholder="8:00 PM" onblur="normTimeInput(this);calcSemHours(\''+wk.id+'\','+d+');semAutoFill(\''+wk.id+'\','+d+',\'fin\')">';
+      tbody += '<label>L.INI</label><input type="text" inputmode="text" class="sem-input sem-time-txt" id="'+cellId+'_li" placeholder="12:00 PM" onblur="normTimeInput(this);calcSemHours(\''+wk.id+'\','+d+');semAutoFill(\''+wk.id+'\','+d+',\'li\')">';
+      tbody += '<label>L.FIN</label><input type="text" inputmode="text" class="sem-input sem-time-txt" id="'+cellId+'_lf" placeholder="12:30 PM" onblur="normTimeInput(this);calcSemHours(\''+wk.id+'\','+d+');semAutoFill(\''+wk.id+'\','+d+',\'lf\')">';
       tbody += '<div class="sem-hrs-val" id="'+cellId+'_hrs">0</div>';
       // Gamma2: Pago diario (solo visual)
       tbody += '<div id="'+cellId+'_dpay" style="font-size:9px;color:#1a6b3a;font-weight:700;margin-top:2px"></div>';
@@ -7751,7 +8317,8 @@ function generateSemPDF(){
   html += '<tr style="background:#f9f9f9"><td style="'+metaEmpty+'"></td><td style="'+metaEmpty+'"></td>'
     +'<td style="'+metaLabel+';color:#111">Entrada</td>';
   for(var c=0;c<dayCols.length;c++){
-    html += '<td style="'+metaStyle+'">'+dayCols[c].sched.ent+'</td>';
+    // V18: horarios en 12h AM/PM en PDF semanal
+    html += '<td style="'+metaStyle+'">'+to12h(dayCols[c].sched.ent)+'</td>';
   }
   html += '<td style="'+metaEmpty+'"></td></tr>';
 
@@ -7759,7 +8326,7 @@ function generateSemPDF(){
   html += '<tr style="background:#f9f9f9"><td style="'+metaEmpty+'"></td><td style="'+metaEmpty+'"></td>'
     +'<td style="'+metaLabel+';color:#111">Salida</td>';
   for(var c=0;c<dayCols.length;c++){
-    html += '<td style="'+metaStyle+'">'+dayCols[c].sched.sal+'</td>';
+    html += '<td style="'+metaStyle+'">'+to12h(dayCols[c].sched.sal)+'</td>';
   }
   html += '<td style="'+metaEmpty+'"></td></tr>';
 
@@ -7767,7 +8334,7 @@ function generateSemPDF(){
   html += '<tr style="background:#f9f9f9"><td style="'+metaEmpty+'"></td><td style="'+metaEmpty+'"></td>'
     +'<td style="'+metaLabel+';color:#111">L. Inicio</td>';
   for(var c=0;c<dayCols.length;c++){
-    html += '<td style="'+metaStyle+'">'+dayCols[c].sched.lIni+'</td>';
+    html += '<td style="'+metaStyle+'">'+to12h(dayCols[c].sched.lIni)+'</td>';
   }
   html += '<td style="'+metaEmpty+'"></td></tr>';
 
@@ -7775,7 +8342,7 @@ function generateSemPDF(){
   html += '<tr style="background:#f9f9f9;border-bottom:3px solid #1a2b8c"><td style="'+metaEmpty+'"></td><td style="'+metaEmpty+'"></td>'
     +'<td style="'+metaLabel+';color:#111">L. Fin</td>';
   for(var c=0;c<dayCols.length;c++){
-    html += '<td style="'+metaStyle+'">'+dayCols[c].sched.lFin+'</td>';
+    html += '<td style="'+metaStyle+'">'+to12h(dayCols[c].sched.lFin)+'</td>';
   }
   html += '<td style="'+metaEmpty+'"></td></tr>';
 
@@ -7962,6 +8529,13 @@ function saveOfflineQueue(queue){
 
 function addToOfflineQueue(payload){
   var queue = getOfflineQueue();
+  // V19-FIX3: dedup — no agregar si ya existe payload con misma fecha+rancho+surquero+action
+  var dedupKey = (payload.action||'')+'_'+(payload.fecha||payload.weekStart||'')+'_'+(payload.rancho||'')+'_'+(payload.surquero||'');
+  for(var qi=0;qi<queue.length;qi++){
+    var q=queue[qi];
+    var qKey=(q.action||'')+'_'+(q.fecha||q.weekStart||'')+'_'+(q.rancho||'')+'_'+(q.surquero||'');
+    if(qKey===dedupKey){ toast('⚠️ Ya está en cola offline'); return; }
+  }
   // Agregar timestamp para tracking
   payload._queuedAt = new Date().toISOString();
   payload._queueId  = Date.now() + '_' + Math.random().toString(36).substr(2,6);
