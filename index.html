@@ -1524,6 +1524,8 @@ function loginSuccess(user){
   if(surqName){
     var _w=findInArr(ALL_WORKERS,surqName); surqIOE=_w?_w.ioe||'':''; // V12-FIX1
   }
+  // V30-FIX: guardar IOE en currentUser para que populateRanchAddSel lo use
+  currentUser.ioe = surqIOE;
   var crewBase = user.crew ? user.crew.replace(/\s*\d+$/,'').trim() : '';
   populateRanchoDropdown(surqIOE, crewBase, user.isAdmin);
 
@@ -1534,9 +1536,10 @@ function loginSuccess(user){
   // 👤 Mostrar botón registro facial si es admin
   showFaceRegBtn();
 
-  updParam();
   load();
   renderRanchBar();
+  // V30-FIX: updParam DESPUÉS de renderRanchBar (antes crasheaba porque hpill no existía)
+  updParam();
   // V28-FIX-UI3+UI4: auto-expandir primer rancho + activar página
   if(!_ranchos.length && gVal('rancho')){ _initRanchos(); renderRanchBar(); }
   // V29-FIX3: solo expandir si NO está ya expandido (evita colapsar lo que renderRanchBar ya expandió)
@@ -1653,10 +1656,10 @@ function _filterActsForRancho(rancho){
   }
   if(!ACTS.length) ACTS = FALLBACK_ACTS.filter(function(a){ return a.modo !== 'Grupal'; });
   if(!GRUPAL_ACTS.length) GRUPAL_ACTS = FALLBACK_GRUPAL_ACTS;
-  // Filtrar workers por rancho (admin sin surquero)
-  if(currentUser && currentUser.isAdmin && !gVal('surquero')){
+  // V30-FIX: actualizar NAMES para TODOS los usuarios al cambiar rancho (antes solo admin)
+  if(currentUser){
     var ranchoWorkers = getWorkersForRancho();
-    NAMES = ranchoWorkers.map(function(w){ return w.name; });
+    if(ranchoWorkers.length) NAMES = ranchoWorkers.map(function(w){ return w.name; });
   }
 }
 
@@ -2621,13 +2624,18 @@ function updParam(){
   updDate();
   var h=nh(gVal('hEnt'),gVal('hSal'));
   var li=t2m(gVal('lIni')),lf=t2m(gVal('lFin')),lm=(li!==null&&lf!==null)?Math.max(0,lf-li):0;
-  gEl('hpill').innerHTML=h?'<div class="hpill">⏱️ Jornada base: <b>'+h+' h</b> <span style="font-size:12px;font-weight:400;color:var(--gr)">(lonche: '+lm+' min)</span></div>':'';
+  // V30-FIX: hpill ahora es por rancho (hpill_0, hpill_1, etc.)
+  var hpillEl=gEl('hpill_'+_activeRanchoIdx);
+  if(hpillEl) hpillEl.innerHTML=h?'<div class="hpill">⏱️ Jornada base: <b>'+h+' h</b> <span style="font-size:12px;font-weight:400;color:var(--gr)">(lonche: '+lm+' min)</span></div>':'';
   updBanner();
 }
 function updBanner(){
   var h=nh(gVal('hEnt'),gVal('hSal'));
-  // V18: banner en 12h AM/PM
-  gEl('banner').innerHTML='<div class="bi"><span class="bv">'+to12h(gVal('hEnt'))+'</span><span class="bk">Entrada</span></div><div class="bi"><span class="bv">'+to12h(gVal('hSal'))+'</span><span class="bk">Salida</span></div><div class="bi"><span class="bv">'+to12h(gVal('lIni'))+'</span><span class="bk">Lonche ini</span></div><div class="bi"><span class="bv">'+to12h(gVal('lFin'))+'</span><span class="bk">Lonche fin</span></div><div class="bi"><span class="bv" style="color:var(--g2)">'+(h?h+'h':'—')+'</span><span class="bk">Jornada</span></div>';
+  // V30-FIX: surquero visible en banner + guard contra banner null
+  var surq=gVal('surquero')||(currentUser&&!currentUser.isAdmin?currentUser.name:'')||(currentUser&&currentUser.isAdmin?'ADM':'');
+  var banEl=gEl('banner');
+  if(!banEl) return;
+  banEl.innerHTML='<div class="bi"><span class="bv" style="font-size:13px;color:#fff">'+esc(surq)+'</span><span class="bk">Surquero</span></div><div class="bi"><span class="bv">'+to12h(gVal('hEnt'))+'</span><span class="bk">Entrada</span></div><div class="bi"><span class="bv">'+to12h(gVal('hSal'))+'</span><span class="bk">Salida</span></div><div class="bi"><span class="bv">'+to12h(gVal('lIni'))+'</span><span class="bk">Lonche ini</span></div><div class="bi"><span class="bv">'+to12h(gVal('lFin'))+'</span><span class="bk">Lonche fin</span></div><div class="bi"><span class="bv" style="color:var(--g2)">'+(h?h+'h':'—')+'</span><span class="bk">Jornada</span></div>';
 }
 
 // V11: highlight seguro — primero marca en texto plano, luego escapa solo fuera de <mark>
@@ -3526,8 +3534,16 @@ function buildSum(){
     w.totalPay=t+grpPay(w.id); grand+=w.totalPay;
   }
   gEl('sg').innerHTML='<div class="sb2"><div class="sv">'+workers.length+'</div><div class="sl">Trabajadores</div></div><div class="sb2"><div class="sv am">$'+grand.toFixed(0)+'</div><div class="sl">💰 Total del día</div></div><div class="sb2"><div class="sv">'+function(){ var n=0; for(var i=0;i<workers.length;i++) n+=workers[i].acts.length; return n; }()+'</div><div class="sl">Actividades</div></div>';
-  // V9: escapar datos de formulario
-  gEl('si').innerHTML='<div class="ir"><span class="ik">Fecha</span><span class="iv">'+esc(gVal('fecha'))+'</span></div><div class="ir"><span class="ik">Rancho</span><span class="iv">'+esc(gVal('rancho'))+'</span></div><div class="ir"><span class="ik">Surquero</span><span class="iv">'+esc(gVal('surquero'))+'</span></div><div class="ir"><span class="ik">Finca</span><span class="iv">'+esc(gVal('finca'))+'</span></div><div class="ir"><span class="ik">Horario</span><span class="iv">'+esc(to12h(gVal('hEnt')))+' → '+esc(to12h(gVal('hSal')))+'</span></div><div class="ir"><span class="ik">Lonche</span><span class="iv">'+esc(to12h(gVal('lIni')))+' – '+esc(to12h(gVal('lFin')))+'</span></div>';
+  // V30-FIX: fallback a _ranchos si hidden inputs vacíos + surquero de currentUser
+  var _r = (_ranchos && _ranchos[_activeRanchoIdx]) || {};
+  var _rancho = gVal('rancho') || _r.rancho || '—';
+  var _finca  = gVal('finca')  || _r.finca  || '—';
+  var _hEnt   = gVal('hEnt')   || _r.hEnt   || '';
+  var _hSal   = gVal('hSal')   || _r.hSal   || '';
+  var _lIni   = gVal('lIni')   || _r.lIni   || '';
+  var _lFin   = gVal('lFin')   || _r.lFin   || '';
+  var _surq   = gVal('surquero') || (currentUser && !currentUser.isAdmin ? currentUser.name : '') || '—';
+  gEl('si').innerHTML='<div class="ir"><span class="ik">Fecha</span><span class="iv">'+esc(gVal('fecha'))+'</span></div><div class="ir"><span class="ik">Rancho</span><span class="iv">'+esc(_rancho)+'</span></div><div class="ir"><span class="ik">Surquero</span><span class="iv">'+esc(_surq)+'</span></div><div class="ir"><span class="ik">Finca</span><span class="iv">'+esc(_finca)+'</span></div><div class="ir"><span class="ik">Horario</span><span class="iv">'+esc(to12h(_hEnt))+' → '+esc(to12h(_hSal))+'</span></div><div class="ir"><span class="ik">Lonche</span><span class="iv">'+esc(to12h(_lIni))+' – '+esc(to12h(_lFin))+'</span></div>';
   var h='';
   for(var i=0;i<workers.length;i++){
     var w=workers[i]; var dets=[];
@@ -4121,28 +4137,7 @@ function saveQuiet(){
   }
 }
 
-window.addEventListener('DOMContentLoaded',function(){
-  // Save pill
-  var htop=document.querySelector('.htop');
-  if(htop){
-    var pill=document.createElement('div');
-    pill.id='savepill';
-    pill.style.cssText='background:rgba(255,255,255,.12);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;color:rgba(255,255,255,.45);margin-left:5px;white-space:nowrap';
-    pill.textContent='● Auto';
-    var dpill=htop.querySelector('.dpill');
-    if(dpill&&dpill.parentNode){ dpill.parentNode.insertBefore(pill,dpill.nextSibling); }
-    else { htop.appendChild(pill); }
-  }
-  var ids=['rancho','fecha','numBus','numCam','surquero','finca','notas','hEnt','hSal','lIni','lFin'];
-  for(var i=0;i<ids.length;i++){
-    (function(id){
-      var el=gEl(id); if(!el)return;
-      el.addEventListener('change',autoSave);
-      el.addEventListener('input',autoSave);
-    })(ids[i]);
-  }
-  window.addEventListener('visibilitychange',function(){ if(document.visibilityState==='hidden'&&currentUser) saveQuiet(); });
-});
+// V30: bloque DOMContentLoaded duplicado eliminado — el principal está en línea ~6457
 
 function showHistory(){
   var keys=[], i;
