@@ -1164,7 +1164,10 @@ html.login-locked{overflow:hidden!important;height:100%!important}
   </div>
 </div>
 
-<!-- QR SCANNER OVERLAY -->
+<!-- V25: cierre del pagesSlot (las páginas se teletransportan al rancho activo) -->
+</div><!-- /pagesSlot -->
+
+<!-- V32-FIX: QR OVERLAY movido FUERA del pagesSlot — es global (position:fixed), no debe viajar con el rancho -->
 <div class="qrOv" id="qrOv">
   <div class="qrBox">
     <div class="qrHead">
@@ -1176,9 +1179,6 @@ html.login-locked{overflow:hidden!important;height:100%!important}
     <div class="qrCount" id="qrCount" style="display:none"></div>
   </div>
 </div>
-
-<!-- V25: cierre del pagesSlot (las páginas se teletransportan al rancho activo) -->
-</div><!-- /pagesSlot -->
 
 <!-- STICKY BOTTOM -->
 <div class="btm">
