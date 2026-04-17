@@ -1297,14 +1297,14 @@ function closeSession(){
 function logoutUser(){
   saveQuiet();
   closeSession();
-  // V7: limpiar intervalos para evitar acumulación en re-login
   if(_keepAliveTimer){ clearInterval(_keepAliveTimer); _keepAliveTimer=null; }
-  // V20_02-FIX: limpiar estado del surquero anterior para que el siguiente no herede datos
+  // V20_02-HOTFIX2: setear null ANTES de limpiar — evita que listeners disparen saveQuiet con datos vacíos
+  currentUser = null;
+  // Ahora sí limpiar (saveQuiet ya no corre porque currentUser=null)
   resetState();
   var wlist = gEl('wlist'); if(wlist) wlist.innerHTML = '';
   var sel = gEl('rancho'); if(sel){ sel.innerHTML = '<option value="">— Selecciona un rancho —</option>'; sel.value = ''; }
   ACTS = []; GRUPAL_ACTS = []; NAMES = [];
-  currentUser = null;
   // Hide logout button
   var btn = gEl('logoutBtn'); if(btn) btn.style.display = 'none';
   var badge = gEl('adminBadge'); if(badge) badge.style.display = 'none';
@@ -1317,7 +1317,7 @@ function logoutUser(){
   gEl('loginScreen').classList.remove('hide');
   document.body.classList.add('login-locked');
   document.documentElement.classList.add('login-locked');
-  go(0);
+  // V20_02-HOTFIX: go(0) removido — ocultaba el addbar/QR al re-login
   toast('👋 Sesión cerrada');
 }
 
@@ -1607,7 +1607,8 @@ function populateRanchoDropdown(ioe, defaultRancho, isAdmin){
 
 function onRanchoChange(){
   // V20-FIX2: guardar ANTES de re-filtrar ACTS — evita serializar con ACTS del rancho nuevo
-  if(currentUser) saveQuiet();
+  // V20_02-HOTFIX: solo guardar si hay workers (evita borrar datos durante login)
+  if(currentUser && workers.length) saveQuiet();
 
   var rancho = gVal('rancho');
   if(!rancho) return;
@@ -2385,12 +2386,16 @@ function pauseQR(){
   // Pausa la cámara sin cerrar el overlay (para mostrar modales encima)
   if(qrScanner){ qrScanner.stop().catch(function(){}); }
 }
+// V20_02-FIX: guard anti-concurrencia en resumeQR
+var _qrResuming = false;
 function resumeQR(){
-  // Reanuda la cámara después de cerrar un modal
   if(!qrActive) return;
+  if(_qrResuming) return;
+  _qrResuming = true;
   setQRStatus('Apunta la cámara al siguiente QR','');
   setTimeout(function(){
-    if(qrScanner){
+    _qrResuming = false;
+    if(qrScanner && qrActive){
       qrScanner.start(
         { facingMode: "environment" },
         { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 },
@@ -2416,15 +2421,15 @@ if(typeof MutationObserver!=='undefined')(function(){
     for(var i=0;i<all.length;i++){ if(all[i].id!=='qrOv') return true; }
     return false;
   }
-  // V13-FIX1: Debounce overlay QR — evita doble-tap accidental
+  // V20_02-FIX: Debounce QR corregido — clearTimeout reinicia timer en cada mutation
   var _ovDebounce = null;
   var obs=new MutationObserver(function(){
     if(!qrActive)return;
-    if(_ovDebounce) return;
+    clearTimeout(_ovDebounce);
     _ovDebounce = setTimeout(function(){
       _ovDebounce = null;
       if(anyOverlayOpen()) pauseQR(); else resumeQR();
-    }, 50);
+    }, 150);
   });
   // Observar body completo: detecta class changes y nodos nuevos (.ov dinámicos)
   obs.observe(document.body,{attributes:true,attributeFilter:['class'],subtree:true,childList:true});
@@ -3571,7 +3576,8 @@ function applyAutoFill(){
     if(disp){ disp.textContent = currentUser.name; disp.style.display='block'; }
     if(inp)  inp.value = currentUser.name;
     if(adminSel) adminSel.style.display='none'; // ✅ siempre oculto para surqueros
-    // V20_02-FIX: rancho del crew con match correcto + disparar onRanchoChange
+    // V20_02-HOTFIX2: rancho del crew con match correcto — SIN llamar onRanchoChange
+    // onRanchoChange hace saveQuiet() que puede corromper datos durante load()
     var crewBase = currentUser.crew.replace(/\s*\d+$/,'').trim();
     var rEl = gEl('rancho');
     if(rEl){
@@ -3584,7 +3590,20 @@ function applyAutoFill(){
           if(rEl.options[_oi2].value.toLowerCase().indexOf(crewBase.toLowerCase())===0){ rEl.selectedIndex=_oi2; _matched=true; break; }
         }
       }
-      onRanchoChange();
+      // Solo re-filtrar ACTS, NO guardar
+      var _rVal = gVal('rancho');
+      if(_rVal){
+        ACTS=[]; GRUPAL_ACTS=[];
+        for(var _fi=0;_fi<ALL_ACTS.length;_fi++){
+          var _farm=(ALL_ACTS[_fi].farm||'').toLowerCase();
+          if(_farm===_rVal.toLowerCase()){
+            if((ALL_ACTS[_fi].modo||'Individual').toLowerCase()==='grupal') GRUPAL_ACTS.push(ALL_ACTS[_fi]);
+            else ACTS.push(ALL_ACTS[_fi]);
+          }
+        }
+        if(!ACTS.length) ACTS=FALLBACK_ACTS.filter(function(a){return a.modo!=='Grupal';});
+        if(!GRUPAL_ACTS.length) GRUPAL_ACTS=FALLBACK_GRUPAL_ACTS;
+      }
     }
   } else {
     // Admin — ocultar display, mostrar select con surqueros
