@@ -4007,16 +4007,16 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
       // colKey basado en esName (estable) en vez de ai numérico (puede cambiar)
       var actName=actDef.es||actDef.en||(''+ai);
       var colKey;
-      // Beta2: colKey = nombre + tipo. Esto separa columnas cuando la misma actividad
-      // tiene tipos diferentes (ej: "Trabajo general|Hora" vs "Trabajo general|Ficha").
-      // Upsilon2 quitó shifts del colKey (correcto), pero también quitó tipo (bug).
-      colKey = actName + '|' + (actDef.tipo||'');
+      // V20_05 FIX1: colKey = nombre + tipo + finca. Separa columnas cuando la misma actividad
+      // se hace en 2 fincas distintas del mismo rancho (antes se fusionaba y la 2da finca desaparecía del PDF).
+      var _fincaKey=(a_.finca||'').trim();
+      colKey = actName + '|' + (actDef.tipo||'') + '|' + _fincaKey;
       var found=false;
       for(var k=0;k<actCols.length;k++){ if(actCols[k].colKey===colKey){found=true;break;} }
       if(!found) actCols.push({
         ai:ai, colKey:colKey, wid:null,
         label:actDef.en||actDef.es, tipo:actDef.tipo, payType:actDef.payType||'', hr:actDef.hr,
-        esName:actName
+        esName:actName, finca:_fincaKey
       });
     }
   }
@@ -4064,7 +4064,8 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
       var puertas_=(grandAcres_>0&&anchoCama_>0)?grandAcres_*anchoCama_:grandPies_/100;
       if(!puertas_) continue;
       var ppx_=puertas_/np_;
-      col_={label:gact_.es, ct:'puertas', perPersona:{}, totalVal:puertas_, np:np_, precio:gact_.p, unitLabel:'Doors p/p', finca:g_.vars.finca||'', ini:g_.vars.ini||'', fin:g_.vars.fin||''};
+      // V20_05: guardar anchoCama en el col para evitar desalineación tras sort T1/T2
+      col_={label:gact_.es, ct:'puertas', perPersona:{}, totalVal:puertas_, np:np_, precio:gact_.p, unitLabel:'Doors p/p', finca:g_.vars.finca||'', ini:g_.vars.ini||'', fin:g_.vars.fin||'', anchoCama:anchoCama_};
       for(var pi_=0;pi_<g_.participantes.length;pi_++) col_.perPersona[g_.participantes[pi_]]=ppx_;
     } else if(ct_==='cajas'){
       var totalC_=parseFloat(g_.vars.totalC)||0;
@@ -4088,32 +4089,30 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     if(col_) grpPuertasCols.push(col_);
   }
 
-  // Tau: Fusionar columnas grupales contiguas (misma actividad + fin===ini)
+  // V20_05 FIX2: NO fusionar columnas grupales. Cuando misma actividad aparece 2+ veces
+  // (diferentes horarios o fincas), subdividir con sufijo T1/T2/T3 para que cada grupo
+  // conserve su horario propio en el header (antes se perdía: 7-8 y 9-14 salían como 7-14).
   grpPuertasCols.sort(function(a,b){
     if(a.label!==b.label) return a.label<b.label?-1:1;
     return (a.ini||'')<(b.ini||'')?-1:1;
   });
-  var _merged=[];
-  for(var mi_=0;mi_<grpPuertasCols.length;mi_++){
-    var prev_=_merged.length?_merged[_merged.length-1]:null;
-    if(prev_&&prev_.label===grpPuertasCols[mi_].label&&prev_.fin===grpPuertasCols[mi_].ini){
-      prev_.fin=grpPuertasCols[mi_].fin;
-      prev_.totalVal+=grpPuertasCols[mi_].totalVal;
-      for(var pk_ in grpPuertasCols[mi_].perPersona){
-        if(prev_.perPersona[pk_]) prev_.perPersona[pk_]+=grpPuertasCols[mi_].perPersona[pk_];
-        else prev_.perPersona[pk_]=grpPuertasCols[mi_].perPersona[pk_];
-      }
-      var uq_=0; for(var uk_ in prev_.perPersona) uq_++;
-      prev_.np=uq_;
-    } else {
-      var cp_={label:grpPuertasCols[mi_].label,ct:grpPuertasCols[mi_].ct,perPersona:{},totalVal:grpPuertasCols[mi_].totalVal,np:grpPuertasCols[mi_].np,precio:grpPuertasCols[mi_].precio,unitLabel:grpPuertasCols[mi_].unitLabel,finca:grpPuertasCols[mi_].finca,ini:grpPuertasCols[mi_].ini,fin:grpPuertasCols[mi_].fin};
-      for(var pk2_ in grpPuertasCols[mi_].perPersona) cp_.perPersona[pk2_]=grpPuertasCols[mi_].perPersona[pk2_];
-      _merged.push(cp_);
+  var _lblCount={};
+  for(var lc_=0;lc_<grpPuertasCols.length;lc_++){
+    var lbl_=grpPuertasCols[lc_].label;
+    _lblCount[lbl_]=(_lblCount[lbl_]||0)+1;
+  }
+  var _lblIdx={};
+  for(var si_=0;si_<grpPuertasCols.length;si_++){
+    var lblA_=grpPuertasCols[si_].label;
+    if(_lblCount[lblA_]>1){
+      _lblIdx[lblA_]=(_lblIdx[lblA_]||0)+1;
+      grpPuertasCols[si_].labelOrig=lblA_;
+      grpPuertasCols[si_].label=lblA_+' T'+_lblIdx[lblA_];
     }
   }
-  grpPuertasCols=_merged;
 
-  var th='<th style="width:28px;text-align:center">#</th><th style="width:62px;text-align:center;font-size:8px">Emp #</th><th style="min-width:130px;text-align:left;border-right:3px solid #1a2b8c">Nombre / Name</th>';
+  // V20_04: separador verde en header de Nombre
+  var th='<th style="width:28px;text-align:center">#</th><th style="width:62px;text-align:center;font-size:8px">Emp #</th><th style="min-width:130px;text-align:left;border-right:3px solid #407623">Nombre / Name</th>';
   // Tau: helper para unit label en inglés (como columna D de Current Contracted)
   var _ptMap={'Hora':'Hours','Ficha':'Pieces','Caja':'Pieces','$':'Extra'};
   for(i=0;i<actCols.length;i++){
@@ -4139,11 +4138,13 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
       var found3=null;
       var col3Name=col3.esName||(ACTS[col3.ai]?ACTS[col3.ai].es:'');
       var col3Tipo=col3.tipo||'';
+      var col3Finca=(col3.finca||'').trim();
       for(var k3=0;k3<wks[i].acts.length;k3++){
         var wAct3=wks[i].acts[k3];
         var wActName3=wAct3.esName||(ACTS[wAct3.ai]?ACTS[wAct3.ai].es:'');
         var wActTipo3=wAct3.tipo||(ACTS[wAct3.ai]?ACTS[wAct3.ai].tipo:'')||'';
-        if(wActName3===col3Name && wActTipo3===col3Tipo){found3=wAct3;break;}
+        var wActFinca3=(wAct3.finca||'').trim();
+        if(wActName3===col3Name && wActTipo3===col3Tipo && wActFinca3===col3Finca){found3=wAct3;break;}
       }
       if(found3){
         if(col3.hr) colTotals[col3.colKey]+=totalShiftHours(found3)||0;
@@ -4153,27 +4154,27 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     }
   }
 
-  // ── Filas de cabecera: TOTAL / Pago Unit. / Labor / Entrada / Salida ──
+  // V20_04: colores personalizados por Serafín — separador verde, bordes negros
   var trTotal='<tr style="background:#d0d8ff;font-weight:700;font-size:9px">'
-    +'<td style="border:1px solid #aab;border-top:2px solid #1a2b8c"></td>'
-    +'<td style="border:1px solid #aab;border-top:2px solid #1a2b8c"></td>'
-    +'<td style="text-align:right;padding:2px 4px;border:1px solid #aab;border-top:2px solid #1a2b8c;border-right:2px solid #1a2b8c;color:#1a2b8c;font-size:9px;font-weight:900">TOTAL</td>';
+    +'<td style="border:1px solid #000;border-top:2px solid #1a2b8c"></td>'
+    +'<td style="border:1px solid #000;border-top:2px solid #1a2b8c"></td>'
+    +'<td style="text-align:right;padding:2px 4px;border:1px solid #000;border-top:2px solid #1a2b8c;border-right:2px solid #407623;color:#1a2b8c;font-size:9px;font-weight:900">TOTAL</td>';
   var trPrice='<tr style="font-size:9px;background:#fff">'
-    +'<td style="border:1px solid #ddd"></td>'
-    +'<td style="border:1px solid #ddd"></td>'
-    +'<td style="text-align:right;padding:2px 4px;border:1px solid #ddd;border-right:2px solid #1a2b8c;color:#111;font-weight:600">Pago Unit.</td>';
+    +'<td style="border:1px solid #000"></td>'
+    +'<td style="border:1px solid #000"></td>'
+    +'<td style="text-align:right;padding:2px 4px;border:1px solid #000;border-right:2px solid #407623;color:#000;font-weight:600">Pago Unit.</td>';
   var trLabor='<tr style="font-size:9px;background:#f5f8ff">'
-    +'<td style="border:1px solid #ddd"></td>'
-    +'<td style="border:1px solid #ddd"></td>'
-    +'<td style="text-align:right;padding:2px 4px;border:1px solid #ddd;border-right:2px solid #1a2b8c;color:#111;font-weight:600">Labor</td>';
+    +'<td style="border:1px solid #000"></td>'
+    +'<td style="border:1px solid #000"></td>'
+    +'<td style="text-align:right;padding:2px 4px;border:1px solid #000;border-right:2px solid #407623;color:#000;font-weight:600">Labor</td>';
   var trEntry='<tr style="font-size:9px;background:#f9f9f9">'
-    +'<td style="border:1px solid #ddd"></td>'
-    +'<td style="border:1px solid #ddd"></td>'
-    +'<td style="text-align:right;padding:2px 4px;border:1px solid #ddd;border-right:2px solid #1a2b8c;color:#111">Entrada</td>';
+    +'<td style="border:1px solid #000"></td>'
+    +'<td style="border:1px solid #000"></td>'
+    +'<td style="text-align:right;padding:2px 4px;border:1px solid #000;border-right:2px solid #407623;color:#000">Entrada</td>';
   var trExit='<tr class="meta-last" style="font-size:9px;background:#f9f9f9">'
-    +'<td style="border:1px solid #ddd"></td>'
-    +'<td style="border:1px solid #ddd"></td>'
-    +'<td style="text-align:right;padding:2px 4px;border:1px solid #ddd;border-right:2px solid #1a2b8c;color:#111">Salida</td>';
+    +'<td style="border:1px solid #000"></td>'
+    +'<td style="border:1px solid #000"></td>'
+    +'<td style="text-align:right;padding:2px 4px;border:1px solid #000;border-right:2px solid #407623;color:#000">Salida</td>';
 
   for(i=0;i<actCols.length;i++){
     var col4=actCols[i];
@@ -4183,12 +4184,14 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     if(!col4.hr && tot>0){
       // Checar si algún worker tiene qty para esta columna
       var anyQty=false;
+      var _col4Finca=(col4.finca||'').trim();
       for(var wq=0;wq<wks.length;wq++){
         for(var aq=0;aq<wks[wq].acts.length;aq++){
           var wqAct=wks[wq].acts[aq];
           var wqn=wqAct.esName||(ACTS[wqAct.ai]?ACTS[wqAct.ai].es:'');
           var wqt=wqAct.tipo||(ACTS[wqAct.ai]?ACTS[wqAct.ai].tipo:'')||'';
-          if(wqn===(col4.esName||(ACTS[col4.ai]?ACTS[col4.ai].es:'')) && wqt===(col4.tipo||'') && parseFloat(wqAct.qty)){ anyQty=true; break; }
+          var wqf=(wqAct.finca||'').trim();
+          if(wqn===(col4.esName||(ACTS[col4.ai]?ACTS[col4.ai].es:'')) && wqt===(col4.tipo||'') && wqf===_col4Finca && parseFloat(wqAct.qty)){ anyQty=true; break; }
         }
         if(anyQty) break;
       }
@@ -4198,11 +4201,13 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     for(var w2=0;w2<wks.length;w2++){
       // Alpha2-fix5: eliminado dead code (wid siempre es null)
       var col4Name=col4.esName||(ACTS[col4.ai]?ACTS[col4.ai].es:'');
+      var col4Finca=(col4.finca||'').trim();
       for(var a2=0;a2<wks[w2].acts.length;a2++){
         var wAct4_=wks[w2].acts[a2];
         var wActName4=wAct4_.esName||(ACTS[wAct4_.ai]?ACTS[wAct4_.ai].es:'');
         var wActTipo4=wAct4_.tipo||(ACTS[wAct4_.ai]?ACTS[wAct4_.ai].tipo:'')||'';
-        if(wActName4===col4Name && wActTipo4===(col4.tipo||'')){
+        var wActFinca4=(wAct4_.finca||'').trim();
+        if(wActName4===col4Name && wActTipo4===(col4.tipo||'') && wActFinca4===col4Finca){
           var act2=wks[w2].acts[a2];
           if(act2.unitPrice) unitPr='$'+parseFloat(act2.unitPrice).toFixed(2);
           else if(ACTS[col4.ai]&&ACTS[col4.ai].p) unitPr='$'+parseFloat(ACTS[col4.ai].p).toFixed(2);
@@ -4226,11 +4231,12 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
       if(unitPr && entLbl) break;
     }
     if(!unitPr&&ACTS[col4.ai]&&ACTS[col4.ai].p) unitPr='$'+parseFloat(ACTS[col4.ai].p).toFixed(2);
-    trTotal+='<td style="text-align:center;border:1px solid #ccc;border-top:3px solid #1a2b8c;color:#1a2b8c;font-weight:700">'+totLbl+'</td>';
-    trPrice+='<td style="text-align:center;border:1px solid #ddd;color:#c0392b;font-weight:700">'+unitPr+'</td>';
-    trLabor+='<td style="text-align:center;border:1px solid #ddd;color:#3a7fd4;font-size:9px">'+laborLbl+'</td>';
-    trEntry+='<td style="text-align:center;border:1px solid #ddd;color:#111">'+entLbl+'</td>';
-    trExit +='<td style="text-align:center;border:1px solid #ddd;color:#111">'+salLbl+'</td>';
+    // V20_04: colores personalizados por Serafín
+    trTotal+='<td style="text-align:center;border:1px solid #000;border-top:3px solid #1a2b8c;color:#1a2b8c;font-weight:700">'+totLbl+'</td>';
+    trPrice+='<td style="text-align:center;border:1px solid #000;color:#c0392b;font-weight:700">'+unitPr+'</td>';
+    trLabor+='<td style="text-align:center;border:1px solid #000;color:#3a7fd4;font-size:9px">'+laborLbl+'</td>';
+    trEntry+='<td style="text-align:center;border:1px solid #000;color:#000">'+entLbl+'</td>';
+    trExit +='<td style="text-align:center;border:1px solid #000;color:#000">'+salLbl+'</td>';
   }
   if(cp&&cp.length&&cajasT){ trTotal+='<td style="border-top:3px solid #1a2b8c"></td>'; trPrice+='<td></td>'; trLabor+='<td></td>'; trEntry+='<td></td>'; trExit+='<td></td>'; }
   if(ep&&ep.length&&estA&&estAn){ trTotal+='<td style="border-top:3px solid #1a2b8c"></td>'; trPrice+='<td></td>'; trLabor+='<td></td>'; trEntry+='<td></td>'; trExit+='<td></td>'; }
@@ -4240,7 +4246,8 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     var gc_=grpPuertasCols[gi4_];
     var totalCell_='';
     if(gc_.ct==='puertas'){
-      var gcAncho_ = parseFloat(grpActs_[gi4_] ? (grpActs_[gi4_].vars.anchoCama||0) : 0)||0;
+      // V20_05: usar anchoCama guardado en gc_ (evita desalineación por sort)
+      var gcAncho_ = parseFloat(gc_.anchoCama||0)||0;
       var gcAcres_ = (gcAncho_>0 && gc_.totalVal>0) ? gc_.totalVal/gcAncho_ : 0;
       totalCell_ = (gcAcres_>0?'<span style="font-size:9px;color:#0f6e56;display:block">'+smartNum(gcAcres_)+' acres</span>':'')
         +'<span style="font-size:11px">'+smartNum(gc_.totalVal)+' puertas</span>';
@@ -4287,19 +4294,22 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     var w=sortedWks[i];
     var _empN12 = w.empNum || '';
     if(!_empN12){ var _awM=findInArr(ALL_WORKERS,w.name); if(_awM) _empN12=_awM.empNum||''; }
-    var empCell = '<td style="text-align:center;font-size:8px;color:#444">'+(_empN12?esc(_empN12):'')+'</td>';
-    var td='<td class="numcol">'+(i+1)+'</td>'+empCell+'<td class="namecol" style="border-right:2px solid #1a2b8c;line-height:1.05;padding:1px 3px;font-size:9px">'+esc(w.name)+'</td>';
+    // V20_04: Emp# negro, separador nombre verde
+    var empCell = '<td style="text-align:center;font-size:8px;color:#000">'+(_empN12?esc(_empN12):'')+'</td>';
+    var td='<td class="numcol">'+(i+1)+'</td>'+empCell+'<td class="namecol" style="border-right:2px solid #407623;line-height:1.05;padding:1px 3px;font-size:9px">'+esc(w.name)+'</td>';
     for(j=0;j<actCols.length;j++){
       var col2=actCols[j];
       // Alpha2-fix5: eliminado dead code (wid siempre es null)
       var found2=null;
       var col2Name=col2.esName||(ACTS[col2.ai]?ACTS[col2.ai].es:'');
       var col2Tipo=col2.tipo||'';
+      var col2Finca=(col2.finca||'').trim();
       for(var k2=0;k2<w.acts.length;k2++){
         var wAct2=w.acts[k2];
         var wActName2=wAct2.esName||(ACTS[wAct2.ai]?ACTS[wAct2.ai].es:'');
         var wActTipo2=wAct2.tipo||(ACTS[wAct2.ai]?ACTS[wAct2.ai].tipo:'')||'';
-        if(wActName2===col2Name && wActTipo2===col2Tipo){found2=wAct2;break;}
+        var wActFinca2=(wAct2.finca||'').trim();
+        if(wActName2===col2Name && wActTipo2===col2Tipo && wActFinca2===col2Finca){found2=wAct2;break;}
       }
       if(found2){
         var cv='';
@@ -4332,23 +4342,23 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
   for(i=0;i<emptyCount;i++){
     var etd='<td class="numcol" style="color:#ddd;border:1px solid #ddd">'+(sortedWks.length+i+1)+'</td>';
     etd+='<td style="border:1px solid #ddd"></td>'; // Emp # vacío
-    etd+='<td style="border:1px solid #ddd;border-right:3px solid #1a2b8c"></td>';
+    etd+='<td style="border:1px solid #000;border-right:3px solid #407623"></td>';
     for(j=0;j<totalCols-3;j++) etd+='<td style="border:1px solid #ddd"></td>';
     rows+='<tr style="height:22px">'+etd+'</tr>';
   }
 
   var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Payroll '+vals.rancho+' '+vals.fecha+'</title>'
     +'<style>'
-    +'*{box-sizing:border-box;margin:0;padding:0}'
-    +'body{font-family:Arial,sans-serif;font-size:10px;padding:6px 8px;color:#111}'
+    +'*{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}'
+    +'body{font-family:Arial,sans-serif;font-size:10px;padding:6px 8px;color:#000}'
     +'.hdr{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px;border-bottom:2px solid #1a2b8c;padding-bottom:4px}'
     +'table{width:100%;border-collapse:collapse;font-size:9px;border:2px solid #1a2b8c}'
     +'th{padding:2px 3px;text-align:center;font-size:8px;font-weight:700;border:1px solid #4a5bbc;background:#1a2b8c;color:#fff;line-height:1.2}'
-    +'td{padding:2px 3px;border:1px solid #ddd;vertical-align:middle;text-align:center}'
-    +'.namecol{text-align:left!important;font-weight:600}'
+    +'td{padding:2px 3px;border:1px solid #000;vertical-align:middle;text-align:center}'
+    +'.namecol{text-align:left!important;font-weight:600;border-right:2px solid #407623}'
     +'.numcol{text-align:center!important;color:#8b0000;font-weight:700;font-size:8px}'
     +'.meta-last td{border-bottom:2px solid #1a2b8c!important}'
-    +'.ft{font-size:7px;color:#333;text-align:center;margin-top:3px;border-top:1px solid #ddd;padding-top:3px}'
+    +'.ft{font-size:7px;color:#5eba45;text-align:center;margin-top:3px;border-top:1px solid #136790;padding-top:3px}'
     +'@media print{.nopr{display:none}thead{display:table-header-group}@page{margin:5mm;size:letter landscape}}'
     +'</style></head><body>'
     +'<div class="hdr">'
@@ -4357,10 +4367,10 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     +'<div>'
     +'<div style="font-size:13px;font-weight:700;color:#1a2b8c;line-height:1.1">eberry harvest company llc</div>'
     +'<div style="font-size:11px;font-weight:900;letter-spacing:.5px">DAILY PAYROLL SHEET</div>'
-    +'<div style="font-size:9px;color:#111;margin-top:1px">Farm: '+vals.rancho+' &nbsp;|&nbsp; Bus #'+vals.numBus+' &nbsp;|&nbsp; '+(currentUser&&currentUser.isAdmin?'ADM':vals.surquero)+' &nbsp;|&nbsp; Lunch: '+lunchMin+' min</div>'
+    +'<div style="font-size:9px;color:#000;margin-top:1px">Farm: '+vals.rancho+' &nbsp;|&nbsp; Bus #'+vals.numBus+' &nbsp;|&nbsp; '+(currentUser&&currentUser.isAdmin?'ADM':vals.surquero)+' &nbsp;|&nbsp; Lunch: '+lunchMin+' min</div>'
     +'</div></div>'
     +'<div style="text-align:right">'
-    +'<div style="font-size:7px;font-weight:700;color:#333;text-transform:uppercase;letter-spacing:1px">DATE / FECHA</div>'
+    +'<div style="font-size:7px;font-weight:700;color:#ff1900;text-transform:uppercase;letter-spacing:1px">DATE / FECHA</div>'
     +'<div style="font-size:18px;font-weight:900;color:#1a2b8c;letter-spacing:1px">'+vals.fecha+'</div>'
     +'</div>'
     +'</div>'
