@@ -4315,7 +4315,36 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     }
     if(!unitPr&&ACTS[col4.ai]&&ACTS[col4.ai].p) unitPr='$'+parseFloat(ACTS[col4.ai].p).toFixed(2);
     var _csp=_NS>1?' colspan="'+_NS+'"':'';
-    trTotal+='<td'+_csp+' style="text-align:center;border:1px solid #000;border-top:3px solid #1a2b8c;color:#1a2b8c;font-weight:700">'+totLbl+'</td>';
+    // V20_08: si es Hora y multi-shift, emitir total por sub-columna (2h/5h) en vez de suma total
+    if(col4.hr && _NS>1){
+      for(var sst_=0;sst_<_NS;sst_++){
+        var _tarK=col4.shifts[sst_].key;
+        var _subTot=0;
+        for(var wts=0;wts<wks.length;wts++){
+          var _cN=col4.esName||(ACTS[col4.ai]?ACTS[col4.ai].es:'');
+          var _cF=(col4.finca||'').trim();
+          for(var ka=0;ka<wks[wts].acts.length;ka++){
+            var _wAct=wks[wts].acts[ka];
+            var _wN=_wAct.esName||(ACTS[_wAct.ai]?ACTS[_wAct.ai].es:'');
+            var _wT=_wAct.tipo||(ACTS[_wAct.ai]?ACTS[_wAct.ai].tipo:'')||'';
+            var _wF=(_wAct.finca||'').trim();
+            if(_wN!==_cN||_wT!==(col4.tipo||'')||_wF!==_cF) continue;
+            if(_wAct.shifts&&_wAct.shifts.length){
+              for(var ssx_=0;ssx_<_wAct.shifts.length;ssx_++){
+                var _wk_=(_wAct.shifts[ssx_].ini||'')+'|'+(_wAct.shifts[ssx_].fin||'');
+                if(_wk_===_tarK) _subTot+=nh(_wAct.shifts[ssx_].ini||'',_wAct.shifts[ssx_].fin||'')||0;
+              }
+            } else {
+              var _wk2_=(_wAct.ini||'')+'|'+(_wAct.fin||'');
+              if(_wk2_===_tarK) _subTot+=nh(_wAct.ini||'',_wAct.fin||'')||0;
+            }
+          }
+        }
+        trTotal+='<td style="text-align:center;border:1px solid #000;border-top:3px solid #1a2b8c;color:#1a2b8c;font-weight:700">'+smartNum(_subTot)+' h</td>';
+      }
+    } else {
+      trTotal+='<td'+_csp+' style="text-align:center;border:1px solid #000;border-top:3px solid #1a2b8c;color:#1a2b8c;font-weight:700">'+totLbl+'</td>';
+    }
     trPrice+='<td'+_csp+' style="text-align:center;border:1px solid #000;color:#c0392b;font-weight:700">'+unitPr+'</td>';
     trLabor+='<td'+_csp+' style="text-align:center;border:1px solid #000;color:#3a7fd4;font-size:9px">'+laborLbl+'</td>';
     // Entrada/Salida: N celdas con horario de cada sub-shift
@@ -4412,6 +4441,12 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
         var wActFinca2=(wAct2.finca||'').trim();
         if(wActName2===col2Name && wActTipo2===col2Tipo && wActFinca2===col2Finca){found2=wAct2;break;}
       }
+      // V20_08: Daywork/qty no se divide — 1 sola celda con colspan=N (abarca todos los shifts)
+      if(found2 && !col2.hr && parseFloat(found2.qty)){
+        var _cspQ=_NW>1?' colspan="'+_NW+'"':'';
+        td+='<td'+_cspQ+' style="text-align:center">'+smartNum(found2.qty)+'</td>';
+        continue;
+      }
       var _wKeys=[];
       if(found2){
         if(found2.shifts && found2.shifts.length){
@@ -4438,8 +4473,6 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
             }
             if(!_sumH) _sumH=totalShiftHours(found2)||0;
             cv=smartNum(_sumH)+' h';
-          } else if(found2.qty){
-            cv=smartNum(found2.qty);
           } else {
             var _sumH2=0;
             for(var kk2=sci_;kk2<sci_+_fr.span;kk2++){
