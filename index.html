@@ -4155,15 +4155,18 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     var np_=g_.participantes.length; if(!np_) continue;
     var col_=null;
     if(ct_==='puertas'){
-      // Omega: sumar totalPies y totalAcres; puertas = acres×anchoCama o pies/100
+      // V20_13: Pennrose5Act usa pennAcres directo (ignora surcos y ancho legacy)
       var grandPies_=0, grandAcres_=0;
-      var surcos_=g_.vars.surcos||[];
-      for(var si_=0;si_<surcos_.length;si_++){
-        grandPies_+=parseFloat(surcos_[si_].totalPies)||0;
-        grandAcres_+=parseFloat(surcos_[si_].totalAcres)||0;
+      if(isPennrose5Act(gact_)){
+        grandAcres_ = parseFloat(g_.vars.pennAcres)||0;
+      } else {
+        var surcos_=g_.vars.surcos||[];
+        for(var si_=0;si_<surcos_.length;si_++){
+          grandPies_+=parseFloat(surcos_[si_].totalPies)||0;
+          grandAcres_+=parseFloat(surcos_[si_].totalAcres)||0;
+        }
       }
       var anchoCama_=parseFloat(g_.vars.anchoCama)||0;
-      // V20_12: Pennrose5Act fuerza anchoCama=87.2 (ignora valor del usuario)
       var _ancEff=isPennrose5Act(gact_)?PENNROSE_ANCHO:anchoCama_;
       var puertas_=(grandAcres_>0&&_ancEff>0)?grandAcres_*_ancEff:grandPies_/100;
       if(!puertas_) continue;
@@ -5080,10 +5083,9 @@ function sendToSheets() {
       var metros = 0;
       var surcos = g.vars.surcos || [];
       for (var si = 0; si < surcos.length; si++) metros += (parseFloat(surcos[si].largo) || 0) * (parseFloat(surcos[si].num) || 0);
-      // V20_12: Pennrose5Act → puertas = acres × 87.2 / personas. Legacy → pies/100 / personas
+      // V20_13: Pennrose5Act → usa g.vars.pennAcres × 87.2 / personas (sin surcos)
       if(isPennrose5Act(act)){
-        var _acP=0;
-        for(var _sa=0;_sa<surcos.length;_sa++) _acP+=parseFloat(surcos[_sa].totalAcres)||0;
+        var _acP=parseFloat(g.vars.pennAcres)||0;
         qtyPerPerson = (_acP*PENNROSE_ANCHO)/np;
       } else {
         qtyPerPerson = (metros / 100) / np;
@@ -5310,7 +5312,33 @@ function renderGrpActs(){
       +'</div>';
 
     var varsHtml = '';
-    if(ct === 'puertas'){
+    // V20_13: grupal Pennrose5Act → UI simplificada (solo TOTAL ACRES + ancho fijo)
+    if(ct === 'puertas' && isPennrose5Act(act)){
+      var _pA = g.vars.pennAcres || '';
+      var _pAN = parseFloat(_pA) || 0;
+      var _pPue = _pAN * PENNROSE_ANCHO;
+      varsHtml = '<div style="margin-bottom:10px">'
+        + '<label style="font-size:10px;font-weight:700;color:var(--gr)">TOTAL ACRES</label>'
+        + '<input type="text" inputmode="decimal" value="'+_pA+'" placeholder="Ej: 5.26"'
+        + ' data-gi="'+gi+'" data-v="pennAcres" oninput="setGrpVar(this)"'
+        + ' style="font-size:18px;font-weight:700;padding:10px;width:100%;margin-top:3px;border:2px solid var(--b);border-radius:8px;color:var(--b);font-family:\'DM Sans\',sans-serif">'
+        + '</div>'
+        + '<div style="background:#eef;border-radius:6px;padding:6px 10px;margin-bottom:6px;font-size:11px;color:#334;display:flex;justify-content:space-between">'
+        + '<span>Ancho de cama (Pennrose)</span><b>'+PENNROSE_ANCHO+' (fijo)</b></div>'
+        + (_pAN>0?'<div style="background:var(--dk);border-radius:7px;padding:9px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'
+          + '<span style="font-size:12px;font-weight:600;color:rgba(255,255,255,.7)">🚪 Puertas totales (acres×'+PENNROSE_ANCHO+')</span>'
+          + '<b style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:var(--a)">'+_pPue.toFixed(2)+'</b></div>':'')
+        + '<div class="r2" style="margin-bottom:8px">'
+        + '<div><label style="font-size:10px">🟢 Entrada</label>'
+        + '<input type="time" step="1800" value="'+(g.vars.ini||'')+'" data-gi="'+gi+'" data-v="ini" onchange="setGrpVar(this)" style="font-size:16px;padding:9px 10px;width:100%"></div>'
+        + '<div><label style="font-size:10px">🏁 Salida</label>'
+        + '<input type="time" step="1800" value="'+(g.vars.fin||'')+'" data-gi="'+gi+'" data-v="fin" onchange="setGrpVar(this)" style="font-size:16px;padding:9px 10px;width:100%"></div>'
+        + '</div>'
+        + '<div style="margin-bottom:6px"><label style="font-size:10px">📍 Labor / Finca (aparece en el PDF)</label>'
+        + '<input type="text" value="'+(g.vars.finca||'')+'" placeholder="ej: Bloque 3..."'
+        + ' data-gi="'+gi+'" data-v="finca" oninput="setGrpVar(this)"'
+        + ' style="font-size:16px;padding:9px 10px;width:100%"></div>';
+    } else if(ct === 'puertas'){
       if(!g.vars.surcos || !g.vars.surcos.length) g.vars.surcos = [{largo:'',num:'',totalPies:'',totalAcres:'',mode:''}];
       var anchoCama = g.vars.anchoCama||'';
 
@@ -5501,14 +5529,18 @@ function updGrpPreview(gi){
   // Calcular datos del resumen
   var ppp=0, qtyLabel='';
   if(ct==='puertas'){
-    // Omega: puertas = acres × anchoCama (exacto), fallback pies/100
-    var grandPies=0, grandAcres=0; var surcos=g.vars.surcos||[];
-    for(var si=0;si<surcos.length;si++){
-      grandPies+=parseFloat(surcos[si].totalPies)||0;
-      grandAcres+=parseFloat(surcos[si].totalAcres)||0;
+    var grandPies=0, grandAcres=0;
+    // V20_13: Pennrose5Act → pennAcres directo, sin surcos
+    if(isPennrose5Act(act)){
+      grandAcres = parseFloat(g.vars.pennAcres)||0;
+    } else {
+      var surcos=g.vars.surcos||[];
+      for(var si=0;si<surcos.length;si++){
+        grandPies+=parseFloat(surcos[si].totalPies)||0;
+        grandAcres+=parseFloat(surcos[si].totalAcres)||0;
+      }
     }
     var anchoCama=parseFloat(g.vars.anchoCama)||0;
-    // V20_12: Pennrose5Act fuerza anchoCama=87.2
     var _ancPv=isPennrose5Act(act)?PENNROSE_ANCHO:anchoCama;
     var puertas=(grandAcres>0&&_ancPv>0)?grandAcres*_ancPv:grandPies/100;
     if(puertas&&np){
@@ -5705,25 +5737,26 @@ function calcGrpAct(gi){
   var ppp = 0; // pago por persona
 
   if(ct==='puertas'){
-    // Omega: sumar totalPies y totalAcres de todas las filas
-    var grandPies=0, grandAcres=0; var surcos=g.vars.surcos||[];
-    for(var si=0;si<surcos.length;si++){
-      grandPies+=parseFloat(surcos[si].totalPies)||0;
-      grandAcres+=parseFloat(surcos[si].totalAcres)||0;
+    // V20_13: Pennrose5Act → usa g.vars.pennAcres (no surcos)
+    var grandPies=0, grandAcres=0;
+    if(isPennrose5Act(act)){
+      grandAcres = parseFloat(g.vars.pennAcres)||0;
+    } else {
+      var surcos=g.vars.surcos||[];
+      for(var si=0;si<surcos.length;si++){
+        grandPies+=parseFloat(surcos[si].totalPies)||0;
+        grandAcres+=parseFloat(surcos[si].totalAcres)||0;
+      }
     }
-    // Omega: puertas SIEMPRE se calcula como acres × anchoCama cuando hay ambos
-    // Esto da el resultado exacto que esperan los ranchos (10 acres × 83 = 830 ptas)
-    // Solo usar pies/100 como fallback cuando no hay anchoCama
     var anchoCama=parseFloat(g.vars.anchoCama)||0;
     var puertas=0;
     var formulaStr='';
-    if(grandAcres>0 && anchoCama>0){
-      puertas=grandAcres*anchoCama;
-      formulaStr=grandAcres.toFixed(3)+' acres × '+anchoCama+' = <strong>'+puertas.toFixed(2)+' puertas</strong>';
-    } else if(isPennrose5Act(act) && grandAcres>0){
-      // V20_12: Pennrose5Act → acres × 87.2
+    if(isPennrose5Act(act) && grandAcres>0){
       puertas=grandAcres*PENNROSE_ANCHO;
       formulaStr=grandAcres.toFixed(3)+' acres × '+PENNROSE_ANCHO+' = <strong>'+puertas.toFixed(2)+' puertas</strong>';
+    } else if(grandAcres>0 && anchoCama>0){
+      puertas=grandAcres*anchoCama;
+      formulaStr=grandAcres.toFixed(3)+' acres × '+anchoCama+' = <strong>'+puertas.toFixed(2)+' puertas</strong>';
     } else {
       puertas=grandPies/100;
       var acresStr=grandAcres>0?' ('+grandAcres.toFixed(3)+' acres)':'';
@@ -5774,14 +5807,18 @@ function grpPayDetail(wid_){
     var ct  = grpCalcType(act);
     var np  = g.participantes.length; if(!np) continue;
     if(ct==='puertas'){
-      // Omega: puertas = acres × anchoCama (exacto), fallback pies/100
-      var grandPies=0, grandAcres=0; var surcos=g.vars.surcos||[];
-      for(var si=0;si<surcos.length;si++){
-        grandPies+=parseFloat(surcos[si].totalPies)||0;
-        grandAcres+=parseFloat(surcos[si].totalAcres)||0;
+      // V20_13: Pennrose5Act → pennAcres directo
+      var grandPies=0, grandAcres=0;
+      if(isPennrose5Act(act)){
+        grandAcres = parseFloat(g.vars.pennAcres)||0;
+      } else {
+        var surcos=g.vars.surcos||[];
+        for(var si=0;si<surcos.length;si++){
+          grandPies+=parseFloat(surcos[si].totalPies)||0;
+          grandAcres+=parseFloat(surcos[si].totalAcres)||0;
+        }
       }
       var anchoCama=parseFloat(g.vars.anchoCama)||0;
-      // V20_12: Pennrose5Act fuerza anchoCama=87.2
       var _ancGpd=isPennrose5Act(act)?PENNROSE_ANCHO:anchoCama;
       var puertas=(grandAcres>0&&_ancGpd>0)?grandAcres*_ancGpd:grandPies/100;
       if(puertas){
