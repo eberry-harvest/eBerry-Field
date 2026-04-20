@@ -2774,7 +2774,12 @@ function mkActRow(wid_,ai,_cont){
     } else {
       var qr=document.createElement('div'); qr.className='qr'; qr.id='qr'+wid_+'_'+ai;
       var lbl2=act.tipo==='Caja'?'Cajas':act.tipo==='Ficha'?'Piezas':'Monto $';
-      qr.innerHTML='<div><label style="margin:0;font-size:10px">'+lbl2+'</label><input type="number" id="qty'+wid_+'_'+ai+'" min="0" step="'+(act.tipo==='$'?'0.5':'1')+'" value="'+(a.qty||'')+'" placeholder="0"></div>'+(act.tipo!=='$'?'<div><label style="margin:0;font-size:10px">$/'+act.tipo+'</label><input type="number" value="'+act.p+'" readonly class="ro"></div>':'');
+      // V20_17: Pennrose5Act individual → 1 solo cuadro (sin div precio readonly)
+      var _showPriceBox = !isPennrose5Act(act);
+      // V20_17: si la UI tendrá 1 solo hijo, forzar grid a 1 columna (evita espacio sobrante)
+      var _singleCol = (!_showPriceBox || act.tipo==='$');
+      if(_singleCol) qr.style.gridTemplateColumns='1fr';
+      qr.innerHTML='<div><label style="margin:0;font-size:10px">'+lbl2+'</label><input type="number" id="qty'+wid_+'_'+ai+'" min="0" step="'+(act.tipo==='$'?'0.5':'1')+'" value="'+(a.qty||'')+'" placeholder="0"></div>'+(_showPriceBox&&act.tipo!=='$'?'<div><label style="margin:0;font-size:10px">$/'+act.tipo+'</label><input type="number" value="'+act.p+'" readonly class="ro"></div>':'');
       div.appendChild(qr);
       var _wi=wid_,_ai=ai;
       setTimeout(function(){
@@ -4392,13 +4397,14 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
       totalCell_='<span style="font-size:11px">'+smartNum(_totVal)+'</span>';
     }
     var _gcsp=_NG2>1?' colspan="'+_NG2+'"':'';
-    trTotal+='<td'+_gcsp+' style="text-align:center;font-weight:700;line-height:1.5;border:1px solid #ccc;border-top:3px solid #1a2b8c;color:#1a2b8c">'+totalCell_+'</td>';
-    trPrice+='<td'+_gcsp+' style="text-align:center;color:#c0392b;font-weight:700;border:1px solid #ddd">$'+_gp2.precio.toFixed(2)+'</td>';
-    trLabor+='<td'+_gcsp+' style="text-align:center;border:1px solid #ddd;color:#3a7fd4;font-size:9px">'+(_gp2.finca||'')+'</td>';
+    // V20_16: colores grupales alineados con los personalizados de Serafín (bordes #000, texto #000 en horarios)
+    trTotal+='<td'+_gcsp+' style="text-align:center;font-weight:700;line-height:1.5;border:1px solid #000;border-top:3px solid #1a2b8c;color:#1a2b8c">'+totalCell_+'</td>';
+    trPrice+='<td'+_gcsp+' style="text-align:center;color:#c0392b;font-weight:700;border:1px solid #000">$'+_gp2.precio.toFixed(2)+'</td>';
+    trLabor+='<td'+_gcsp+' style="text-align:center;border:1px solid #000;color:#3a7fd4;font-size:9px">'+(_gp2.finca||'')+'</td>';
     for(var gs3_=0;gs3_<_NG2;gs3_++){
       var _sub=_gp2.subs[gs3_];
-      trEntry+='<td style="text-align:center;border:1px solid #ddd;color:#111">'+to12h(_sub.ini||'')+'</td>';
-      trExit +='<td style="text-align:center;border:1px solid #ddd;color:#111">'+to12h(_sub.fin||'')+'</td>';
+      trEntry+='<td style="text-align:center;border:1px solid #000;color:#000">'+to12h(_sub.ini||'')+'</td>';
+      trExit +='<td style="text-align:center;border:1px solid #000;color:#000">'+to12h(_sub.fin||'')+'</td>';
     }
   }
   trTotal+='</tr>'; trPrice+='</tr>'; trLabor+='</tr>'; trEntry+='</tr>'; trExit+='</tr>';
