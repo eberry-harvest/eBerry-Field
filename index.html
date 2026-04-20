@@ -2760,7 +2760,8 @@ function mkActRow(wid_,ai,_cont){
   div.appendChild(bdg);
   if(!act.hr){
     // Omega: actividades individuales tipo puertas → sistema de surcos
-    if(isActPuertas(act)){
+    // V20_15: Pennrose5Act individual va al flujo Ficha normal (qty único), sin surcos
+    if(isActPuertas(act) && !isPennrose5Act(act)){
       var surcoDiv=document.createElement('div'); surcoDiv.id='indSurco_'+wid_+'_'+ai;
       surcoDiv.className='qr';
       // V3: migrar surcos viejos → indPies
@@ -2786,7 +2787,8 @@ function mkActRow(wid_,ai,_cont){
   div.appendChild(sb);
   cont.appendChild(div);
   // Epsilon2-fix: renderizar surcos DESPUÉS de que el div esté en el DOM
-  if(isActPuertas(act)) renderIndSurcos(wid_,ai);
+  // V20_15: Pennrose5Act individual NO usa surcos (va al flujo Ficha normal)
+  if(isActPuertas(act) && !isPennrose5Act(act)) renderIndSurcos(wid_,ai);
   if(a.qty||(a.ini&&a.fin)) recalc(wid_,ai);
 }
 
