@@ -2799,7 +2799,7 @@ function renderIndSurcos(wi,ai){
   var cont=gEl('indSurco_'+wi+'_'+ai); if(!cont) return;
   var totalPies=parseFloat(a.indPies)||0;
   var anchoCama=parseFloat(a.indAncho)||0;
-  var puertas=totalPies/100;
+  var puertas=totalPies/getActConstante(act);
   var acres=(totalPies>0&&anchoCama>0)?(totalPies*anchoCama)/43560:0;
   var pago=puertas*act.p;
   var h='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">'
@@ -3542,7 +3542,7 @@ function load(){
           if(!_ipV4 && a.surcos && a.surcos.length){
             for(var si2=0;si2<a.surcos.length;si2++) _ipV4+=parseFloat(a.surcos[si2].totalPies)||0;
           }
-          if(_ipV4>0) a.qty=_ipV4/100;
+          if(_ipV4>0) a.qty=_ipV4/getActConstante(ACTS[a.ai]||a);
           var _iaV4=parseFloat(a.indAncho)||0;
           if(_ipV4>0&&_iaV4>0) a.indAcres=(_ipV4*_iaV4)/43560;
         }
@@ -4127,7 +4127,7 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
         grandAcres_+=parseFloat(surcos_[si_].totalAcres)||0;
       }
       var anchoCama_=parseFloat(g_.vars.anchoCama)||0;
-      var puertas_=(grandAcres_>0&&anchoCama_>0)?grandAcres_*anchoCama_:grandPies_/100;
+      var puertas_=(grandAcres_>0&&anchoCama_>0)?grandAcres_*anchoCama_:grandPies_/getActConstante(gact_);
       if(!puertas_) continue;
       var ppx_=puertas_/np_;
       // V20_05: guardar anchoCama en el col para evitar desalineación tras sort T1/T2
@@ -5042,7 +5042,7 @@ function sendToSheets() {
       var metros = 0;
       var surcos = g.vars.surcos || [];
       for (var si = 0; si < surcos.length; si++) metros += (parseFloat(surcos[si].largo) || 0) * (parseFloat(surcos[si].num) || 0);
-      qtyPerPerson = (metros / 100) / np; // puertas ÷ personas
+      qtyPerPerson = (metros / getActConstante(act)) / np; // V20_10: constante 87.2 en Pennrose para 5 actividades
     } else if (ct === 'cajas') {
       var totalC = parseFloat(g.vars.totalC) || 0;
       qtyPerPerson = totalC / np;
@@ -5129,6 +5129,29 @@ function sendToSheets() {
 // ── GROUP ACTIVITY SYSTEM (dinámico desde GRUPAL_ACTS) ──
 // grpActs = [{gai: índice en GRUPAL_ACTS, participantes:[wid,...], vars:{}}]
 // ✅ grpActs declarada en línea 1077 junto con workers/wid — NO redeclarar aquí
+
+// V20_10: constante especial 87.2 para 5 actividades exactas solo en rancho Pennrose.
+// TODO: migrar a columna `constante` del Google Sheet (ver memoria project_mejora_constante_sheet.md).
+var PENNROSE_ACTS_87_2 = [
+  "Sacar plastico",
+  "Levantar Plastico",
+  "Levantar y sacar plastico",
+  "Quitar y levantar estaca",
+  "Quitar hilo"
+];
+function getActConstante(actOrName){
+  var rancho = (typeof gVal==='function'?(gVal('rancho')||''):'').trim();
+  var rNorm = rancho.split(/\s+/)[0].toLowerCase();
+  if(rNorm!=='pennrose') return 100;
+  var esName='';
+  if(typeof actOrName==='string') esName=actOrName;
+  else if(actOrName) esName = actOrName.es || actOrName.esName || '';
+  esName=(esName||'').trim();
+  for(var _ci=0;_ci<PENNROSE_ACTS_87_2.length;_ci++){
+    if(PENNROSE_ACTS_87_2[_ci]===esName) return 87.2;
+  }
+  return 100;
+}
 
 // Detecta el tipo de cálculo de una actividad grupal
 // 'puertas' = acres × ancho × precio ÷ personas
@@ -5304,8 +5327,9 @@ function renderGrpActs(){
       }
       // Omega: puertas = acres × anchoCama cuando hay ambos, fallback pies/100
       var anchoCamaTot=parseFloat(g.vars.anchoCama)||0;
-      var puertasTot=(grandAcres>0&&anchoCamaTot>0)?grandAcres*anchoCamaTot:grandPies/100;
-      var puertasFormula=(grandAcres>0&&anchoCamaTot>0)?'(acres×ancho)':'(÷100)';
+      var _constTot=getActConstante(act);
+      var puertasTot=(grandAcres>0&&anchoCamaTot>0)?grandAcres*anchoCamaTot:grandPies/_constTot;
+      var puertasFormula=(grandAcres>0&&anchoCamaTot>0)?'(acres×ancho)':'(÷'+_constTot+')';
 
       varsHtml = '<div style="font-size:11px;font-weight:700;color:var(--gr);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">📏 Bloques / Surcos</div>'
         + filasHtml
@@ -5434,7 +5458,7 @@ function updGrpPreview(gi){
       grandAcres+=parseFloat(surcos[si].totalAcres)||0;
     }
     var anchoCama=parseFloat(g.vars.anchoCama)||0;
-    var puertas=(grandAcres>0&&anchoCama>0)?grandAcres*anchoCama:grandPies/100;
+    var puertas=(grandAcres>0&&anchoCama>0)?grandAcres*anchoCama:grandPies/getActConstante(act);
     if(puertas&&np){
       var ppx=puertas/np;
       ppp=ppx*act.p;
@@ -5645,9 +5669,10 @@ function calcGrpAct(gi){
       puertas=grandAcres*anchoCama;
       formulaStr=grandAcres.toFixed(3)+' acres × '+anchoCama+' = <strong>'+puertas.toFixed(2)+' puertas</strong>';
     } else {
-      puertas=grandPies/100;
+      var _constP=getActConstante(act);
+      puertas=grandPies/_constP;
       var acresStr=grandAcres>0?' ('+grandAcres.toFixed(3)+' acres)':'';
-      formulaStr=grandPies.toFixed(0)+' ft'+acresStr+' ÷ 100 = <strong>'+puertas.toFixed(2)+' puertas</strong>';
+      formulaStr=grandPies.toFixed(0)+' ft'+acresStr+' ÷ '+_constP+' = <strong>'+puertas.toFixed(2)+' puertas</strong>';
     }
     if(!puertas||!np){ res.style.display='none'; updGrpPreview(gi); return; }
     var puertasPorPersona=puertas/np;
@@ -5701,7 +5726,7 @@ function grpPayDetail(wid_){
         grandAcres+=parseFloat(surcos[si].totalAcres)||0;
       }
       var anchoCama=parseFloat(g.vars.anchoCama)||0;
-      var puertas=(grandAcres>0&&anchoCama>0)?grandAcres*anchoCama:grandPies/100;
+      var puertas=(grandAcres>0&&anchoCama>0)?grandAcres*anchoCama:grandPies/getActConstante(act);
       if(puertas){
         var ppx=puertas/np;
         var pago=ppx*act.p;
@@ -6838,28 +6863,48 @@ function buildInvoiceAutoData(){
   var rancho = gVal('rancho') || '';
 
   // 1. Individual activities — aggregate by activity+finca
-  var actMap = {}; // key → {product, equipment, totalPersonas, totalField, isHr}
+  // V20_09: actividades tipo Hora se separan por horario (una fila por shift único con sus
+  // horas y personas). Ficha/Daywork siguen agregándose solo por finca+esName (sin horario).
+  var actMap = {};
   for(var wi=0; wi<workers.length; wi++){
     var w = workers[wi];
     for(var ai=0; ai<w.acts.length; ai++){
       var a = w.acts[ai];
-      // ✅ Fix: usar esName (no a.es) — así se guardan las actividades
       var esName = a.esName || (a.ai>=0 && a.ai<ACTS.length ? ACTS[a.ai].es : '');
       if(!esName) continue;
       var act = (a.ai>=0 && a.ai<ACTS.length) ? ACTS[a.ai] : null;
       var isHr = act ? !!act.hr : false;
       var finca = a.finca || rancho;
-      var key = finca + '|' + esName;
-      if(!actMap[key]){
-        actMap[key] = {product: finca, equipment: esName, personas: 0, totalField: 0, isHr: isHr};
-      }
-      actMap[key].personas++;
       if(isHr){
-        // Hora: sumar horas trabajadas
-        var hrs = totalShiftHours(a);
-        actMap[key].totalField += hrs;
+        var _shifts=[];
+        if(a.shifts && a.shifts.length){
+          for(var ssx=0; ssx<a.shifts.length; ssx++){
+            if(a.shifts[ssx].ini || a.shifts[ssx].fin){
+              _shifts.push({ini:a.shifts[ssx].ini||'',fin:a.shifts[ssx].fin||''});
+            }
+          }
+        } else if(a.ini || a.fin){
+          _shifts.push({ini:a.ini||'',fin:a.fin||''});
+        }
+        if(!_shifts.length) _shifts.push({ini:'',fin:''});
+        for(var sis=0; sis<_shifts.length; sis++){
+          var sh=_shifts[sis];
+          var keyH=finca+'|'+esName+'|'+sh.ini+'|'+sh.fin;
+          if(!actMap[keyH]){
+            actMap[keyH]={product:finca, equipment:esName, personas:0, totalField:0, isHr:true, ini:sh.ini, fin:sh.fin, _workerIds:{}};
+          }
+          if(!actMap[keyH]._workerIds[w.id]){
+            actMap[keyH]._workerIds[w.id]=true;
+            actMap[keyH].personas++;
+          }
+          actMap[keyH].totalField += nh(sh.ini, sh.fin) || 0;
+        }
       } else {
-        // Ficha: sumar fichas/piezas del pago ÷ precio
+        var key = finca + '|' + esName;
+        if(!actMap[key]){
+          actMap[key] = {product: finca, equipment: esName, personas: 0, totalField: 0, isHr: false};
+        }
+        actMap[key].personas++;
         var qty = parseFloat(a.qty) || 0;
         actMap[key].totalField += qty;
       }
@@ -6868,9 +6913,13 @@ function buildInvoiceAutoData(){
   for(var k in actMap){
     var m = actMap[k];
     var blockLabel = m.isHr ? 'Horas' : 'Piezas';
+    var equipLbl = m.equipment;
+    if(m.isHr && (m.ini || m.fin)){
+      equipLbl += ' (' + to12h(m.ini||'') + '-' + to12h(m.fin||'') + ')';
+    }
     rows.push({
       product: m.product,
-      equipment: m.equipment,
+      equipment: equipLbl,
       units: m.personas + ' Personas',
       field: m.totalField.toFixed(2),
       blockNum: blockLabel
@@ -6920,9 +6969,14 @@ function buildInvoiceAutoData(){
       });
     } else {
       var qty = parseFloat(v.qty) || 0;
+      // V20_09: grupales tipo 'hora' muestran horario en el label
+      var gEquip = gact.es;
+      if(ct === 'hora' && (v.ini || v.fin)){
+        gEquip += ' (' + to12h(v.ini||'') + '-' + to12h(v.fin||'') + ')';
+      }
       rows.push({
         product: gact.farm || rancho,
-        equipment: gact.es,
+        equipment: gEquip,
         units: ga.participantes.length + ' Personas',
         field: qty.toFixed(2),
         blockNum: ct === 'hora' ? 'Horas' : 'Piezas'
