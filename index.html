@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_21';
+window.APP_VERSION = 'V20_22';
 (function(){
   // Toast persistente de "versión antigua detectada" — NO se puede cerrar, obliga a actualizar
   function showVersionMismatch(remoteV){
@@ -5230,6 +5230,12 @@ function isPennrose5Act(actOrName){
 }
 // Legacy (pies ÷ 100 en cálculos fallback de otros ranchos). Para Pennrose5Act ahora se usa isPennrose5Act + PENNROSE_ANCHO.
 function getActConstante(actOrName){ return 100; }
+// V20_22: Ancho de cama default para convertir piezas → acres en el invoice.
+// Pennrose (5 actividades específicas) usa 87.2; otros ranchos usan 5.67 (default genérico).
+function getAnchoCamaDefault(act){
+  if(isPennrose5Act(act)) return PENNROSE_ANCHO; // 87.2
+  return 5.67;
+}
 
 // Detecta el tipo de cálculo de una actividad grupal
 // 'puertas' = acres × ancho × precio ÷ personas
@@ -7021,9 +7027,12 @@ function buildInvoiceAutoData(){
           actMap[keyH].totalField += nh(sh.ini, sh.fin) || 0;
         }
       } else {
+        // V20_22: si es actividad tipo puertas (hilo, estaca, plástico) → calcular acres
+        var _isPuertas = isActPuertas(act);
+        var _ancho = _isPuertas ? getAnchoCamaDefault(act) : 0;
         var key = finca + '|' + esName;
         if(!actMap[key]){
-          actMap[key] = {product: finca, equipment: esName, personas: 0, totalField: 0, isHr: false};
+          actMap[key] = {product: finca, equipment: esName, personas: 0, totalField: 0, isHr: false, isPuertas: _isPuertas, ancho: _ancho};
         }
         actMap[key].personas++;
         var qty = parseFloat(a.qty) || 0;
@@ -7033,16 +7042,23 @@ function buildInvoiceAutoData(){
   }
   for(var k in actMap){
     var m = actMap[k];
-    var blockLabel = m.isHr ? 'Horas' : 'Piezas';
+    // V20_22: actividades puertas individuales muestran ACRES en vez de Piezas
+    var blockLabel = m.isHr ? 'Horas' : (m.isPuertas ? 'Acres' : 'Piezas');
     var equipLbl = m.equipment;
     if(m.isHr && (m.ini || m.fin)){
       equipLbl += ' (' + to12h(m.ini||'') + '-' + to12h(m.fin||'') + ')';
+    }
+    var fieldVal;
+    if(m.isPuertas && m.ancho > 0){
+      fieldVal = (m.totalField / m.ancho).toFixed(2); // piezas ÷ ancho = acres
+    } else {
+      fieldVal = m.totalField.toFixed(2);
     }
     rows.push({
       product: m.product,
       equipment: equipLbl,
       units: m.personas + ' Personas',
-      field: m.totalField.toFixed(2),
+      field: fieldVal,
       blockNum: blockLabel
     });
   }
