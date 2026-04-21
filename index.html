@@ -23,8 +23,8 @@
 })();
 </script>
 <script>
-// V20_18: check de versión explícito vía version.txt (complementa el SW)
-window.APP_VERSION = 'V20_19';
+// V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
+window.APP_VERSION = 'V20_21';
 (function(){
   // Toast persistente de "versión antigua detectada" — NO se puede cerrar, obliga a actualizar
   function showVersionMismatch(remoteV){
@@ -41,7 +41,8 @@ window.APP_VERSION = 'V20_19';
       + '</div>';
     document.body.appendChild(t);
     document.getElementById('ver-refresh-btn').addEventListener('click', function(){
-      // Limpieza nuclear: borrar todos los caches + unregister SW + reload
+      // V20_21: guardar ack ANTES de recargar — rompe loop si version.txt sigue ≠ APP_VERSION tras recargar
+      try { localStorage.setItem('_ackedVersion', remoteV); } catch(e){}
       try {
         if(window.caches){
           caches.keys().then(function(keys){
@@ -58,7 +59,10 @@ window.APP_VERSION = 'V20_19';
     });
   }
 
+  var _vChecking = false;
   function checkVersion(){
+    if(_vChecking) return;  // evitar overlap
+    _vChecking = true;
     var url = 'version.txt?t=' + Date.now();  // cache-busting
     fetch(url, {cache:'no-store'}).then(function(resp){
       if(!resp.ok) return;
@@ -66,19 +70,27 @@ window.APP_VERSION = 'V20_19';
     }).then(function(txt){
       if(!txt) return;
       var remoteV = txt.trim().split('\n')[0];
-      if(remoteV && remoteV !== window.APP_VERSION){
-        console.warn('[eBerry] Versi\u00f3n local ('+window.APP_VERSION+') != remota ('+remoteV+')');
+      // V20_21: ack — si el usuario ya tocó "Actualizar" para esta versión remota, no mostrar popup aunque APP_VERSION difiera
+      var _acked = '';
+      try { _acked = localStorage.getItem('_ackedVersion') || ''; } catch(e){}
+      console.log('[eBerry] Check versi\u00f3n: local='+window.APP_VERSION+' remota='+remoteV+' acked='+_acked);
+      if(remoteV && remoteV !== window.APP_VERSION && remoteV !== _acked){
+        console.warn('[eBerry] Versi\u00f3n NUEVA detectada: '+remoteV);
         showVersionMismatch(remoteV);
       }
-    }).catch(function(){ /* sin red, ignorar */ });
+    }).catch(function(err){ /* sin red, ignorar */ })
+      .finally(function(){ _vChecking = false; });
   }
 
-  // Check al cargar + cada vez que la app vuelve al frente
+  // V20_20: polling agresivo — load + visibilitychange + focus + cada 30 segundos
   if(document.readyState === 'complete') checkVersion();
   else window.addEventListener('load', checkVersion);
   document.addEventListener('visibilitychange', function(){
     if(document.visibilityState === 'visible') checkVersion();
   });
+  window.addEventListener('focus', checkVersion);
+  // Polling periódico — detecta cambios en vivo sin cerrar/abrir la app
+  setInterval(checkVersion, 30000);
 })();
 
 // V15: Service Worker registration v2 — Network-First + toast de actualización
