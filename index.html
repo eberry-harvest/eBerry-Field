@@ -23,6 +23,64 @@
 })();
 </script>
 <script>
+// V20_18: check de versión explícito vía version.txt (complementa el SW)
+window.APP_VERSION = 'V20_19';
+(function(){
+  // Toast persistente de "versión antigua detectada" — NO se puede cerrar, obliga a actualizar
+  function showVersionMismatch(remoteV){
+    if(document.getElementById('ver-mismatch')) return;
+    var t = document.createElement('div');
+    t.id = 'ver-mismatch';
+    t.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(10,20,50,.95);z-index:99999;display:flex;align-items:center;justify-content:center;font-family:DM Sans,sans-serif;color:#fff';
+    t.innerHTML = '<div style="background:#1a2b8c;padding:28px 24px;border-radius:14px;max-width:88vw;text-align:center;box-shadow:0 10px 40px rgba(0,0,0,.6)">'
+      + '<div style="font-size:42px;margin-bottom:10px">\uD83D\uDD04</div>'
+      + '<div style="font-size:18px;font-weight:700;margin-bottom:10px">Est\u00e1s usando una versi\u00f3n antigua</div>'
+      + '<div style="font-size:13px;opacity:.9;margin-bottom:6px">Versi\u00f3n en tu app: <b>'+(window.APP_VERSION||'?')+'</b></div>'
+      + '<div style="font-size:13px;opacity:.9;margin-bottom:18px">Versi\u00f3n nueva disponible: <b>'+remoteV+'</b></div>'
+      + '<button id="ver-refresh-btn" style="background:#cc2222;color:#fff;border:none;padding:14px 32px;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;min-height:52px;width:100%">\u21bb Actualizar ahora</button>'
+      + '</div>';
+    document.body.appendChild(t);
+    document.getElementById('ver-refresh-btn').addEventListener('click', function(){
+      // Limpieza nuclear: borrar todos los caches + unregister SW + reload
+      try {
+        if(window.caches){
+          caches.keys().then(function(keys){
+            return Promise.all(keys.map(function(k){ return caches.delete(k); }));
+          }).finally(function(){
+            if('serviceWorker' in navigator){
+              navigator.serviceWorker.getRegistrations().then(function(regs){
+                return Promise.all(regs.map(function(r){ return r.unregister(); }));
+              }).finally(function(){ location.reload(true); });
+            } else { location.reload(true); }
+          });
+        } else { location.reload(true); }
+      } catch(e){ location.reload(true); }
+    });
+  }
+
+  function checkVersion(){
+    var url = 'version.txt?t=' + Date.now();  // cache-busting
+    fetch(url, {cache:'no-store'}).then(function(resp){
+      if(!resp.ok) return;
+      return resp.text();
+    }).then(function(txt){
+      if(!txt) return;
+      var remoteV = txt.trim().split('\n')[0];
+      if(remoteV && remoteV !== window.APP_VERSION){
+        console.warn('[eBerry] Versi\u00f3n local ('+window.APP_VERSION+') != remota ('+remoteV+')');
+        showVersionMismatch(remoteV);
+      }
+    }).catch(function(){ /* sin red, ignorar */ });
+  }
+
+  // Check al cargar + cada vez que la app vuelve al frente
+  if(document.readyState === 'complete') checkVersion();
+  else window.addEventListener('load', checkVersion);
+  document.addEventListener('visibilitychange', function(){
+    if(document.visibilityState === 'visible') checkVersion();
+  });
+})();
+
 // V15: Service Worker registration v2 — Network-First + toast de actualización
 (function(){
   var host = location.hostname || '';
@@ -2759,41 +2817,24 @@ function mkActRow(wid_,ai,_cont){
   bdg.id='bd'+wid_+'_'+ai; bdg.className=act.hr?'shift-total':'tbadge rf'; bdg.style.display='none';
   div.appendChild(bdg);
   if(!act.hr){
-    // Omega: actividades individuales tipo puertas → sistema de surcos
-    // V20_15: Pennrose5Act individual va al flujo Ficha normal (qty único), sin surcos
-    if(isActPuertas(act) && !isPennrose5Act(act)){
-      var surcoDiv=document.createElement('div'); surcoDiv.id='indSurco_'+wid_+'_'+ai;
-      surcoDiv.className='qr';
-      // V3: migrar surcos viejos → indPies
-      if(!a.indPies && a.surcos && a.surcos.length){
-        var _migP=0; for(var _ms=0;_ms<a.surcos.length;_ms++) _migP+=parseFloat(a.surcos[_ms].totalPies)||0;
-        if(_migP>0) a.indPies=_migP.toFixed(1);
-      }
-      div.appendChild(surcoDiv);
-      // Epsilon2-fix: renderIndSurcos movido DESPUÉS de cont.appendChild(div) — antes el div no estaba en DOM y gEl devolvía null
-    } else {
-      var qr=document.createElement('div'); qr.className='qr'; qr.id='qr'+wid_+'_'+ai;
-      var lbl2=act.tipo==='Caja'?'Cajas':act.tipo==='Ficha'?'Piezas':'Monto $';
-      // V20_17: Pennrose5Act individual → 1 solo cuadro (sin div precio readonly)
-      var _showPriceBox = !isPennrose5Act(act);
-      // V20_17: si la UI tendrá 1 solo hijo, forzar grid a 1 columna (evita espacio sobrante)
-      var _singleCol = (!_showPriceBox || act.tipo==='$');
-      if(_singleCol) qr.style.gridTemplateColumns='1fr';
-      qr.innerHTML='<div><label style="margin:0;font-size:10px">'+lbl2+'</label><input type="number" id="qty'+wid_+'_'+ai+'" min="0" step="'+(act.tipo==='$'?'0.5':'1')+'" value="'+(a.qty||'')+'" placeholder="0"></div>'+(_showPriceBox&&act.tipo!=='$'?'<div><label style="margin:0;font-size:10px">$/'+act.tipo+'</label><input type="number" value="'+act.p+'" readonly class="ro"></div>':'');
-      div.appendChild(qr);
-      var _wi=wid_,_ai=ai;
-      setTimeout(function(){
-        var q=gEl('qty'+_wi+'_'+_ai);
-        if(q) q.addEventListener('input',function(){ onQty(_wi,_ai,this.value); });
-      },0);
-    }
+    // V20_19: TODAS las actividades individuales usan flujo Ficha único — 1 solo cuadro.
+    // Se elimina el flujo de surcos (pies+ancho) en individual y el cuadro de precio readonly.
+    // Grupal mantiene su lógica separada (renderGrpActs).
+    var qr=document.createElement('div'); qr.className='qr'; qr.id='qr'+wid_+'_'+ai;
+    var lbl2=act.tipo==='Caja'?'Cajas':act.tipo==='$'?'Monto $':'Piezas';
+    qr.style.gridTemplateColumns='1fr'; // forzar 1 columna full-width
+    qr.innerHTML='<div><label style="margin:0;font-size:10px">'+lbl2+'</label><input type="number" id="qty'+wid_+'_'+ai+'" min="0" step="'+(act.tipo==='$'?'0.5':'1')+'" value="'+(a.qty||'')+'" placeholder="0"></div>';
+    div.appendChild(qr);
+    var _wi=wid_,_ai=ai;
+    setTimeout(function(){
+      var q=gEl('qty'+_wi+'_'+_ai);
+      if(q) q.addEventListener('input',function(){ onQty(_wi,_ai,this.value); });
+    },0);
   }
   var sb=document.createElement('div'); sb.className='sub'; sb.id='sb'+wid_+'_'+ai; sb.style.display='none';
   div.appendChild(sb);
   cont.appendChild(div);
-  // Epsilon2-fix: renderizar surcos DESPUÉS de que el div esté en el DOM
-  // V20_15: Pennrose5Act individual NO usa surcos (va al flujo Ficha normal)
-  if(isActPuertas(act) && !isPennrose5Act(act)) renderIndSurcos(wid_,ai);
+  // V20_19: renderIndSurcos desactivado en individual (todas usan flujo Ficha)
   if(a.qty||(a.ini&&a.fin)) recalc(wid_,ai);
 }
 
