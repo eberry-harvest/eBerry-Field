@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_24';
+window.APP_VERSION = 'V20_26';
 (function(){
   // Toast persistente de "versión antigua detectada" — NO se puede cerrar, obliga a actualizar
   function showVersionMismatch(remoteV){
@@ -4382,7 +4382,8 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     }
     if(!unitPr&&ACTS[col4.ai]&&ACTS[col4.ai].p) unitPr='$'+parseFloat(ACTS[col4.ai].p).toFixed(2);
     var _csp=_NS>1?' colspan="'+_NS+'"':'';
-    // V20_08: si es Hora y multi-shift, emitir total por sub-columna (2h/5h) en vez de suma total
+    // V20_08: si es Hora y multi-shift, emitir total por sub-columna (2h/5h).
+    // V20_26: si es no-Hora (Daywork/Ficha/Caja/$) y multi-shift, también emitir total qty por sub-col.
     if(col4.hr && _NS>1){
       for(var sst_=0;sst_<_NS;sst_++){
         var _tarK=col4.shifts[sst_].key;
@@ -4408,6 +4409,42 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
           }
         }
         trTotal+='<td style="text-align:center;border:1px solid #000;border-top:3px solid #1a2b8c;color:#1a2b8c;font-weight:700">'+smartNum(_subTot)+' h</td>';
+      }
+    } else if(!col4.hr && _NS>1){
+      // V20_26: TOTAL no-Hora por sub-columna. Para cada sub-shift, sumar qty de workers presentes.
+      // anyQty=false (sin qty) → fallback a horas referenciales por sub-col.
+      for(var sst2_=0;sst2_<_NS;sst2_++){
+        var _tarK2=col4.shifts[sst2_].key;
+        var _subTotQ=0;
+        var _subTotH=0;
+        var _anyQtySub=false;
+        for(var wts2=0;wts2<wks.length;wts2++){
+          var _cN2=col4.esName||(ACTS[col4.ai]?ACTS[col4.ai].es:'');
+          var _cF2=(col4.finca||'').trim();
+          for(var ka2=0;ka2<wks[wts2].acts.length;ka2++){
+            var _wAct2=wks[wts2].acts[ka2];
+            var _wN2=_wAct2.esName||(ACTS[_wAct2.ai]?ACTS[_wAct2.ai].es:'');
+            var _wT2=_wAct2.tipo||(ACTS[_wAct2.ai]?ACTS[_wAct2.ai].tipo:'')||'';
+            var _wF2=(_wAct2.finca||'').trim();
+            if(_wN2!==_cN2||_wT2!==(col4.tipo||'')||_wF2!==_cF2) continue;
+            var _inShift=false;
+            if(_wAct2.shifts&&_wAct2.shifts.length){
+              for(var ssy_=0;ssy_<_wAct2.shifts.length;ssy_++){
+                var _wkY=(_wAct2.shifts[ssy_].ini||'')+'|'+(_wAct2.shifts[ssy_].fin||'');
+                if(_wkY===_tarK2){ _inShift=true; _subTotH+=nh(_wAct2.shifts[ssy_].ini||'',_wAct2.shifts[ssy_].fin||'')||0; }
+              }
+            } else {
+              var _wkY2=(_wAct2.ini||'')+'|'+(_wAct2.fin||'');
+              if(_wkY2===_tarK2){ _inShift=true; _subTotH+=nh(_wAct2.ini||'',_wAct2.fin||'')||0; }
+            }
+            if(_inShift && parseFloat(_wAct2.qty)){
+              _subTotQ+=parseFloat(_wAct2.qty);
+              _anyQtySub=true;
+            }
+          }
+        }
+        var _subLbl=_anyQtySub?smartNum(_subTotQ):(_subTotH>0?smartNum(_subTotH)+' h':'');
+        trTotal+='<td style="text-align:center;border:1px solid #000;border-top:3px solid #1a2b8c;color:#1a2b8c;font-weight:700">'+_subLbl+'</td>';
       }
     } else {
       trTotal+='<td'+_csp+' style="text-align:center;border:1px solid #000;border-top:3px solid #1a2b8c;color:#1a2b8c;font-weight:700">'+totLbl+'</td>';
@@ -4509,10 +4546,40 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
         var wActFinca2=(wAct2.finca||'').trim();
         if(wActName2===col2Name && wActTipo2===col2Tipo && wActFinca2===col2Finca){found2=wAct2;break;}
       }
-      // V20_08: Daywork/qty no se divide — 1 sola celda con colspan=N (abarca todos los shifts)
+      // V20_26: Daywork/qty SE DISTRIBUYE por sub-shift igual que Hora.
+      // Si worker tiene shifts, qty va en la sub-col donde trabajó (colspan si contiguos).
+      // Si no tiene shifts → fallback colspan=N (preserva comportamiento anterior).
       if(found2 && !col2.hr && parseFloat(found2.qty)){
-        var _cspQ=_NW>1?' colspan="'+_NW+'"':'';
-        td+='<td'+_cspQ+' style="text-align:center">'+smartNum(found2.qty)+'</td>';
+        if(_NW<=1){
+          td+='<td style="text-align:center">'+smartNum(found2.qty)+'</td>';
+          continue;
+        }
+        var _wKeysQ=[];
+        if(found2.shifts && found2.shifts.length){
+          for(var swq_=0;swq_<found2.shifts.length;swq_++){
+            _wKeysQ.push((found2.shifts[swq_].ini||'')+'|'+(found2.shifts[swq_].fin||''));
+          }
+        } else if(found2.ini||found2.fin){
+          _wKeysQ.push((found2.ini||'')+'|'+(found2.fin||''));
+        }
+        if(!_wKeysQ.length){
+          td+='<td colspan="'+_NW+'" style="text-align:center">'+smartNum(found2.qty)+'</td>';
+          continue;
+        }
+        var _fragsQ=_computeFrags(col2.shifts, function(idx){
+          return _wKeysQ.indexOf(col2.shifts[idx].key)>=0;
+        });
+        for(var sq_=0;sq_<_NW;sq_++){
+          var _frQ=_fragsQ[sq_];
+          if(_frQ.type==='start'){
+            var _cspW2=_frQ.span>1?' colspan="'+_frQ.span+'"':'';
+            td+='<td'+_cspW2+' style="text-align:center">'+smartNum(found2.qty)+'</td>';
+          } else if(_frQ.type==='continue'){
+            // skip (cubierto por colspan)
+          } else {
+            td+='<td></td>';
+          }
+        }
         continue;
       }
       var _wKeys=[];
@@ -4615,7 +4682,7 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     +'.namecol{text-align:left!important;font-weight:600;border-right:2px solid #407623}'
     +'.numcol{text-align:center!important;color:#8b0000;font-weight:700;font-size:8px}'
     +'.meta-last td{border-bottom:2px solid #1a2b8c!important}'
-    +'.ft{font-size:7px;color:#5eba45;text-align:center;margin-top:3px;border-top:1px solid #136790;padding-top:3px}'
+    +'.ft{font-size:7px;color:#1a2b8c;text-align:center;margin-top:3px;border-top:1px solid #1a2b8c;padding-top:3px}'
     +'@media print{.nopr{display:none}thead{display:table-header-group}@page{margin:5mm;size:letter landscape}}'
     +'</style></head><body>'
     +'<div class="hdr">'
@@ -7020,6 +7087,12 @@ function buildInvoiceAutoData(){
       var esName = a.esName || (a.ai>=0 && a.ai<ACTS.length ? ACTS[a.ai].es : '');
       if(!esName) continue;
       var act = (a.ai>=0 && a.ai<ACTS.length) ? ACTS[a.ai] : null;
+      // V20_25 FIX: si ai no resuelve (ACTS desincronizado tras reload Sheet), buscar por esName
+      if(!act && esName){
+        for(var _ax=0; _ax<ACTS.length; _ax++){
+          if(ACTS[_ax].es === esName){ act = ACTS[_ax]; break; }
+        }
+      }
       var isHr = act ? !!act.hr : false;
       var finca = a.finca || rancho;
       if(isHr){
@@ -7048,8 +7121,10 @@ function buildInvoiceAutoData(){
         }
       } else {
         // V20_22: si es actividad tipo puertas (hilo, estaca, plástico) → calcular acres
-        var _isPuertas = isActPuertas(act);
-        var _ancho = _isPuertas ? getAnchoCamaDefault(act) : 0;
+        // V20_25 FIX: usar _actRef que incluye esName — así isActPuertas detecta por keyword aunque act sea null
+        var _actRef = act || {es: esName};
+        var _isPuertas = isActPuertas(_actRef);
+        var _ancho = _isPuertas ? getAnchoCamaDefault(_actRef) : 0;
         var key = finca + '|' + esName;
         if(!actMap[key]){
           actMap[key] = {product: finca, equipment: esName, personas: 0, totalField: 0, isHr: false, isPuertas: _isPuertas, ancho: _ancho};
@@ -8091,7 +8166,7 @@ function generateSemPDF(){
     +'.name{text-align:left;font-weight:600;white-space:nowrap}'
     +'.total{font-weight:700;background:#d0d8ff;color:#1a2b8c}'
     +'.grand{font-weight:900;background:#1a2b8c;color:#fff}'
-    +'.ft{font-size:8px;color:#5eba45;text-align:center;margin-top:6px;border-top:1px solid #136790;padding-top:5px}'
+    +'.ft{font-size:8px;color:#1a2b8c;text-align:center;margin-top:6px;border-top:1px solid #1a2b8c;padding-top:5px}'
     +'@media print{.nopr{display:none}@page{size:landscape;margin:10mm}}'
     +'</style></head><body>';
 
