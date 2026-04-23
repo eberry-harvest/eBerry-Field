@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_36';
+window.APP_VERSION = 'V20_37';
 (function(){
   // Toast persistente de "versión antigua detectada" — NO se puede cerrar, obliga a actualizar
   function showVersionMismatch(remoteV){
@@ -216,7 +216,7 @@ header{background:var(--g);color:#fff;padding:12px 14px 0;position:sticky;top:0;
 .logo{font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:2px}
 .logo em{color:var(--a);font-style:normal}
 .dpill{background:rgba(255,255,255,.18);border-radius:20px;padding:4px 11px;font-size:13px;font-weight:500}
-.ver-check-btn{background:rgba(255,255,255,.15);border:none;border-radius:50%;width:32px;height:32px;min-width:32px;color:#fff;font-size:16px;font-weight:700;cursor:pointer;padding:0;display:inline-flex;align-items:center;justify-content:center;transition:background .2s}
+.ver-check-btn{background:rgba(255,255,255,.15);border:none;border-radius:50%;width:44px;height:44px;min-width:44px;min-height:44px;color:#fff;font-size:20px;font-weight:700;cursor:pointer;padding:0;display:inline-flex;align-items:center;justify-content:center;transition:background .2s}
 .ver-check-btn:hover{background:rgba(255,255,255,.28)}
 .ver-check-btn:disabled{opacity:.6;cursor:default}
 .ver-check-btn.spin{animation:verSpin 1s linear infinite}
@@ -601,7 +601,7 @@ html.login-locked{overflow:hidden!important;height:100%!important}
     <div style="display:flex;align-items:center;gap:6px">
       <div class="dpill" id="hdate">—</div>
       <button onclick="showHistory()" style="background:rgba(255,255,255,.15);border:none;border-radius:20px;padding:4px 10px;color:#fff;font-size:12px;font-weight:600;cursor:pointer">📅</button>
-      <button id="verCheckBtn" class="ver-check-btn" onclick="window.manualVersionCheck()" title="Buscar actualización">↻</button>
+      <button id="verCheckBtn" class="ver-check-btn" onclick="window.manualVersionCheck()" title="Buscar actualización" aria-label="Buscar actualización de versión">↻</button>
       <button id="logoutBtn" onclick="logoutUser()" style="display:none;background:rgba(204,34,34,.75);border:none;border-radius:20px;padding:4px 10px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">🚪 Salir</button>
     </div>
   </div>
@@ -1481,6 +1481,23 @@ function closeSession(){
 }
 
 function logoutUser(){
+  // V20_37 FIX: validar cola offline antes de cerrar sesión — evita que próximo surquero vea datos ajenos
+  try {
+    var q = (typeof getOfflineQueue==='function') ? getOfflineQueue() : [];
+    if(q && q.length > 0){
+      var ok = confirm('⚠️ Tienes ' + q.length + ' envío(s) pendiente(s) en la cola offline.\n\n' +
+                       'Si cierras sesión ahora, otro surquero podría ver estos datos al entrar.\n\n' +
+                       '¿Quieres cerrar sesión de todos modos? (Cancelar para intentar enviar primero)');
+      if(!ok){
+        // Usuario canceló — intentar flush antes de salir
+        if(typeof flushOfflineQueue==='function') flushOfflineQueue();
+        return;
+      }
+      // Usuario confirmó salir — limpiar cola para no contaminar próxima sesión
+      try { localStorage.removeItem('eb_offline_queue'); } catch(e){}
+    }
+  } catch(e){ console.warn('V20_37 logout queue check fallo:', e); }
+
   saveQuiet();
   closeSession();
   if(_keepAliveTimer){ clearInterval(_keepAliveTimer); _keepAliveTimer=null; }
@@ -2750,7 +2767,9 @@ function _enterReadOnly(payload){
       }
       var qty = (typeof pa.qty==='number') ? pa.qty : parseFloat(pa.qty)||0;
       var price = parseFloat(pa.unitPrice)||0;
-      var payEst = parseFloat(pa.payEst)||(qty*price);
+      // V20_37 FIX: fallback robusto — 0 es valor válido, no caer a (qty*price) si payEst fue explícitamente 0
+      var _payEstParsed = parseFloat(pa.payEst);
+      var payEst = (!isNaN(_payEstParsed) && pa.payEst !== null && pa.payEst !== undefined && pa.payEst !== '') ? _payEstParsed : (qty*price);
       w.acts.push({
         ai: aiIdx, esName: pa.actEs||'', tipo: pa.tipo||'',
         qty: qty, ini: pa.hEnt||'', fin: pa.hSal||'',
@@ -5376,7 +5395,8 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     rows+='<tr style="height:22px">'+etd+'</tr>';
   }
 
-  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Payroll '+vals.rancho+' '+vals.fecha+'</title>'
+  // V20_37 FIX XSS: esc() en todos los valores inyectados al HTML del PDF
+  var html='<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Payroll '+esc(vals.rancho||'')+' '+esc(vals.fecha||'')+'</title>'
     +'<style>'
     +'*{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}'
     +'body{font-family:Arial,sans-serif;font-size:10px;padding:6px 8px;color:#000}'
@@ -5396,11 +5416,11 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     +'<div>'
     +'<div style="font-size:13px;font-weight:700;color:#1a2b8c;line-height:1.1">eberry harvest company llc</div>'
     +'<div style="font-size:11px;font-weight:900;letter-spacing:.5px">DAILY PAYROLL SHEET</div>'
-    +'<div style="font-size:9px;color:#000;margin-top:1px">Farm: '+vals.rancho+' &nbsp;|&nbsp; Bus #'+vals.numBus+' &nbsp;|&nbsp; '+(currentUser&&currentUser.isAdmin?'ADM':vals.surquero)+' &nbsp;|&nbsp; Lunch: '+lunchMin+' min</div>'
+    +'<div style="font-size:9px;color:#000;margin-top:1px">Farm: '+esc(vals.rancho||'')+' &nbsp;|&nbsp; Bus #'+esc(String(vals.numBus||''))+' &nbsp;|&nbsp; '+(currentUser&&currentUser.isAdmin?'ADM':esc(vals.surquero||''))+' &nbsp;|&nbsp; Lunch: '+lunchMin+' min</div>'
     +'</div></div>'
     +'<div style="text-align:right">'
     +'<div style="font-size:7px;font-weight:700;color:#ff1900;text-transform:uppercase;letter-spacing:1px">DATE / FECHA</div>'
-    +'<div style="font-size:18px;font-weight:900;color:#1a2b8c;letter-spacing:1px">'+vals.fecha+'</div>'
+    +'<div style="font-size:18px;font-weight:900;color:#1a2b8c;letter-spacing:1px">'+esc(vals.fecha||'')+'</div>'
     +'</div>'
     +'</div>'
     +'<table>'
@@ -5466,7 +5486,7 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
         +'<tr style="background:#8b0000;color:#fff;font-weight:700"><td colspan="2" style="padding:5px 8px;font-size:10px;border:1px solid #c00">TOTAL P&Eacute;RDIDA EMPRESA</td><td style="padding:5px 8px;font-size:12px;text-align:right;border:1px solid #c00">-$'+totalLoss.toFixed(2)+'</td></tr>'
         +'</table></div>';
     })()
-    +'<div class="ft">'+vals.rancho+' &nbsp;|&nbsp; '+vals.fecha+' &nbsp;|&nbsp; '+wks.length+' trabajadores &nbsp;|&nbsp; Bus: #'+vals.numBus+' &nbsp;|&nbsp; Surquero: '+(currentUser&&currentUser.isAdmin?'ADM':vals.surquero)+' &nbsp;|&nbsp; Generado: '+new Date().toLocaleString()+' &nbsp;|&nbsp; App: '+(window.APP_VERSION||'?')+(_readOnlyMode?' &nbsp;|&nbsp; 📖 REGENERADO DESDE SHEETS':'')+'</div>'
+    +'<div class="ft">'+esc(vals.rancho||'')+' &nbsp;|&nbsp; '+esc(vals.fecha||'')+' &nbsp;|&nbsp; '+wks.length+' trabajadores &nbsp;|&nbsp; Bus: #'+esc(String(vals.numBus||''))+' &nbsp;|&nbsp; Surquero: '+(currentUser&&currentUser.isAdmin?'ADM':esc(vals.surquero||''))+' &nbsp;|&nbsp; Generado: '+new Date().toLocaleString()+' &nbsp;|&nbsp; App: '+(window.APP_VERSION||'?')+(_readOnlyMode?' &nbsp;|&nbsp; 📖 REGENERADO DESDE SHEETS':'')+'</div>'
     +'<div class="nopr" style="text-align:center;margin-top:16px"><button onclick="window.print()" style="background:#1a7a4a;color:#fff;border:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-right:10px">🖨️ Imprimir / Guardar PDF</button><button onclick="window.close()" style="background:#eee;color:#555;border:none;padding:12px 20px;border-radius:8px;font-size:14px;cursor:pointer">Cerrar</button></div>'
     +'</body></html>';
   // V20_24: window.open sin features restrictivas (Android/iOS moderno bloquea `width=1000,height=700`) + fallback Blob robusto (timeout 60s para que el browser procese)
@@ -5979,6 +5999,11 @@ function sendToSheets() {
   }
 
   if (btn) { btn.textContent = '📤 Enviando...'; btn.disabled = true; }
+
+  // V20_37 FIX: _queueId SIEMPRE (online + offline) para que FieldSync deduplique doble-tap
+  if(!payload._queueId){
+    payload._queueId = Date.now() + '_' + Math.random().toString(36).substr(2,6);
+  }
 
   // V8: usa submitViaIframe unificado
   submitViaIframe(SHEETS_URL, payload,
@@ -9181,6 +9206,10 @@ function sendSemToSheets(){
   }
 
   toast('📤 Enviando semanal...');
+  // V20_37 FIX: _queueId para dedup de doble-tap en semanal
+  if(!payload._queueId){
+    payload._queueId = Date.now() + '_' + Math.random().toString(36).substr(2,6);
+  }
   // V8: usa submitViaIframe unificado
   submitViaIframe(SHEETS_URL, payload,
     function(){ recordLastSend(); toast('✅ ' + payload.workers.length + ' trabajador(es) semanal enviado a Sheets'); },
