@@ -1,13 +1,15 @@
 /* ═══════════════════════════════════════════════════════════════
-   eBerry Field — Service Worker v2.0
+   eBerry Field — Service Worker v3.0 (2026-04-23)
    Estrategia: Network-First para HTML, Cache-First para CDN
    ---------------------------------------------------------------
-   IMPORTANTE: Este archivo NUNCA necesita modificarse.
-   La detección de "HTML nuevo" se hace por hash de contenido,
-   no por versión del SW. Serafín solo toca index.html.
+   V3 FIX CRÍTICO: version.txt ya no se cachea (Network-only).
+   El SW v2 interceptaba version.txt y servía cache viejo → clientes
+   quedaban atorados en versiones viejas sin detectar nueva. Backup
+   del v2 está en sw_v2_backup.js. CACHE_NAME bumpeado a v3 para que
+   activate() borre el cache v2 automáticamente al activarse.
    ═══════════════════════════════════════════════════════════════ */
 
-var CACHE_NAME = 'eberry-v2';
+var CACHE_NAME = 'eberry-v4';
 
 // Dominios de API → NUNCA cachear (datos dinámicos)
 var API_DOMAINS = [
@@ -29,7 +31,7 @@ var CDN_DOMAINS = [
 // usuario acepta la actualización desde el toast.
 // ─────────────────────────────────────────────────────────────
 self.addEventListener('install', function(e) {
-  console.log('[SW] Instalando v2...');
+  console.log('[SW] Instalando v4...');
   // Pre-cachear solo el root. Los CDN se cachean on-demand.
   e.waitUntil(
     caches.open(CACHE_NAME).then(function(cache) {
@@ -46,7 +48,7 @@ self.addEventListener('install', function(e) {
 // ACTIVATE: limpiar caches de versiones anteriores
 // ─────────────────────────────────────────────────────────────
 self.addEventListener('activate', function(e) {
-  console.log('[SW] Activado v2');
+  console.log('[SW] Activado v4 — fix clone bug');
   e.waitUntil(
     caches.keys().then(function(names) {
       return Promise.all(
@@ -204,8 +206,10 @@ function strategyCacheFirstCdn(request) {
   return caches.match(request).then(function(cached) {
     var fetchPromise = fetch(request).then(function(networkResp) {
       if (networkResp && networkResp.ok) {
+        // FIX v4: clonar ANTES de devolver el original — evita "Response body is already used"
+        var respClone = networkResp.clone();
         caches.open(CACHE_NAME).then(function(cache) {
-          cache.put(request, networkResp.clone());
+          cache.put(request, respClone);
         });
       }
       return networkResp;
@@ -226,8 +230,10 @@ function strategyCacheFirstLocal(request) {
     if (cached) return cached;
     return fetch(request).then(function(networkResp) {
       if (networkResp && networkResp.ok) {
+        // FIX v4: clonar ANTES de devolver original — evita "Response body is already used"
+        var respClone = networkResp.clone();
         caches.open(CACHE_NAME).then(function(cache) {
-          cache.put(request, networkResp.clone());
+          cache.put(request, respClone);
         });
       }
       return networkResp;
@@ -298,6 +304,18 @@ self.addEventListener('fetch', function(e) {
 
   // Solo GET
   if (e.request.method !== 'GET') return;
+
+  // 0) V3 FIX CRÍTICO: version.txt → Network-only, NUNCA cachear.
+  //    El SW v2 interceptaba y devolvía cache viejo → checkVersion nunca detectaba
+  //    nuevas versiones → clientes atorados en versiones viejas. Ahora bypass total.
+  if (url.origin === self.location.origin && url.pathname.endsWith('/version.txt')) {
+    e.respondWith(
+      fetch(e.request, { cache: 'no-store' }).catch(function(){
+        return new Response('', { status: 503, statusText: 'Offline' });
+      })
+    );
+    return;
+  }
 
   // 1) APIs de Google → pasar directo a la red, sin tocar
   if (isApiUrl(url)) return;
