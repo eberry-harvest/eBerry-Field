@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_37';
+window.APP_VERSION = 'V20_38';
 (function(){
   // Toast persistente de "versión antigua detectada" — NO se puede cerrar, obliga a actualizar
   function showVersionMismatch(remoteV){
@@ -875,6 +875,14 @@ html.login-locked{overflow:hidden!important;height:100%!important}
     <div id="cloudLoadBox" style="margin:18px 0 12px;padding:12px;border:1.5px dashed var(--g);border-radius:10px;background:var(--gp)">
       <div style="font-size:14px;font-weight:800;color:var(--g);margin-bottom:8px">☁️ Cargar día desde Sheets</div>
       <div style="font-size:11px;color:var(--gr);margin-bottom:10px">Consulta un día enviado a Payroll Field Master (últimos 90 días). Modo solo lectura — no modifica tus datos actuales.</div>
+      <!-- V20_38: admin ve dropdown de surquero; surqueros normales solo ven el suyo -->
+      <div id="cloudLoadSurqBox" style="display:none;margin-bottom:8px">
+        <label style="font-size:11px;color:var(--gr);font-weight:700">Surquero:</label>
+        <select id="cloudLoadSurquero" aria-label="Selecciona surquero a consultar"
+                style="width:100%;padding:10px;border:1.5px solid var(--bd);border-radius:8px;font-size:16px;min-height:44px;background:#fff;margin-top:4px">
+          <option value="">— Selecciona surquero —</option>
+        </select>
+      </div>
       <div style="display:flex;gap:8px;align-items:stretch">
         <input type="date" id="cloudLoadDate" aria-label="Fecha a consultar en Sheets"
                style="flex:1;min-width:140px;padding:10px;border:1.5px solid var(--bd);border-radius:8px;font-size:16px;min-height:44px;background:#fff">
@@ -1481,6 +1489,14 @@ function closeSession(){
 }
 
 function logoutUser(){
+  // V20_38 FIX: si está en modo lectura, salir PRIMERO para restaurar estado vivo antes de guardar/limpiar
+  if(_readOnlyMode){
+    try { exitReadOnly(); } catch(e){ console.warn('V20_38 exitReadOnly fallo:', e); }
+    // Forzar flags por si exitReadOnly no los limpió
+    _readOnlyMode = false;
+    _localBackup = null;
+  }
+
   // V20_37 FIX: validar cola offline antes de cerrar sesión — evita que próximo surquero vea datos ajenos
   try {
     var q = (typeof getOfflineQueue==='function') ? getOfflineQueue() : [];
@@ -2702,9 +2718,18 @@ function loadDayFromSheets(){
   var inp=gEl('cloudLoadDate'); var st=gEl('cloudLoadStatus'); var btn=gEl('cloudLoadBtn');
   var fecha = inp && inp.value;
   if(!fecha){ if(st) st.textContent='⚠️ Selecciona una fecha'; return; }
-  var surquero = (currentUser && currentUser.name) || gVal('surquero') || '';
-  if(!surquero){ toast('⚠️ No se detecta surquero activo'); return; }
   var isAdmin = !!(currentUser && currentUser.isAdmin);
+  // V20_38: admin usa dropdown; surquero normal usa su propio nombre
+  var targetSurquero;
+  if(isAdmin){
+    var sel = gEl('cloudLoadSurquero');
+    targetSurquero = sel && sel.value;
+    if(!targetSurquero){ if(st) st.textContent='⚠️ Selecciona un surquero'; return; }
+  } else {
+    targetSurquero = (currentUser && currentUser.name) || gVal('surquero') || '';
+    if(!targetSurquero){ toast('⚠️ No se detecta surquero activo'); return; }
+  }
+  var myName = (currentUser && currentUser.name) || gVal('surquero') || '';
 
   btn.disabled=true; btn.textContent='…';
   if(st) st.textContent='⏳ Consultando Sheets…';
@@ -2712,9 +2737,9 @@ function loadDayFromSheets(){
   var url = APPS_SCRIPT_URL
     + '?action=loadDay'
     + '&fecha='    + encodeURIComponent(fecha)
-    + '&surquero=' + encodeURIComponent(surquero)
+    + '&surquero=' + encodeURIComponent(myName)
     + '&isAdmin='  + (isAdmin?'true':'false')
-    + '&claimedSurquero=' + encodeURIComponent(surquero);
+    + '&claimedSurquero=' + encodeURIComponent(targetSurquero);
 
   fetch(url, {method:'GET', cache:'no-store'})
     .then(function(r){ return r.json(); })
@@ -2770,6 +2795,14 @@ function _enterReadOnly(payload){
       // V20_37 FIX: fallback robusto — 0 es valor válido, no caer a (qty*price) si payEst fue explícitamente 0
       var _payEstParsed = parseFloat(pa.payEst);
       var payEst = (!isNaN(_payEstParsed) && pa.payEst !== null && pa.payEst !== undefined && pa.payEst !== '') ? _payEstParsed : (qty*price);
+      // V20_38: buscar payType en ALL_ACTS si la actividad no está en ACTS del rancho actual
+      var _payTypeForAct = '';
+      if(aiIdx>=0 && ACTS[aiIdx]) _payTypeForAct = ACTS[aiIdx].payType || '';
+      else {
+        for(var _aai=0; _aai<ALL_ACTS.length; _aai++){
+          if(ALL_ACTS[_aai].es === pa.actEs){ _payTypeForAct = ALL_ACTS[_aai].payType || ''; break; }
+        }
+      }
       w.acts.push({
         ai: aiIdx, esName: pa.actEs||'', tipo: pa.tipo||'',
         qty: qty, ini: pa.hEnt||'', fin: pa.hSal||'',
@@ -2777,7 +2810,7 @@ function _enterReadOnly(payload){
         finca: pa.finca||'',
         shifts: (pa.hEnt||pa.hSal) ? [{ini:pa.hEnt||'', fin:pa.hSal||''}] : [],
         pay: payEst,
-        _frozen: true, _unitPrice: price
+        _frozen: true, _unitPrice: price, _payType: _payTypeForAct
       });
       if(pa.hEnt) _iniAll.push(pa.hEnt);
       if(pa.hSal) _finAll.push(pa.hSal);
@@ -4229,6 +4262,8 @@ function _persistState(vals, wSave){
 }
 
 function save(){
+  // V20_38 FIX: bloquear guardado manual en modo lectura (evita contaminar localStorage con datos del día cargado)
+  if(_readOnlyMode){ toast('🔒 Modo lectura — no se puede guardar'); return; }
   try {
     var s=_serializeState();
     _persistState(s.vals, s.wSave);
@@ -4647,6 +4682,33 @@ function showHistory(){
     }
     gEl('histList').innerHTML=h;
   }
+
+  // V20_38: si admin, mostrar dropdown de surqueros; si no, ocultarlo
+  try {
+    var isAdmin = !!(currentUser && currentUser.isAdmin);
+    var box = gEl('cloudLoadSurqBox');
+    var sel = gEl('cloudLoadSurquero');
+    if(box) box.style.display = isAdmin ? 'block' : 'none';
+    if(isAdmin && sel){
+      // Lista de surqueros = LIDERES (desde MASTER Sheet "Lideres")
+      var surqueros = [];
+      if(typeof LIDERES !== 'undefined' && LIDERES && LIDERES.length){
+        LIDERES.forEach(function(l){ if(l && l.name) surqueros.push(l.name); });
+      }
+      // dedup + sort
+      var uniq = {};
+      surqueros.forEach(function(n){ uniq[n.toLowerCase()] = n; });
+      var list = Object.keys(uniq).map(function(k){ return uniq[k]; }).sort();
+      if(list.length){
+        sel.innerHTML = '<option value="">— Selecciona surquero —</option>' +
+          list.map(function(n){ return '<option value="'+esc(n)+'">'+esc(n)+'</option>'; }).join('');
+      } else {
+        // V20_38: LIDERES vacío (ej: offline o sin carga del MASTER) — mostrar mensaje
+        sel.innerHTML = '<option value="">⚠️ Sin lista de surqueros — recarga la app</option>';
+      }
+    }
+  } catch(e){ console.warn('V20_38 populate surqueros fallo:', e); }
+
   gEl('histOv').classList.add('on');
 }
 
@@ -4781,24 +4843,40 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     }
   }
   // Construir columnas: Hora agrupa por actividad+horario, otros por actividad
+  // V20_38 FIX: si ai=-1 (actividad no está en ACTS del rancho actual, ej: admin revisa otro día),
+  // usar datos preservados del worker (esName, tipo, _unitPrice) como fallback robusto
   for(i=0;i<wks.length;i++){
     for(j=0;j<wks[i].acts.length;j++){
       var a_=wks[i].acts[j];
       var ai=a_.ai;
       var actDef=ACTS[ai];
-      if(!actDef) continue;
-      // colKey basado en esName (estable) en vez de ai numérico (puede cambiar)
-      var actName=actDef.es||actDef.en||(''+ai);
+      // V20_38 FIX: NO usar continue — construir columna con datos del worker
+      var actName, actTipo, actPayT, actHr, actLabel;
+      if(actDef){
+        actName = actDef.es || actDef.en || (''+ai);
+        actTipo = actDef.tipo || '';
+        actPayT = actDef.payType || '';
+        actHr   = !!actDef.hr;
+        actLabel= actDef.en || actDef.es;
+      } else {
+        // Fallback: actividad no existe en ACTS del rancho actual
+        if(!a_.esName) continue; // sin esName tampoco, saltar
+        actName = a_.esName;
+        actTipo = a_.tipo || '';
+        actPayT = a_._payType || '';
+        actHr   = (actTipo.toLowerCase() === 'hora');
+        actLabel= a_.esName;
+      }
       var colKey;
       // V20_05 FIX1: colKey = nombre + tipo + finca. Separa columnas cuando la misma actividad
       // se hace en 2 fincas distintas del mismo rancho (antes se fusionaba y la 2da finca desaparecía del PDF).
       var _fincaKey=(a_.finca||'').trim();
-      colKey = actName + '|' + (actDef.tipo||'') + '|' + _fincaKey;
+      colKey = actName + '|' + actTipo + '|' + _fincaKey;
       var found=false;
       for(var k=0;k<actCols.length;k++){ if(actCols[k].colKey===colKey){found=true;break;} }
       if(!found) actCols.push({
         ai:ai, colKey:colKey, wid:null,
-        label:actDef.en||actDef.es, tipo:actDef.tipo, payType:actDef.payType||'', hr:actDef.hr,
+        label:actLabel, tipo:actTipo, payType:actPayT, hr:actHr,
         esName:actName, finca:_fincaKey
       });
     }
@@ -5092,7 +5170,9 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
         if(wActName4===col4Name && wActTipo4===(col4.tipo||'') && wActFinca4===col4Finca){
           var act2=wks[w2].acts[a2];
           if(!unitPr){
+            // V20_38: usar _unitPrice preservado del worker cuando ACTS[ai] no existe (admin ve otro rancho)
             if(act2.unitPrice) unitPr='$'+parseFloat(act2.unitPrice).toFixed(2);
+            else if(act2._unitPrice) unitPr='$'+parseFloat(act2._unitPrice).toFixed(2);
             else if(ACTS[col4.ai]&&ACTS[col4.ai].p) unitPr='$'+parseFloat(ACTS[col4.ai].p).toFixed(2);
           }
           if(!laborLbl && act2.finca) laborLbl=act2.finca;
