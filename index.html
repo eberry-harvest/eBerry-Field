@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_30';
+window.APP_VERSION = 'V20_34';
 (function(){
   // Toast persistente de "versión antigua detectada" — NO se puede cerrar, obliga a actualizar
   function showVersionMismatch(remoteV){
@@ -621,6 +621,19 @@ html.login-locked{overflow:hidden!important;height:100%!important}
   </div>
 </div>
 
+<!-- V20_31: Modal TRANSLAPE DE HORARIOS -->
+<div id="overlapOv" class="ov" role="dialog" aria-modal="true" aria-labelledby="overlapTit">
+  <div class="md" style="max-width:420px">
+    <div id="overlapTit" style="font-size:40px;text-align:center;margin-bottom:6px">⏰⛔</div>
+    <div class="mt" style="color:#c0392b;text-align:center;font-size:17px;line-height:1.3">Horarios translapados</div>
+    <div class="ms" style="text-align:center;margin-top:8px">Tu trabajador no pudo estar en 2 actividades al mismo tiempo, favor de corroborar sus horarios.</div>
+    <div id="overlapDetail" style="background:#fdf2f0;border-left:4px solid #c0392b;padding:10px 12px;margin:12px 0;font-size:13px;color:#7a1e12;border-radius:6px;text-align:left"></div>
+    <div class="mbs" style="margin-top:14px">
+      <button class="mok" onclick="closeOverlap()" autofocus>Revisar horarios</button>
+    </div>
+  </div>
+</div>
+
 <!-- Alpha2: WELCOME / CONTRACT SUMMARY MODAL -->
 <div class="ov" id="welcomeOv">
   <div class="md" style="max-width:420px">
@@ -811,11 +824,44 @@ html.login-locked{overflow:hidden!important;height:100%!important}
     <div class="mt">📅 Historial de Días</div>
     <div class="ms">Toca un día para cargarlo</div>
     <div id="histList" style="margin:12px 0"></div>
+
+    <!-- V20_34: Cargar día desde Sheets (FIELD_DROP) -->
+    <div id="cloudLoadBox" style="margin:18px 0 12px;padding:12px;border:1.5px dashed var(--g);border-radius:10px;background:var(--gp)">
+      <div style="font-size:14px;font-weight:800;color:var(--g);margin-bottom:8px">☁️ Cargar día desde Sheets</div>
+      <div style="font-size:11px;color:var(--gr);margin-bottom:10px">Consulta un día enviado a Payroll Field Master (últimos 90 días). Modo solo lectura — no modifica tus datos actuales.</div>
+      <div style="display:flex;gap:8px;align-items:stretch">
+        <input type="date" id="cloudLoadDate" aria-label="Fecha a consultar en Sheets"
+               style="flex:1;min-width:140px;padding:10px;border:1.5px solid var(--bd);border-radius:8px;font-size:16px;min-height:44px;background:#fff">
+        <button class="btn" id="cloudLoadBtn" onclick="loadDayFromSheets()"
+                style="background:var(--g);color:#fff;min-height:44px;padding:0 18px;white-space:nowrap;font-weight:700">☁️ Cargar</button>
+      </div>
+      <div id="cloudLoadStatus" aria-live="polite" style="margin-top:8px;font-size:12px;color:var(--gr);min-height:16px"></div>
+    </div>
+
     <div class="mbs" style="margin-top:10px">
       <button class="mca" onclick="gEl('histOv').classList.remove('on')" style="flex:1">Cerrar</button>
     </div>
   </div>
 </div>
+
+<!-- V20_34: Banner modo lectura sticky -->
+<div id="readOnlyBanner" role="alert" aria-live="assertive" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#fff3c4;border-bottom:2px solid #e6b800;padding:10px 14px;align-items:center;justify-content:space-between;gap:10px;font-size:13px;font-weight:700;color:#5a4500;box-shadow:0 2px 6px rgba(0,0,0,.12);min-height:44px;box-sizing:border-box">
+  <span style="flex:1;line-height:1.3">📖 MODO LECTURA — Día <b id="roDateLbl">—</b> cargado desde Sheets</span>
+  <button onclick="exitReadOnly()" style="background:#cc2222;color:#fff;border:none;border-radius:6px;padding:8px 14px;font-weight:800;font-size:12px;cursor:pointer;min-height:36px">Salir</button>
+</div>
+<style>
+/* V20_34 — modo lectura: deshabilita inputs y oculta botones de escritura */
+body.readOnly{padding-top:56px}
+body.readOnly .card input:not([type="date"]),
+body.readOnly .card select,
+body.readOnly .card textarea,
+body.readOnly .card button:not(.roExit):not(.mca){
+  pointer-events:none !important;opacity:.75 !important
+}
+body.readOnly #btnSend,
+body.readOnly [onclick*="sendToSheets"],
+body.readOnly [onclick*="openNewDay"]{display:none !important}
+</style>
 
 <!-- NUEVO DIA MODAL -->
 <div class="ov" id="newDayOv">
@@ -2474,13 +2520,312 @@ function closeHorObl(){ var ov=gEl('horOblOv'); if(ov) ov.classList.remove('on')
 // checkHorarioBeforeAdd: se llama ANTES de agregar otro trabajador
 // Valida que el último trabajador ya tenga horario en sus actividades
 function checkHorarioBeforeAdd(){
-  if(!workers || !workers.length) return true; // primer worker, ok
+  if(!workers || !workers.length) return true;
   var last=workers[workers.length-1];
-  if(!last || !last.acts || !last.acts.length) return true; // sin acts aún
+  if(!last || !last.acts || !last.acts.length) return true;
   var r=validateWorkerHasHorario(last);
   if(!r.ok){ openHorObl(); return false; }
+  // V20_31: validar translapes antes de agregar otro worker
+  var ov=checkOverlapsInWorker(last);
+  if(!ov.ok){ openOverlap(ov, last.name); return false; }
   return true;
 }
+
+// V20_31: detecta translape de horarios entre actividades distintas del mismo worker
+// V20_32: extendido — ahora también incluye grupales donde el worker es participante
+// Ej: Act individual 7am-4pm + Grupal Empaque 3pm-6pm → overlap 3pm-4pm
+function checkOverlapsInWorker(w){
+  if(!w || !w.acts) return {ok:true};
+  var allShifts=[];
+  for(var i=0;i<w.acts.length;i++){
+    var a=w.acts[i];
+    var actName=a.esName||'?';
+    if(a.shifts && a.shifts.length){
+      for(var s=0;s<a.shifts.length;s++){
+        var sh=a.shifts[s];
+        if(sh.ini && sh.fin) allShifts.push({key:'ia'+i, act:actName, ini:sh.ini, fin:sh.fin});
+      }
+    } else if(a.ini && a.fin){
+      allShifts.push({key:'ia'+i, act:actName, ini:a.ini, fin:a.fin});
+    }
+  }
+  // V20_32: Grupales donde el worker participa
+  if(typeof grpActs !== 'undefined' && grpActs && w.id != null){
+    for(var gi=0;gi<grpActs.length;gi++){
+      var g=grpActs[gi];
+      if(!g || !g.participantes) continue;
+      if(g.participantes.indexOf(w.id) < 0) continue;
+      var gAct=(typeof GRUPAL_ACTS !== 'undefined' && GRUPAL_ACTS[g.gai]) ? GRUPAL_ACTS[g.gai] : null;
+      var gActName=(gAct?gAct.es:'Grupal')+' (grupal)';
+      if(g.vars && g.vars.ini && g.vars.fin){
+        allShifts.push({key:'ga'+gi, act:gActName, ini:g.vars.ini, fin:g.vars.fin});
+      }
+    }
+  }
+  if(allShifts.length < 2) return {ok:true};
+  for(var x=0;x<allShifts.length;x++){
+    for(var y=x+1;y<allShifts.length;y++){
+      var A=allShifts[x], B=allShifts[y];
+      if(A.key===B.key) continue;
+      var ai=t2m(A.ini), af=t2m(A.fin), bi=t2m(B.ini), bf=t2m(B.fin);
+      if(ai===null||af===null||bi===null||bf===null) continue;
+      if(af<=ai) af+=1440;
+      if(bf<=bi) bf+=1440;
+      if(ai<bf && bi<af){
+        return {ok:false, a1:A.act, a2:B.act,
+                t1:to12h(A.ini)+' → '+to12h(A.fin),
+                t2:to12h(B.ini)+' → '+to12h(B.fin)};
+      }
+    }
+  }
+  return {ok:true};
+}
+
+// V20_32: verificar overlaps en TODOS los participantes de un grupal tras cambios
+function checkOverlapsForGrpAct(gi){
+  var g=grpActs[gi]; if(!g || !g.participantes) return;
+  for(var i=0;i<g.participantes.length;i++){
+    var w=getW(g.participantes[i]);
+    if(!w) continue;
+    var ov=checkOverlapsInWorker(w);
+    if(!ov.ok){ openOverlap(ov, w.name); return; }
+  }
+}
+
+function openOverlap(info, workerName){
+  var ov=gEl('overlapOv'); if(!ov) return;
+  var det=gEl('overlapDetail');
+  if(det && info){
+    det.innerHTML='<b>'+esc(workerName||'')+'</b><br>'
+      +'📍 <b>'+esc(info.a1)+'</b>: '+info.t1+'<br>'
+      +'📍 <b>'+esc(info.a2)+'</b>: '+info.t2;
+  }
+  ov.classList.add('on');
+  setTimeout(function(){ var b=ov.querySelector('.mok'); if(b) b.focus(); },50);
+}
+function closeOverlap(){ var ov=gEl('overlapOv'); if(ov) ov.classList.remove('on'); }
+
+// V20_31: verificar translapes después de cambiar ENT/SAL (alerta sin revertir)
+function checkOverlapsForWorker(wi){
+  var w=getW(wi); if(!w) return;
+  var ov=checkOverlapsInWorker(w);
+  if(!ov.ok) openOverlap(ov, w.name);
+}
+
+// ============================================================================
+// V20_34: MODO LECTURA — Cargar día desde FIELD_DROP via FieldSync v5.10
+// ============================================================================
+// State machine simple: LIVE (normal) | READONLY (día cargado). Ningún otro.
+// Regla de oro: NO recalcular. Hidratar con qty/price congelados de FIELD_DROP.
+// _localBackup guarda snapshot en memoria (nunca toca localStorage real).
+// ============================================================================
+var _readOnlyMode = false;
+var _localBackup = null;
+
+// Ajusta fecha min/max del date picker al abrir modal historial
+function _setCloudDateLimits(){
+  var inp = gEl('cloudLoadDate'); if(!inp) return;
+  function fmt(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+  var today=new Date(); var min=new Date(); min.setDate(min.getDate()-90);
+  inp.max = fmt(today); inp.min = fmt(min);
+  if(!inp.value) inp.value = fmt(today);
+}
+
+function loadDayFromSheets(){
+  if(_readOnlyMode){ toast('⚠️ Ya estás en modo lectura — sal primero'); return; }
+  var inp=gEl('cloudLoadDate'); var st=gEl('cloudLoadStatus'); var btn=gEl('cloudLoadBtn');
+  var fecha = inp && inp.value;
+  if(!fecha){ if(st) st.textContent='⚠️ Selecciona una fecha'; return; }
+  var surquero = (currentUser && currentUser.name) || gVal('surquero') || '';
+  if(!surquero){ toast('⚠️ No se detecta surquero activo'); return; }
+  var isAdmin = !!(currentUser && currentUser.isAdmin);
+
+  btn.disabled=true; btn.textContent='…';
+  if(st) st.textContent='⏳ Consultando Sheets…';
+
+  var url = APPS_SCRIPT_URL
+    + '?action=loadDay'
+    + '&fecha='    + encodeURIComponent(fecha)
+    + '&surquero=' + encodeURIComponent(surquero)
+    + '&isAdmin='  + (isAdmin?'true':'false')
+    + '&claimedSurquero=' + encodeURIComponent(surquero);
+
+  fetch(url, {method:'GET', cache:'no-store'})
+    .then(function(r){ return r.json(); })
+    .then(function(res){
+      if(!res){ toast('⚠️ Sin respuesta'); return; }
+      if(!res.success){ toast('⚠️ '+(res.error||'Error desconocido')); return; }
+      if(res.empty || !(res.workers&&res.workers.length) && !(res.ausencias&&res.ausencias.length) && !(res.grpActs&&res.grpActs.length)){
+        if(st) st.textContent=''; toast('📭 No hay datos de esa fecha'); return;
+      }
+      _enterReadOnly(res);
+      gEl('histOv').classList.remove('on');
+      toast('📖 Día cargado en modo lectura');
+    })
+    .catch(function(err){
+      console.warn('[eBerry] loadDayFromSheets error:', err);
+      toast('⚠️ Error de conexión');
+    })
+    .finally(function(){
+      btn.disabled=false; btn.textContent='☁️ Cargar';
+      if(st) st.textContent='';
+    });
+}
+
+function _enterReadOnly(payload){
+  // 1) Snapshot del estado vivo actual (en memoria, nunca en localStorage)
+  _localBackup = {
+    workers:   JSON.parse(JSON.stringify(workers||[])),
+    grpActs:   JSON.parse(JSON.stringify(grpActs||[])),
+    ausencias: JSON.parse(JSON.stringify(ausencias||[])),
+    wid: wid,
+    vals: {
+      rancho:gVal('rancho'), fecha:gVal('fecha'), numBus:gVal('numBus'),
+      hEnt:gVal('hEnt'), hSal:gVal('hSal'), lIni:gVal('lIni'), lFin:gVal('lFin'),
+      finca:gVal('finca')
+    }
+  };
+
+  // 2) Activar flag ANTES de mutar (wrappers de autoSave/sendToSheets ya bloquean)
+  _readOnlyMode = true;
+
+  // 3) Hidratar workers desde payload — NO recalcular, usar qty/price congelados
+  workers = []; wid = 1;
+  var _iniAll = [], _finAll = [];
+  (payload.workers||[]).forEach(function(pw){
+    var w = { id:wid++, name:pw.name||'', empNum:pw.empNum||'', open:true, acts:[], totalPay:0, _frozen:true };
+    (pw.acts||[]).forEach(function(pa){
+      var aiIdx=-1;
+      for(var i=0;i<ACTS.length;i++){
+        if(ACTS[i].es===pa.actEs){ aiIdx=i; break; }
+      }
+      var qty = (typeof pa.qty==='number') ? pa.qty : parseFloat(pa.qty)||0;
+      var price = parseFloat(pa.unitPrice)||0;
+      var payEst = parseFloat(pa.payEst)||(qty*price);
+      w.acts.push({
+        ai: aiIdx, esName: pa.actEs||'', tipo: pa.tipo||'',
+        qty: qty, ini: pa.hEnt||'', fin: pa.hSal||'',
+        showTime: !!(pa.hEnt||pa.hSal),
+        finca: pa.finca||'',
+        shifts: (pa.hEnt||pa.hSal) ? [{ini:pa.hEnt||'', fin:pa.hSal||''}] : [],
+        pay: payEst,
+        _frozen: true, _unitPrice: price
+      });
+      if(pa.hEnt) _iniAll.push(pa.hEnt);
+      if(pa.hSal) _finAll.push(pa.hSal);
+    });
+    w.totalPay = w.acts.reduce(function(a,b){ return a+(parseFloat(b.pay)||0); },0);
+    workers.push(w);
+  });
+
+  // 4) Grupales: cada entrada del payload trae workers[] (participantes) con qty/unitPrice del grupo
+  grpActs = [];
+  (payload.grpActs||[]).forEach(function(pg){
+    var gaiIdx=-1;
+    for(var gi=0;gi<(GRUPAL_ACTS||[]).length;gi++){
+      if(GRUPAL_ACTS[gi].es===pg.actEs){ gaiIdx=gi; break; }
+    }
+    var partIds = (pg.workers||[]).map(function(pw){
+      var match=null;
+      for(var wi=0;wi<workers.length;wi++){
+        if(workers[wi].name===pw.name){ match=workers[wi]; break; }
+      }
+      return match ? match.id : null;
+    }).filter(function(x){ return x!=null; });
+    grpActs.push({
+      gai: gaiIdx, esName: pg.actEs||'',
+      participantes: partIds,
+      vars: { ini: pg.hEnt||'', fin: pg.hSal||'', finca: pg.finca||'', qtyTotal: pg.qty||0 },
+      _frozen: true
+    });
+    if(pg.hEnt) _iniAll.push(pg.hEnt);
+    if(pg.hSal) _finAll.push(pg.hSal);
+  });
+
+  // 5) Ausencias
+  ausencias = (payload.ausencias||[]).map(function(a){
+    return { name:a.name||'', empNum:a.empNum||'', motivo:a.motivo||'', _frozen:true };
+  });
+
+  // 6) Restaurar campos top del payload
+  var topFields = {
+    rancho: payload.rancho, fecha: payload.fecha, numBus: payload.numBus,
+    hEnt: _iniAll.length ? _iniAll.sort()[0] : '',
+    hSal: _finAll.length ? _finAll.sort().reverse()[0] : ''
+  };
+  Object.keys(topFields).forEach(function(id){
+    var el = gEl(id); if(el && topFields[id]!=null && topFields[id]!=='') el.value = topFields[id];
+  });
+
+  // 7) Re-render
+  var list = gEl('wlist'); if(list) list.innerHTML = '';
+  workers.forEach(function(w,i){ if(list) list.appendChild(mkCard(w,i)); });
+  try { updParam && updParam(); } catch(e){}
+  try { updParts && updParts(); } catch(e){}
+  try { renderGrpActs && renderGrpActs(); } catch(e){}
+
+  // 8) Banner visible
+  var banner = gEl('readOnlyBanner');
+  var lbl = gEl('roDateLbl');
+  if(lbl) lbl.textContent = payload.fecha || '—';
+  if(banner){ banner.style.display='flex'; }
+  document.body.classList.add('readOnly');
+}
+
+function exitReadOnly(){
+  if(!_readOnlyMode || !_localBackup){
+    var b=gEl('readOnlyBanner'); if(b) b.style.display='none';
+    document.body.classList.remove('readOnly');
+    _readOnlyMode=false; return;
+  }
+  // Restaurar snapshot
+  workers = _localBackup.workers;
+  grpActs = _localBackup.grpActs;
+  ausencias = _localBackup.ausencias;
+  wid = _localBackup.wid;
+  Object.keys(_localBackup.vals).forEach(function(k){
+    var el=gEl(k); if(el) el.value = _localBackup.vals[k]||'';
+  });
+  _localBackup = null;
+  _readOnlyMode = false;
+
+  // Banner off + re-render
+  var b=gEl('readOnlyBanner'); if(b) b.style.display='none';
+  document.body.classList.remove('readOnly');
+  var list=gEl('wlist'); if(list) list.innerHTML='';
+  workers.forEach(function(w,i){ if(list) list.appendChild(mkCard(w,i)); });
+  try { updParam && updParam(); } catch(e){}
+  try { updParts && updParts(); } catch(e){}
+  try { renderGrpActs && renderGrpActs(); } catch(e){}
+  toast('✍️ Volviste al día actual');
+}
+
+// Guards: interceptar autoSave y sendToSheets durante modo lectura
+(function(){
+  if(typeof autoSave==='function'){
+    var _orig = autoSave;
+    autoSave = function(){ if(_readOnlyMode) return; return _orig.apply(this, arguments); };
+  }
+  if(typeof saveQuiet==='function'){
+    var _orig2 = saveQuiet;
+    saveQuiet = function(){ if(_readOnlyMode) return; return _orig2.apply(this, arguments); };
+  }
+  if(typeof sendToSheets==='function'){
+    var _orig3 = sendToSheets;
+    sendToSheets = function(){
+      if(_readOnlyMode){ toast('🔒 Modo lectura — no se puede enviar'); return; }
+      return _orig3.apply(this, arguments);
+    };
+  }
+})();
+
+// Hook al abrir modal historial: setear min/max del date picker
+document.addEventListener('click', function(ev){
+  var t = ev.target;
+  if(t && (t.id==='histBtn' || (t.getAttribute && t.getAttribute('onclick') && t.getAttribute('onclick').indexOf('histOv')>=0))){
+    setTimeout(_setCloudDateLimits, 60);
+  }
+}, true);
 
 // V20_28: renderActInputs — inyecta cuadritos dinámicos según label'X' en H-M
 function renderActInputs(actCard, act, wi, ai){
@@ -3183,8 +3528,8 @@ function onIndField(inp){
 // V7: sanitizar qty como número antes de guardar
 // V19-FIX2: guardar número, no string
 function onQty(wi,ai,v){ var w=getW(wi); if(!w||!w.acts[ai])return; var n=parseFloat(v); w.acts[ai].qty=isFinite(n)?n:0; recalc(wi,ai); autoSave(); }
-function onIni(wi,ai,v){ var w=getW(wi); if(!w||!w.acts[ai])return; w.acts[ai].ini=v; w.acts[ai].showTime=true; recalc(wi,ai); autoSave(); }
-function onFin(wi,ai,v){ var w=getW(wi); if(!w||!w.acts[ai])return; w.acts[ai].fin=v; w.acts[ai].showTime=true; recalc(wi,ai); autoSave(); }
+function onIni(wi,ai,v){ var w=getW(wi); if(!w||!w.acts[ai])return; w.acts[ai].ini=v; w.acts[ai].showTime=true; recalc(wi,ai); autoSave(); checkOverlapsForWorker(wi); /* V20_31 */ }
+function onFin(wi,ai,v){ var w=getW(wi); if(!w||!w.acts[ai])return; w.acts[ai].fin=v; w.acts[ai].showTime=true; recalc(wi,ai); autoSave(); checkOverlapsForWorker(wi); /* V20_31 */ }
 
 // Tau: obtener rate por hora real del worker — si tiene contractRate individual, usarlo;
 // si no, fallback al precio default de la actividad (act.p)
@@ -5050,7 +5395,7 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
         +'<tr style="background:#8b0000;color:#fff;font-weight:700"><td colspan="2" style="padding:5px 8px;font-size:10px;border:1px solid #c00">TOTAL P&Eacute;RDIDA EMPRESA</td><td style="padding:5px 8px;font-size:12px;text-align:right;border:1px solid #c00">-$'+totalLoss.toFixed(2)+'</td></tr>'
         +'</table></div>';
     })()
-    +'<div class="ft">'+vals.rancho+' &nbsp;|&nbsp; '+vals.fecha+' &nbsp;|&nbsp; '+wks.length+' trabajadores &nbsp;|&nbsp; Bus: #'+vals.numBus+' &nbsp;|&nbsp; Surquero: '+(currentUser&&currentUser.isAdmin?'ADM':vals.surquero)+' &nbsp;|&nbsp; Generado: '+new Date().toLocaleString()+' &nbsp;|&nbsp; App: '+(window.APP_VERSION||'?')+'</div>'
+    +'<div class="ft">'+vals.rancho+' &nbsp;|&nbsp; '+vals.fecha+' &nbsp;|&nbsp; '+wks.length+' trabajadores &nbsp;|&nbsp; Bus: #'+vals.numBus+' &nbsp;|&nbsp; Surquero: '+(currentUser&&currentUser.isAdmin?'ADM':vals.surquero)+' &nbsp;|&nbsp; Generado: '+new Date().toLocaleString()+' &nbsp;|&nbsp; App: '+(window.APP_VERSION||'?')+(_readOnlyMode?' &nbsp;|&nbsp; 📖 REGENERADO DESDE SHEETS':'')+'</div>'
     +'<div class="nopr" style="text-align:center;margin-top:16px"><button onclick="window.print()" style="background:#1a7a4a;color:#fff;border:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-right:10px">🖨️ Imprimir / Guardar PDF</button><button onclick="window.close()" style="background:#eee;color:#555;border:none;padding:12px 20px;border-radius:8px;font-size:14px;cursor:pointer">Cerrar</button></div>'
     +'</body></html>';
   // V20_24: window.open sin features restrictivas (Android/iOS moderno bloquea `width=1000,height=700`) + fallback Blob robusto (timeout 60s para que el browser procese)
@@ -5202,6 +5547,7 @@ function onShift(wi,ai,si,field,val){
   if(si===0){ a.ini=a.shifts[0].ini||''; a.fin=a.shifts[0].fin||''; }
   a.showTime=true;
   recalc(wi,ai); autoSave();
+  checkOverlapsForWorker(wi); // V20_31: detectar translape con otras actividades
 }
 
 function totalShiftHours(a){
@@ -5395,6 +5741,12 @@ function submitViaIframe(url, payload, onDone, timeoutMs, onTimeout, frameId){
 function sendToSheets() {
   if (!workers.length && !ausencias.length) { toast('⚠️ No hay trabajadores ni ausencias'); return; }
   if (!gVal('fecha'))  { toast('⚠️ Ingresa la fecha primero'); return; }
+  // V20_31: bloquear envío si algún worker tiene translapes de horarios
+  for (var _wvi=0; _wvi<workers.length; _wvi++){
+    var _wv=workers[_wvi];
+    var _ov=checkOverlapsInWorker(_wv);
+    if(!_ov.ok){ openOverlap(_ov, _wv.name); return; }
+  }
 
   // Mapeo motivo → etiquetas ES/EN para ausencias
   var _motLabels = {
@@ -5987,6 +6339,8 @@ function setGrpVar(inp){
   grpActs[gi].vars[v] = inp.value;
   calcGrpAct(gi);
   autoSave();
+  // V20_32: si se cambió el horario del grupal, validar overlap en todos los participantes
+  if(v==='ini' || v==='fin') checkOverlapsForGrpAct(gi);
 }
 
 // ── Omega: Conversión Pies ↔ Acres por rancho ──
@@ -6130,8 +6484,25 @@ function renderGrpPart(gi){
 function togGrpPart(gi, wid_){
   var g = grpActs[gi]; if(!g) return;
   var idx = g.participantes.indexOf(wid_);
-  if(idx>=0) g.participantes.splice(idx,1);
-  else g.participantes.push(wid_);
+  if(idx >= 0){
+    // Quitar participante — siempre permitido
+    g.participantes.splice(idx, 1);
+  } else {
+    // V20_33: AGREGAR con validación previa de translape.
+    // Si el worker tiene actividades que se translapan con el horario del grupal,
+    // NO lo agrega y muestra modal pidiendo revisar horarios primero.
+    var w = getW(wid_);
+    if(w){
+      g.participantes.push(wid_); // simular adición
+      var ov = checkOverlapsInWorker(w);
+      if(!ov.ok){
+        g.participantes.pop(); // revertir
+        openOverlap(ov, w.name);
+        return; // bloquear sin render ni save
+      }
+      // OK, push ya hecho — sigue al render/save
+    }
+  }
   renderGrpPart(gi);
   calcGrpAct(gi);
   autoSave();
