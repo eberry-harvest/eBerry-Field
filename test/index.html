@@ -24,7 +24,7 @@
 </script>
 <script>
 // V50 (port V20_23): estandarización de colores PDF
-window.APP_VERSION = 'V63';
+window.APP_VERSION = 'V64';
 (function(){
   function showVersionMismatch(remoteV){
     if(document.getElementById('ver-mismatch')) return;
@@ -2521,7 +2521,7 @@ function renderRanchBar(){
         +'<div class="ranch-config">'
           +'<div class="r2" style="margin-bottom:8px">'
             +'<div><label>Rancho</label><select onchange="onRanchConfigChange('+i+',\'rancho\',this.value);_updRanchCardName('+i+',this.value)" style="width:100%;padding:8px 10px;border:1.5px solid var(--bd);border-radius:8px;font-size:14px;font-family:DM Sans,sans-serif">'+_buildRanchOpts(r.rancho, i)+'</select></div>'
-            +'<div><label>Finca / Labor</label><input type="text" value="'+esc(r.finca||'')+'" onchange="onRanchConfigChange('+i+',\'finca\',this.value)" placeholder="Ej: Block 5"></div>'
+            +'<div><label>Finca / Labor</label>'+_fincaRanchHtml(i, r.rancho||'', r.finca||'')+'</div>'
           +'</div>'
           +'<div class="r4">'
             +'<div><label>Entrada</label><input type="time" value="'+(r.hEnt||'')+'" step="1800" onchange="onRanchConfigChange('+i+',\'hEnt\',this.value)"></div>'
@@ -3142,6 +3142,10 @@ function _enterReadOnly(payload){
     grpActs:   JSON.parse(JSON.stringify(grpActs||[])),
     ausencias: JSON.parse(JSON.stringify(ausencias||[])),
     wid: wid,
+    // V64 FIX 1: respaldar _ranchos[] y _activeRanchoIdx
+    // Antes: al entrar modo lectura con 2-3 ranchos activos, se perdían al salir
+    _ranchos: (typeof _ranchos !== 'undefined') ? JSON.parse(JSON.stringify(_ranchos||[])) : [],
+    _activeRanchoIdx: (typeof _activeRanchoIdx !== 'undefined') ? _activeRanchoIdx : 0,
     vals: {
       rancho:gVal('rancho'), fecha:gVal('fecha'), numBus:gVal('numBus'),
       hEnt:gVal('hEnt'), hSal:gVal('hSal'), lIni:gVal('lIni'), lFin:gVal('lFin'),
@@ -3257,6 +3261,11 @@ function exitReadOnly(){
   grpActs = _localBackup.grpActs;
   ausencias = _localBackup.ausencias;
   wid = _localBackup.wid;
+  // V64 FIX 1: restaurar _ranchos[] y _activeRanchoIdx que el admin tenía antes de entrar a lectura
+  if(_localBackup._ranchos !== undefined && typeof _ranchos !== 'undefined'){
+    _ranchos = _localBackup._ranchos;
+    _activeRanchoIdx = (_localBackup._activeRanchoIdx != null) ? _localBackup._activeRanchoIdx : 0;
+  }
   Object.keys(_localBackup.vals).forEach(function(k){
     var el=gEl(k); if(el) el.value = _localBackup.vals[k]||'';
   });
@@ -3281,6 +3290,8 @@ function exitReadOnly(){
   try { updParam && updParam(); } catch(e){}
   try { updParts && updParts(); } catch(e){}
   try { renderGrpActs && renderGrpActs(); } catch(e){}
+  // V64 FIX 1: re-renderizar pills de ranchos si los hay
+  try { if(typeof renderRanchBar === 'function') renderRanchBar(); } catch(e){}
   toast('✍️ Volviste al día actual');
 }
 
@@ -6660,6 +6671,58 @@ function removeGrpAct(gi){
   renderGrpActs(); updParts(); autoSave();
 }
 
+// V63 — helper para generar input/select de finca en configuración MULTI-RANCHO
+// Usa el rancho de ESA tarjeta (r.rancho) — no el rancho activo global
+function _fincaRanchHtml(idx, ranchoName, currentVal){
+  var fincas = (typeof FINCAS_POR_RANCHO !== 'undefined' && FINCAS_POR_RANCHO && ranchoName && FINCAS_POR_RANCHO[ranchoName]) ? FINCAS_POR_RANCHO[ranchoName] : null;
+  var cv = currentVal || '';
+  if(fincas && fincas.length){
+    var html = '<select onchange="onRanchConfigChange('+idx+',\'finca\',this.value)" style="width:100%;padding:8px 10px;border:1.5px solid var(--bd);border-radius:8px;font-size:14px;font-family:DM Sans,sans-serif;min-height:44px;background:#fff">';
+    html += '<option value="">— Selecciona finca —</option>';
+    var found = false;
+    for(var fi=0; fi<fincas.length; fi++){
+      var sel = (fincas[fi] === cv) ? ' selected' : '';
+      if(fincas[fi] === cv) found = true;
+      html += '<option value="'+esc(fincas[fi])+'"'+sel+'>'+esc(fincas[fi])+'</option>';
+    }
+    if(cv && !found){
+      html += '<option value="'+esc(cv)+'" selected>⚠️ '+esc(cv)+' (legacy)</option>';
+    }
+    html += '</select>';
+    return html;
+  } else {
+    // Fallback: rancho sin catálogo → input libre
+    return '<input type="text" value="'+esc(cv)+'" onchange="onRanchConfigChange('+idx+',\'finca\',this.value)" placeholder="Ej: Block 5">';
+  }
+}
+
+// V63 — helper para generar input/select de finca según catálogo del rancho activo (en GRUPALES)
+// Si el rancho está en FINCAS_POR_RANCHO → <select> cerrado (+opción legacy si finca no está en lista)
+// Si no está en catálogo → <input type="text"> libre (fallback)
+function _fincaGrpHtml(gi, currentVal, placeholderTxt){
+  var ranchoActual = gVal('rancho') || '';
+  var fincas = (typeof FINCAS_POR_RANCHO !== 'undefined' && FINCAS_POR_RANCHO && FINCAS_POR_RANCHO[ranchoActual]) ? FINCAS_POR_RANCHO[ranchoActual] : null;
+  var cv = currentVal || '';
+  if(fincas && fincas.length){
+    var html = '<select data-gi="'+gi+'" data-v="finca" onchange="setGrpVar(this)" style="font-size:16px;padding:9px 10px;width:100%;min-height:44px;background:#fff">';
+    html += '<option value="">📍 Seleccionar labor...</option>';
+    var foundInList = false;
+    for(var fi=0; fi<fincas.length; fi++){
+      var sel = (fincas[fi] === cv) ? ' selected' : '';
+      if(fincas[fi] === cv) foundInList = true;
+      html += '<option value="'+esc(fincas[fi])+'"'+sel+'>📍 '+esc(fincas[fi])+'</option>';
+    }
+    if(cv && !foundInList){
+      html += '<option value="'+esc(cv)+'" selected>⚠️ '+esc(cv)+' (legacy)</option>';
+    }
+    html += '</select>';
+    return html;
+  } else {
+    // Fallback: rancho sin catálogo → input libre (por ahora)
+    return '<input type="text" value="'+esc(cv)+'" placeholder="'+esc(placeholderTxt||'Finca / Labor')+'" data-gi="'+gi+'" data-v="finca" oninput="setGrpVar(this)" style="font-size:16px;padding:9px 10px;width:100%">';
+  }
+}
+
 function renderGrpActs(){
   var list  = gEl('grpActList');
   var empty = gEl('grpEmpty');
@@ -6717,9 +6780,8 @@ function renderGrpActs(){
         + '<input type="time" step="1800" value="'+(g.vars.fin||'')+'" data-gi="'+gi+'" data-v="fin" onchange="setGrpVar(this)" style="font-size:16px;padding:9px 10px;width:100%"></div>'
         + '</div>'
         + '<div style="margin-bottom:6px"><label style="font-size:10px">📍 Labor / Finca (aparece en el PDF)</label>'
-        + '<input type="text" value="'+(g.vars.finca||'')+'" placeholder="ej: Bloque 3..."'
-        + ' data-gi="'+gi+'" data-v="finca" oninput="setGrpVar(this)"'
-        + ' style="font-size:16px;padding:9px 10px;width:100%"></div>';
+        + _fincaGrpHtml(gi, g.vars.finca||'', 'ej: Bloque 3...')
+        + '</div>';
     } else if(ct === 'puertas'){
       if(!g.vars.surcos || !g.vars.surcos.length) g.vars.surcos = [{largo:'',num:'',totalPies:'',totalAcres:'',mode:''}];
       var anchoCama = g.vars.anchoCama||'';
@@ -6820,9 +6882,8 @@ function renderGrpActs(){
         +' data-gi="'+gi+'" data-v="anchoCama" oninput="setGrpVar(this)"'
         +' style="font-size:16px;padding:9px 10px;width:100%"></div>'
         +'<div style="margin-bottom:6px"><label style="font-size:10px">📍 Labor / Finca (aparece en el PDF)</label>'
-        +'<input type="text" value="'+(g.vars.finca||'')+'" placeholder="ej: El Columpio, Block 3..."'
-        +' data-gi="'+gi+'" data-v="finca" oninput="setGrpVar(this)"'
-        +' style="font-size:16px;padding:9px 10px;width:100%"></div>';
+        +_fincaGrpHtml(gi, g.vars.finca||'', 'ej: El Columpio, Block 3...')
+        +'</div>';
     } else if(ct === 'cajas'){
       var totalC = g.vars.totalC||''; var precioC = g.vars.precioC||act.p||0.80;
       varsHtml = '<div class="r2" style="margin-bottom:8px">'
@@ -6842,9 +6903,8 @@ function renderGrpActs(){
         +' style="font-size:16px;padding:9px 10px;width:100%"></div>'
         +'</div>'
         +'<div style="margin-bottom:6px"><label style="font-size:10px">📍 Labor / Finca (aparece en el PDF)</label>'
-        +'<input type="text" value="'+(g.vars.finca||'')+'" placeholder="ej: El Columpio, Block 3..."'
-        +' data-gi="'+gi+'" data-v="finca" oninput="setGrpVar(this)"'
-        +' style="font-size:16px;padding:9px 10px;width:100%"></div>';
+        +_fincaGrpHtml(gi, g.vars.finca||'', 'ej: El Columpio, Block 3...')
+        +'</div>';
     } else if(ct === 'hora'){
       var hIni = g.vars.ini||''; var hFin = g.vars.fin||'';
       varsHtml = '<div class="r2" style="margin-bottom:8px">'
@@ -6868,9 +6928,8 @@ function renderGrpActs(){
         +' style="font-size:16px;padding:9px 10px;width:100%"></div>'
         +'</div>'
         +'<div style="margin-bottom:6px"><label style="font-size:10px">📍 Labor / Finca (aparece en el PDF)</label>'
-        +'<input type="text" value="'+(g.vars.finca||'')+'" placeholder="ej: El Columpio, Block 3..."'
-        +' data-gi="'+gi+'" data-v="finca" oninput="setGrpVar(this)"'
-        +' style="font-size:16px;padding:9px 10px;width:100%"></div>';
+        +_fincaGrpHtml(gi, g.vars.finca||'', 'ej: El Columpio, Block 3...')
+        +'</div>';
     }
 
     // Participantes
@@ -9857,6 +9916,7 @@ function _sendNextInQueue(){
   // V7: mantener _queueId para que FieldSync pueda deduplicar; solo quitar _queuedAt
   var clean = JSON.parse(JSON.stringify(payload));
   delete clean._queuedAt;
+  delete clean._retryCount; // V64 FIX 2: no mandar contador al backend
 
   // V8: usa submitViaIframe unificado
   submitViaIframe(SHEETS_URL, clean,
@@ -9869,8 +9929,30 @@ function _sendNextInQueue(){
       else { toast('✅ Todos los registros pendientes enviados'); recordLastSend(); checkDaysWithoutSend(); }
     }, 20000,
     function(){ // onTimeout
-      console.warn('[eBerry] Timeout enviando cola, se reintentará');
-      toast('⚠️ Timeout al enviar — se reintentará');
+      // V64 FIX 2: tras 3 fallos consecutivos del MISMO payload, moverlo al final
+      // para no bloquear ranchos 2 y 3 detrás en la cola
+      var q = getOfflineQueue();
+      if(q.length > 0){
+        var head = q[0];
+        head._retryCount = (head._retryCount || 0) + 1;
+        console.warn('[eBerry] Timeout cola — intento ' + head._retryCount + '/3');
+        if(head._retryCount >= 3 && q.length > 1){
+          // Rotar: mover el primero al final para intentar los demás
+          q.shift();
+          head._retryCount = 0; // reset para próximo intento
+          q.push(head);
+          saveOfflineQueue(q);
+          console.warn('[eBerry] Payload rotado al final tras 3 timeouts — probando siguientes ranchos');
+          toast('⚠️ Un rancho no responde — intentando otros');
+          setTimeout(_sendNextInQueue, 1500); // seguir con el nuevo primero
+          return;
+        } else {
+          saveOfflineQueue(q); // guarda el counter incrementado
+          toast('⚠️ Timeout al enviar — se reintentará');
+        }
+      } else {
+        toast('⚠️ Timeout al enviar — se reintentará');
+      }
     }, '_gsQFrame');
 }
 
