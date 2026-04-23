@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_26';
+window.APP_VERSION = 'V20_30';
 (function(){
   // Toast persistente de "versión antigua detectada" — NO se puede cerrar, obliga a actualizar
   function showVersionMismatch(remoteV){
@@ -516,6 +516,15 @@ html.login-locked{overflow:hidden!important;height:100%!important}
 .sem-name{text-align:left;font-weight:600;font-size:11px;white-space:nowrap;min-width:120px;padding:4px 6px;background:#f8f9ff}
 .sem-input{width:100%;padding:4px;border:1px solid #dde;border-radius:4px;text-align:center;font-size:11px;font-family:'DM Sans',sans-serif}
 .sem-input:focus{outline:2px solid var(--g2);border-color:var(--g2)}
+/* V20_27: motor data-driven — inputs dinámicos para label'X' */
+.actInputRow{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0 6px;padding:8px;background:#f8f9ff;border-radius:8px;border:1px solid #dde}
+.actInputCell{display:flex;flex-direction:column;gap:3px;flex:1 1 90px;min-width:90px}
+.actInputLabel{font-size:11px;font-weight:700;color:var(--gr);text-transform:uppercase;letter-spacing:.3px;padding-left:2px}
+.actInputBox{width:100%;min-height:44px;padding:10px 12px;border:1.5px solid #dde;border-radius:8px;background:#fff;color:var(--dk);font-family:'DM Sans',sans-serif;font-size:16px;font-weight:600;box-sizing:border-box;-webkit-appearance:none;appearance:none}
+.actInputBox:focus{outline:none;border-color:var(--g2);box-shadow:0 0 0 2px rgba(58,127,212,.2)}
+.actInputBox::-webkit-outer-spin-button,.actInputBox::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.actInputBox[type=number]{-moz-appearance:textfield}
+@media(max-width:360px){.actInputCell{flex:1 1 100%}}
 .sem-time-txt{width:90px;font-size:12px;letter-spacing:0.5px}
 .sem-time-txt::placeholder{color:#bbc;font-size:10px}
 .sem-total{font-weight:700;color:var(--g);font-size:12px;background:#eef1ff}
@@ -599,6 +608,18 @@ html.login-locked{overflow:hidden!important;height:100%!important}
 </div>
 
 <div class="toast" id="toast"></div>
+
+<!-- V20_27: Modal HORARIO OBLIGATORIO -->
+<div id="horOblOv" class="ov" role="dialog" aria-modal="true" aria-labelledby="horOblTit">
+  <div class="md" style="max-width:380px">
+    <div id="horOblTit" style="font-size:40px;text-align:center;margin-bottom:6px">⚠️</div>
+    <div class="mt" style="color:#c0392b;text-align:center;font-size:17px;line-height:1.3">Tu trabajador no tiene horario</div>
+    <div class="ms" style="text-align:center;margin-top:8px">Debes ponerle un horario para continuar.</div>
+    <div class="mbs" style="margin-top:14px">
+      <button class="mok" onclick="closeHorObl()" autofocus>Entendido</button>
+    </div>
+  </div>
+</div>
 
 <!-- Alpha2: WELCOME / CONTRACT SUMMARY MODAL -->
 <div class="ov" id="welcomeOv">
@@ -2104,7 +2125,9 @@ function loadSheetsData(){
         ALL_ACTS.push({
           farm:t.farm, es:t.es, en:t.en||t.es,
           tipo:tipoNorm, payType:t.tipo||'', p:t.rate||16.23, hr:tipoNorm==='Hora',
-          modo: modo  // 'Individual' | 'Grupal'
+          modo: modo,  // 'Individual' | 'Grupal'
+          // V20_29: columnas G-M del motor data-driven (FieldSync v5.8+)
+          variable: t.variable||'', H: t.H, I: t.I, J: t.J, K: t.K, L: t.L, M: t.M
         });
       }
       // V10: Diagnóstico — cuántas actividades cargaron por rancho
@@ -2123,7 +2146,26 @@ function loadSheetsData(){
     loaded.tasks = true;
     checkDone();
   });
+
+  // V20_29: Load catálogo de fincas por rancho (FieldSync v5.9)
+  fetchFromScript('fincas', function(err, data){
+    if(!err && data && data.success && data.fincas){
+      FINCAS_POR_RANCHO = data.fincas;
+      try { localStorage.setItem('eb_fincas_cache', JSON.stringify(data.fincas)); } catch(e){}
+    } else {
+      // Fallback: cache local
+      try {
+        var cached = localStorage.getItem('eb_fincas_cache');
+        if(cached) FINCAS_POR_RANCHO = JSON.parse(cached);
+      } catch(e){}
+    }
+  });
 }
+
+// V20_29: Catálogo de fincas por rancho (desde Master Sheet pestaña "Fincas por rancho")
+// Formato: { "Dewitt": ["The valer","The river",...], "Pennrose": [...] }
+// Si un rancho NO está aquí, la app NO pide input de finca (y el PDF omite esa fila).
+var FINCAS_POR_RANCHO = {};
 
 // Build LIDERES list from ALL_WORKERS where lider column = "Surquero"
 function buildLideres(){
@@ -2310,6 +2352,204 @@ function nh(a,b){
   if(li!==null&&lf!==null){ var ov=Math.min(s,lf)-Math.max(e,li); if(ov>0)w-=ov; }
   return Math.round(Math.max(0,w)*10/60)/10;
 }
+
+// ============================================================================
+// V20_27: MOTOR DATA-DRIVEN — Intérprete de fórmulas desde MASTER (cols G-M)
+// Lee la configuración de cada actividad y arma (H·I·J·K)/(L·M)
+// Reemplaza gradualmente: getActConstante, isPennrose5Act, piesToAcresWithAC
+// ============================================================================
+
+// parseFormulaCell: clasifica una celda H-M en 4 tipos
+function parseFormulaCell(val){
+  if(val===null||val===undefined||val===''||(typeof val==='string'&&!val.trim())){
+    return {type:'empty'};
+  }
+  if(typeof val==='number'&&isFinite(val)) return {type:'const',value:val};
+  var s=String(val).trim();
+  var numTry=parseFloat(s.replace(',','.'));
+  if(!isNaN(numTry)&&/^-?\d+(\.\d+)?$/.test(s.replace(',','.'))){
+    return {type:'const',value:numTry};
+  }
+  // label'X' — acepta comillas simples, dobles o espacios
+  var m=s.match(/^label\s*['"]?\s*([^'"]+?)\s*['"]?$/i);
+  if(m){
+    var lbl=m[1].trim();
+    if(/^personas$/i.test(lbl)) return {type:'personas'};
+    return {type:'input',label:lbl};
+  }
+  return {type:'empty'};
+}
+
+// getRequiredInputs: qué cuadritos renderizar en la UI
+function getRequiredInputs(actRow){
+  var cols=['H','I','J','K','L','M'];
+  var out=[], seen={};
+  for(var i=0;i<cols.length;i++){
+    var p=parseFormulaCell(actRow&&actRow[cols[i]]);
+    if(p.type==='input'&&!seen[p.label]){
+      seen[p.label]=true;
+      out.push({column:cols[i],label:p.label,placeholder:p.label});
+    }
+  }
+  return out;
+}
+
+// computeQty: intérprete principal. userInputs={H:4.70,I:null,...}
+function computeQty(actRow,userInputs,np){
+  userInputs=userInputs||{};
+  var mulCols=['H','I','J','K'], divCols=['L','M'];
+  var num=1, den=1, hasAny=false;
+  function resolve(cellVal,userVal,personas){
+    var p=parseFormulaCell(cellVal);
+    if(p.type==='empty') return {val:1,real:false};
+    if(p.type==='const') return {val:p.value,real:true};
+    if(p.type==='personas'){
+      var n=parseInt(personas,10);
+      if(!n||n<1) return {val:null,real:true};
+      return {val:n,real:true};
+    }
+    if(p.type==='input'){
+      var u=parseFloat(userVal);
+      if(isNaN(u)) return {val:null,real:true};
+      return {val:u,real:true};
+    }
+    return {val:1,real:false};
+  }
+  for(var i=0;i<mulCols.length;i++){
+    var r=resolve(actRow&&actRow[mulCols[i]],userInputs[mulCols[i]],np);
+    if(r.val===null) return null;
+    if(r.real) hasAny=true;
+    num*=r.val;
+  }
+  for(var j=0;j<divCols.length;j++){
+    var r2=resolve(actRow&&actRow[divCols[j]],userInputs[divCols[j]],np);
+    if(r2.val===null) return null;
+    if(r2.val===0) return null;
+    if(r2.real) hasAny=true;
+    den*=r2.val;
+  }
+  if(!hasAny) return 0;
+  return num/den;
+}
+
+// computePay: aplica la matriz Pay Type × G Variable
+function computePay(actRow,userInputs,np,rate,hours){
+  var pt=String((actRow&&actRow.tipo)||(actRow&&actRow.payType)||'').toLowerCase();
+  rate=parseFloat(rate)||0;
+  if(pt.indexOf('hour')>=0||pt==='hora'||pt==='hr'){
+    return (parseFloat(hours)||0)*rate;
+  }
+  // Pieces / Daywork / Extra con motor
+  var q=computeQty(actRow,userInputs,np);
+  if(q===null||q===0) return 0;
+  return q*rate;
+}
+
+// validateWorkerHasHorario: TODA actividad debe tener ENT/SAL (regla V20_27)
+function validateWorkerHasHorario(worker){
+  if(!worker||!worker.acts||!worker.acts.length) return {ok:true};
+  for(var i=0;i<worker.acts.length;i++){
+    var a=worker.acts[i];
+    var ini='', fin='';
+    if(a.shifts&&a.shifts.length){
+      ini=a.shifts[0].ini||''; fin=a.shifts[0].fin||'';
+    } else {
+      ini=a.ini||''; fin=a.fin||'';
+    }
+    if(!ini||!fin||!/^\d{1,2}:\d{2}$/.test(ini)||!/^\d{1,2}:\d{2}$/.test(fin)){
+      return {ok:false, act:(a.esName||'?'), worker:(worker.name||'?')};
+    }
+  }
+  return {ok:true};
+}
+
+// Modal de advertencia "trabajador sin horario"
+function openHorObl(){
+  var ov=gEl('horOblOv'); if(!ov) return;
+  ov.classList.add('on');
+  setTimeout(function(){ var b=ov.querySelector('.mok'); if(b) b.focus(); },50);
+}
+function closeHorObl(){ var ov=gEl('horOblOv'); if(ov) ov.classList.remove('on'); }
+
+// checkHorarioBeforeAdd: se llama ANTES de agregar otro trabajador
+// Valida que el último trabajador ya tenga horario en sus actividades
+function checkHorarioBeforeAdd(){
+  if(!workers || !workers.length) return true; // primer worker, ok
+  var last=workers[workers.length-1];
+  if(!last || !last.acts || !last.acts.length) return true; // sin acts aún
+  var r=validateWorkerHasHorario(last);
+  if(!r.ok){ openHorObl(); return false; }
+  return true;
+}
+
+// V20_28: renderActInputs — inyecta cuadritos dinámicos según label'X' en H-M
+function renderActInputs(actCard, act, wi, ai){
+  if(!actCard || !act) return;
+  var w=getW(wi); if(!w||!w.acts[ai]) return;
+  var a=w.acts[ai];
+  a.inputs=a.inputs||{};
+  var inputs=getRequiredInputs(act);
+  if(!inputs.length) return;
+  var host=document.createElement('div');
+  host.className='actInputRow';
+  for(var i=0;i<inputs.length;i++){
+    var spec=inputs[i];
+    var cell=document.createElement('div'); cell.className='actInputCell';
+    var lblEl=document.createElement('label'); lblEl.className='actInputLabel'; lblEl.textContent=spec.label;
+    var inp=document.createElement('input');
+    inp.type='number'; inp.step='0.01'; inp.min='0'; inp.inputMode='decimal';
+    inp.placeholder=spec.label;
+    inp.id='mot_'+wi+'_'+ai+'_'+spec.column;
+    inp.className='actInputBox';
+    inp.setAttribute('data-wi',wi); inp.setAttribute('data-ai',ai); inp.setAttribute('data-col',spec.column);
+    var val=a.inputs[spec.column];
+    if(val==null||val===''){
+      var lblL=(spec.label||'').toLowerCase();
+      if(/pies/i.test(lblL) && a.indPies) val=a.indPies;
+      else if(/ancho/i.test(lblL) && a.indAncho) val=a.indAncho;
+    }
+    inp.value=(val!=null && val!=='')?val:'';
+    inp.addEventListener('input', onActInput);
+    cell.appendChild(lblEl); cell.appendChild(inp);
+    host.appendChild(cell);
+  }
+  actCard.appendChild(host);
+}
+
+// V20_28: onActInput — handler cuando usuario teclea en cuadrito dinámico
+function onActInput(ev){
+  var inp=ev.target;
+  var wi=parseInt(inp.dataset.wi), ai=parseInt(inp.dataset.ai); // QA R3: parseInt siempre
+  var col=inp.dataset.col;
+  var w=getW(wi); if(!w||!w.acts[ai]) return;
+  var a=w.acts[ai];
+  a.inputs=a.inputs||{};
+  a.inputs[col]=inp.value.trim();
+  // compat legacy (mientras se migra)
+  var actR=ACTS[a.ai];
+  if(actR){
+    var specs=getRequiredInputs(actR);
+    for(var s=0;s<specs.length;s++){
+      if(specs[s].column===col){
+        var labelNorm=(specs[s].label||'').toLowerCase();
+        if(/pies/i.test(labelNorm)) a.indPies=inp.value.trim();
+        else if(/ancho/i.test(labelNorm)) a.indAncho=inp.value.trim();
+        break;
+      }
+    }
+  }
+  // Motor puente: calcular qty via computeQty (con fallback legacy)
+  try {
+    if(actR && getRequiredInputs(actR).length>0){
+      var q=computeQty(actR, a.inputs, 1);
+      if(q!==null && isFinite(q)) a.qty=q;
+    }
+  } catch(e){ console.warn('Motor onActInput fallback:', e); }
+  recalc(wi, ai);
+  autoSave();
+}
+
+// ============================================================================
 // V8: getPH() eliminada — reemplazada por getHRate()
 function updDate(){
   var v=gVal('fecha'); if(!v)return;
@@ -2705,6 +2945,8 @@ function okUnk(){
 }
 function noUnk(){ pendingUnk=null; gEl('unkOv').classList.remove('on'); if(qrActive) resumeQR(); }
 function doAddConfirmed(name){
+  // V20_27: regla HORARIO OBLIGATORIO — no permite agregar otro worker si el anterior no tiene horario
+  if(!checkHorarioBeforeAdd()) return;
   // Buscar empNum y contractRate del worker en ALL_WORKERS
   var _w9=findInArr(ALL_WORKERS,name); var _empNum=_w9?_w9.empNum||'':''; var _cRate=_w9?_w9.contractRate||0:0; // V12-FIX1
   var w={id:wid++,name:name,empNum:_empNum,contractRate:_cRate,open:true,acts:[],totalPay:0};
@@ -2790,30 +3032,50 @@ function mkActRow(wid_,ai,_cont){
   (function(wi2,ai2){ xb.addEventListener('click',function(){ askDelAct(wi2,ai2); }); })(wid_,ai);
   arh.appendChild(sel); arh.appendChild(xb); div.appendChild(arh);
 
-  // ── Finca/Labor opcional por actividad ──
-  var fincaRow = document.createElement('div');
-  fincaRow.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:6px';
-  var fincaInp = document.createElement('input');
-  fincaInp.type = 'text';
-  fincaInp.id = 'finca_act_'+wid_+'_'+ai;
-  fincaInp.placeholder = '📍 Labor del día';
-  var actFincaVal = (a.finca !== undefined && a.finca !== '') ? a.finca : gVal('finca');
-  fincaInp.value = actFincaVal;
-  var isDiffInit = actFincaVal && actFincaVal !== gVal('finca');
-  fincaInp.style.borderColor = isDiffInit ? 'var(--g)' : 'var(--bd)';
-  fincaInp.style.borderStyle = isDiffInit ? 'solid' : 'dashed';
-  (function(wi2,ai2){
-    fincaInp.addEventListener('input', function(){
-      var w2=getW(wi2); if(!w2||!w2.acts[ai2])return;
-      w2.acts[ai2].finca = this.value.trim();
-      var isDiff = this.value.trim() && this.value.trim() !== gVal('finca');
-      this.style.borderColor = isDiff ? 'var(--g)' : 'var(--bd)';
-      this.style.borderStyle = isDiff ? 'solid' : 'dashed';
-      autoSave();
-    });
-  })(wid_, ai);
-  fincaRow.appendChild(fincaInp);
-  div.appendChild(fincaRow);
+  // V20_29: Finca como DROPDOWN desde catálogo "Fincas por rancho" del Master Sheet.
+  // Si el rancho actual NO está en FINCAS_POR_RANCHO → NO renderizamos el input (regla de Serafín).
+  var _ranchoActual = gVal('rancho') || '';
+  var _fincasDelRancho = (FINCAS_POR_RANCHO && FINCAS_POR_RANCHO[_ranchoActual]) ? FINCAS_POR_RANCHO[_ranchoActual] : null;
+  if(_fincasDelRancho && _fincasDelRancho.length){
+    var fincaRow = document.createElement('div');
+    fincaRow.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:6px';
+    var fincaSel = document.createElement('select');
+    fincaSel.id = 'finca_act_'+wid_+'_'+ai;
+    fincaSel.style.cssText = 'flex:1;padding:8px 10px;border:1.5px dashed var(--bd);border-radius:8px;font-family:\'DM Sans\',sans-serif;font-size:14px;min-height:44px;background:#fff;color:var(--dk)';
+    var actFincaVal = (a.finca !== undefined && a.finca !== '') ? a.finca : '';
+    var _optEmpty = document.createElement('option'); _optEmpty.value=''; _optEmpty.textContent='📍 Seleccionar labor...'; fincaSel.appendChild(_optEmpty);
+    for(var _fi=0; _fi<_fincasDelRancho.length; _fi++){
+      var _opt = document.createElement('option');
+      _opt.value = _fincasDelRancho[_fi];
+      _opt.textContent = '📍 '+_fincasDelRancho[_fi];
+      if(_fincasDelRancho[_fi]===actFincaVal) _opt.selected = true;
+      fincaSel.appendChild(_opt);
+    }
+    // Si el valor guardado no está en el catálogo actual (ej: finca vieja de texto libre), agregar opción "legacy"
+    if(actFincaVal && _fincasDelRancho.indexOf(actFincaVal)<0){
+      var _optLegacy = document.createElement('option');
+      _optLegacy.value = actFincaVal;
+      _optLegacy.textContent = '⚠️ '+actFincaVal+' (legacy)';
+      _optLegacy.selected = true;
+      fincaSel.appendChild(_optLegacy);
+    }
+    var isDiffInit = actFincaVal && actFincaVal !== gVal('finca');
+    fincaSel.style.borderColor = isDiffInit ? 'var(--g)' : 'var(--bd)';
+    fincaSel.style.borderStyle = isDiffInit ? 'solid' : 'dashed';
+    (function(wi2,ai2){
+      fincaSel.addEventListener('change', function(){
+        var w2=getW(wi2); if(!w2||!w2.acts[ai2])return;
+        w2.acts[ai2].finca = this.value;
+        var isDiff = this.value && this.value !== gVal('finca');
+        this.style.borderColor = isDiff ? 'var(--g)' : 'var(--bd)';
+        this.style.borderStyle = isDiff ? 'solid' : 'dashed';
+        autoSave();
+      });
+    })(wid_, ai);
+    fincaRow.appendChild(fincaSel);
+    div.appendChild(fincaRow);
+  }
+  // else: rancho sin fincas en catálogo → no renderiza input. PDF tampoco mostrará fila de finca.
   // Tau: TODAS las actividades usan sistema de turnos con "Agregar turno"
   if(!a.shifts||!a.shifts.length){ a.shifts=[{ini:a.ini||'',fin:a.fin||''}]; }
   var tog=document.createElement('div');
@@ -2829,19 +3091,25 @@ function mkActRow(wid_,ai,_cont){
   bdg.id='bd'+wid_+'_'+ai; bdg.className=act.hr?'shift-total':'tbadge rf'; bdg.style.display='none';
   div.appendChild(bdg);
   if(!act.hr){
-    // V20_19: TODAS las actividades individuales usan flujo Ficha único — 1 solo cuadro.
-    // Se elimina el flujo de surcos (pies+ancho) en individual y el cuadro de precio readonly.
-    // Grupal mantiene su lógica separada (renderGrpActs).
-    var qr=document.createElement('div'); qr.className='qr'; qr.id='qr'+wid_+'_'+ai;
-    var lbl2=act.tipo==='Caja'?'Cajas':act.tipo==='$'?'Monto $':'Piezas';
-    qr.style.gridTemplateColumns='1fr'; // forzar 1 columna full-width
-    qr.innerHTML='<div><label style="margin:0;font-size:10px">'+lbl2+'</label><input type="number" id="qty'+wid_+'_'+ai+'" min="0" step="'+(act.tipo==='$'?'0.5':'1')+'" value="'+(a.qty||'')+'" placeholder="0"></div>';
-    div.appendChild(qr);
-    var _wi=wid_,_ai=ai;
-    setTimeout(function(){
-      var q=gEl('qty'+_wi+'_'+_ai);
-      if(q) q.addEventListener('input',function(){ onQty(_wi,_ai,this.value); });
-    },0);
+    // V20_28: si el act tiene motor activo (H-M con label'X'), renderiza cuadritos dinámicos.
+    // QA R4: try/catch. Frontend BUG3: detectar por getRequiredInputs (no por act.variable).
+    var _motorActive=false;
+    try { _motorActive = getRequiredInputs(act).length > 0; } catch(e){ _motorActive=false; }
+    if(_motorActive){
+      renderActInputs(div, act, wid_, ai);
+    } else {
+      // LEGACY V20_19: cuadrito único para act sin motor
+      var qr=document.createElement('div'); qr.className='qr'; qr.id='qr'+wid_+'_'+ai;
+      var lbl2=act.tipo==='Caja'?'Cajas':act.tipo==='$'?'Monto $':'Piezas';
+      qr.style.gridTemplateColumns='1fr';
+      qr.innerHTML='<div><label style="margin:0;font-size:10px">'+lbl2+'</label><input type="number" id="qty'+wid_+'_'+ai+'" min="0" step="'+(act.tipo==='$'?'0.5':'1')+'" value="'+(a.qty||'')+'" placeholder="0"></div>';
+      div.appendChild(qr);
+      var _wi=wid_,_ai=ai;
+      setTimeout(function(){
+        var q=gEl('qty'+_wi+'_'+_ai);
+        if(q) q.addEventListener('input',function(){ onQty(_wi,_ai,this.value); });
+      },0);
+    }
   }
   var sb=document.createElement('div'); sb.className='sub'; sb.id='sb'+wid_+'_'+ai; sb.style.display='none';
   div.appendChild(sb);
@@ -2935,8 +3203,24 @@ function recalc(wi,ai){
   // V13-FIX2: isHourAct() en vez de act.hr — cubre tipo='hora' sin act.hr=true
   if(isHourAct(act)){ pay=totalShiftHours(a)*getHRate(w,act); }
   else if(act.tipo==='$'){ pay=parseFloat(a.qty)||0; }
-  // Tau: Daywork usa contractRate si existe (misma lógica que Hours)
-  else { pay=(parseFloat(a.qty)||0)*act.p; }  // Daywork, Pieces, Cajas — todos usan act.p
+  else {
+    // V20_28: si motor activo (getRequiredInputs>0), usa computePay con fallback a legacy
+    var _motorActive=false;
+    try { _motorActive = getRequiredInputs(act).length > 0; } catch(e){ _motorActive=false; }
+    if(_motorActive){
+      try {
+        var _hours=totalShiftHours(a)||0;
+        pay=computePay(act, a.inputs||{}, 1, act.p, _hours);
+        if(!isFinite(pay)) pay=0;
+        pay=Math.round(pay*100)/100; // mate: redondear 2 decimales
+      } catch(e){
+        console.warn('Motor recalc fallback a legacy:', e);
+        pay=(parseFloat(a.qty)||0)*act.p;
+      }
+    } else {
+      pay=(parseFloat(a.qty)||0)*act.p; // Legacy
+    }
+  }
   a.pay=pay;
   var sb=gEl('sb'+wi+'_'+ai);
   if(sb){ if(pay>0){sb.textContent='Subtotal: $'+pay.toFixed(2);sb.style.display='block';}else sb.style.display='none'; }
@@ -3056,7 +3340,8 @@ function chAct(wi,ai,nai){
   var actName=nai>=0&&nai<ACTS.length?ACTS[nai].es:'';
   var actTipo=nai>=0&&nai<ACTS.length?ACTS[nai].tipo:'';
   var prevFinca = w.acts[ai].finca || '';
-  w.acts[ai]={ai:nai,esName:actName,tipo:actTipo,qty:'',ini:'',fin:'',showTime:false,pay:0,finca:prevFinca};
+  // V20_28: al cambiar actividad, limpiar a.inputs (fix frontend/QA — inputs de act viejo no son válidos para nuevo)
+  w.acts[ai]={ai:nai,esName:actName,tipo:actTipo,qty:'',ini:'',fin:'',showTime:false,pay:0,finca:prevFinca,inputs:{}};
   var old=gEl('ar'+wi+'_'+ai); if(old)old.parentNode.removeChild(old);
   var cont=gEl('ac'+wi); if(!cont)return;
   cont.innerHTML='';
@@ -3489,6 +3774,7 @@ function _serializeState(){
       if(sa.indPies) actSv.indPies=sa.indPies;
       if(sa.indAncho) actSv.indAncho=sa.indAncho;
       if(sa.indAcres) actSv.indAcres=sa.indAcres;
+      if(sa.inputs && Object.keys(sa.inputs).length) actSv.inputs=sa.inputs; // V20_28: persistir motor inputs
       ws.acts.push(actSv);
     }
     wSave.push(ws);
@@ -4462,35 +4748,38 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
   if(ep&&ep.length&&estA&&estAn){ trTotal+='<td style="border-top:3px solid #1a2b8c"></td>'; trPrice+='<td></td>'; trLabor+='<td></td>'; trEntry+='<td></td>'; trExit+='<td></td>'; }
   if(hp&&hp.length&&hilA&&hilAn){ trTotal+='<td style="border-top:3px solid #1a2b8c"></td>'; trPrice+='<td></td>'; trLabor+='<td></td>'; trEntry+='<td></td>'; trExit+='<td></td>'; }
   // V20_06: Meta rows de grupales con subdivisión por grpParents (label+finca).
-  // Total = suma de subs. Pago/Labor con colspan. Entrada/Salida con N celdas (1 por sub).
+  // V20_30: TOTAL ahora emite N celdas separadas (una por sub), igual que V20_26 hizo con individuales.
+  // Pago/Labor mantienen colspan (valor compartido). Entrada/Salida ya eran N celdas.
   for(var gp2_=0;gp2_<grpParents.length;gp2_++){
     var _gp2=grpParents[gp2_];
     var _NG2=_gp2.subs.length;
-    // Sumar totalVal de todas las subs + acres si aplica
-    var _totVal=0, _acresSum=0;
-    for(var gs2_=0;gs2_<_NG2;gs2_++){
-      _totVal+=_gp2.subs[gs2_].totalVal||0;
-      if(_gp2.ct==='puertas'){
-        var _ancho=parseFloat(_gp2.subs[gs2_].anchoCama||0)||0;
-        if(_ancho>0) _acresSum+=(_gp2.subs[gs2_].totalVal||0)/_ancho;
-      }
-    }
-    var totalCell_='';
-    if(_gp2.ct==='puertas'){
-      totalCell_=(_acresSum>0?'<span style="font-size:9px;color:#0f6e56;display:block">'+smartNum(_acresSum)+' acres</span>':'')
-        +'<span style="font-size:11px">'+smartNum(_totVal)+' puertas</span>';
-    } else if(_gp2.ct==='cajas'){
-      totalCell_='<span style="font-size:11px">'+smartNum(_totVal)+' boxes</span>';
-    } else if(_gp2.ct==='hora'){
-      totalCell_='<span style="font-size:11px">'+smartNum(_totVal)+' hrs</span>';
-    } else {
-      totalCell_='<span style="font-size:11px">'+smartNum(_totVal)+'</span>';
-    }
     var _gcsp=_NG2>1?' colspan="'+_NG2+'"':'';
-    // V20_16: colores grupales alineados con los personalizados de Serafín (bordes #000, texto #000 en horarios)
-    trTotal+='<td'+_gcsp+' style="text-align:center;font-weight:700;line-height:1.5;border:1px solid #000;border-top:3px solid #1a2b8c;color:#1a2b8c">'+totalCell_+'</td>';
+    // V20_30: emitir TOTAL por sub-col (no colspan) — cada sub con su propio total
+    for(var gs2_=0;gs2_<_NG2;gs2_++){
+      var _subT=_gp2.subs[gs2_];
+      var _subTotVal=_subT.totalVal||0;
+      var _subAcres=0;
+      if(_gp2.ct==='puertas'){
+        var _ancho=parseFloat(_subT.anchoCama||0)||0;
+        if(_ancho>0) _subAcres=_subTotVal/_ancho;
+      }
+      var _subTotalCell='';
+      if(_gp2.ct==='puertas'){
+        _subTotalCell=(_subAcres>0?'<span style="font-size:9px;color:#0f6e56;display:block">'+smartNum(_subAcres)+' acres</span>':'')
+          +'<span style="font-size:11px">'+smartNum(_subTotVal)+' puertas</span>';
+      } else if(_gp2.ct==='cajas'){
+        _subTotalCell='<span style="font-size:11px">'+smartNum(_subTotVal)+' boxes</span>';
+      } else if(_gp2.ct==='hora'){
+        _subTotalCell='<span style="font-size:11px">'+smartNum(_subTotVal)+' hrs</span>';
+      } else {
+        _subTotalCell='<span style="font-size:11px">'+smartNum(_subTotVal)+'</span>';
+      }
+      trTotal+='<td style="text-align:center;font-weight:700;line-height:1.5;border:1px solid #000;border-top:3px solid #1a2b8c;color:#1a2b8c">'+_subTotalCell+'</td>';
+    }
+    // Pago Unit y Labor siguen con colspan (valor único compartido entre subs)
     trPrice+='<td'+_gcsp+' style="text-align:center;color:#c0392b;font-weight:700;border:1px solid #000">$'+_gp2.precio.toFixed(2)+'</td>';
     trLabor+='<td'+_gcsp+' style="text-align:center;border:1px solid #000;color:#3a7fd4;font-size:9px">'+(_gp2.finca||'')+'</td>';
+    // Entrada/Salida: N celdas con horario de cada sub-shift
     for(var gs3_=0;gs3_<_NG2;gs3_++){
       var _sub=_gp2.subs[gs3_];
       trEntry+='<td style="text-align:center;border:1px solid #000;color:#000">'+to12h(_sub.ini||'')+'</td>';
@@ -4683,7 +4972,7 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     +'.numcol{text-align:center!important;color:#8b0000;font-weight:700;font-size:8px}'
     +'.meta-last td{border-bottom:2px solid #1a2b8c!important}'
     +'.ft{font-size:7px;color:#1a2b8c;text-align:center;margin-top:3px;border-top:1px solid #1a2b8c;padding-top:3px}'
-    +'@media print{.nopr{display:none}thead{display:table-header-group}@page{margin:5mm;size:letter landscape}}'
+    +'@media print{.nopr{display:none}thead{display:table-header-group}@page{margin:5mm;size:letter landscape}*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}table{table-layout:fixed;-webkit-text-size-adjust:100%}th,td{word-break:break-word}}'
     +'</style></head><body>'
     +'<div class="hdr">'
     +'<div style="display:flex;align-items:center;gap:10px">'
@@ -4761,7 +5050,7 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
         +'<tr style="background:#8b0000;color:#fff;font-weight:700"><td colspan="2" style="padding:5px 8px;font-size:10px;border:1px solid #c00">TOTAL P&Eacute;RDIDA EMPRESA</td><td style="padding:5px 8px;font-size:12px;text-align:right;border:1px solid #c00">-$'+totalLoss.toFixed(2)+'</td></tr>'
         +'</table></div>';
     })()
-    +'<div class="ft">'+vals.rancho+' &nbsp;|&nbsp; '+vals.fecha+' &nbsp;|&nbsp; '+wks.length+' trabajadores &nbsp;|&nbsp; Bus: #'+vals.numBus+' &nbsp;|&nbsp; Surquero: '+(currentUser&&currentUser.isAdmin?'ADM':vals.surquero)+' &nbsp;|&nbsp; Generado: '+new Date().toLocaleString()+'</div>'
+    +'<div class="ft">'+vals.rancho+' &nbsp;|&nbsp; '+vals.fecha+' &nbsp;|&nbsp; '+wks.length+' trabajadores &nbsp;|&nbsp; Bus: #'+vals.numBus+' &nbsp;|&nbsp; Surquero: '+(currentUser&&currentUser.isAdmin?'ADM':vals.surquero)+' &nbsp;|&nbsp; Generado: '+new Date().toLocaleString()+' &nbsp;|&nbsp; App: '+(window.APP_VERSION||'?')+'</div>'
     +'<div class="nopr" style="text-align:center;margin-top:16px"><button onclick="window.print()" style="background:#1a7a4a;color:#fff;border:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-right:10px">🖨️ Imprimir / Guardar PDF</button><button onclick="window.close()" style="background:#eee;color:#555;border:none;padding:12px 20px;border-radius:8px;font-size:14px;cursor:pointer">Cerrar</button></div>'
     +'</body></html>';
   // V20_24: window.open sin features restrictivas (Android/iOS moderno bloquea `width=1000,height=700`) + fallback Blob robusto (timeout 60s para que el browser procese)
@@ -8167,7 +8456,7 @@ function generateSemPDF(){
     +'.total{font-weight:700;background:#d0d8ff;color:#1a2b8c}'
     +'.grand{font-weight:900;background:#1a2b8c;color:#fff}'
     +'.ft{font-size:8px;color:#1a2b8c;text-align:center;margin-top:6px;border-top:1px solid #1a2b8c;padding-top:5px}'
-    +'@media print{.nopr{display:none}@page{size:landscape;margin:10mm}}'
+    +'@media print{.nopr{display:none}@page{size:landscape;margin:10mm}*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}table{table-layout:fixed;-webkit-text-size-adjust:100%}th,td{word-break:break-word}}'
     +'</style></head><body>';
 
   // Gamma2: Header con logo eBerry (igual que Daily Payroll)
@@ -8352,7 +8641,7 @@ function generateSemPDF(){
 
   html += '</tbody></table>';
   // Gamma2: Footer + botones Imprimir/Cerrar
-  html += '<div class="ft">'+(gVal('semRancho')||'—')+' &nbsp;|&nbsp; Semana: '+dates[0]+' al '+dates[6]+' &nbsp;|&nbsp; '+workers.length+' trabajadores &nbsp;|&nbsp; Surquero: '+surqueroName+' &nbsp;|&nbsp; Generado: '+new Date().toLocaleString()+'</div>';
+  html += '<div class="ft">'+(gVal('semRancho')||'—')+' &nbsp;|&nbsp; Semana: '+dates[0]+' al '+dates[6]+' &nbsp;|&nbsp; '+workers.length+' trabajadores &nbsp;|&nbsp; Surquero: '+surqueroName+' &nbsp;|&nbsp; Generado: '+new Date().toLocaleString()+' &nbsp;|&nbsp; App: '+(window.APP_VERSION||'?')+'</div>';
   html += '<div class="nopr" style="text-align:center;margin-top:16px"><button onclick="window.print()" style="background:#1a7a4a;color:#fff;border:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-right:10px">🖨️ Imprimir / Guardar PDF</button><button onclick="window.close()" style="background:#eee;color:#555;border:none;padding:12px 20px;border-radius:8px;font-size:14px;cursor:pointer">Cerrar</button></div>';
   html += '</body></html>';
 
