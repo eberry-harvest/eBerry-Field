@@ -9,7 +9,7 @@
    activate() borre el cache v2 automáticamente al activarse.
    ═══════════════════════════════════════════════════════════════ */
 
-var CACHE_NAME = 'eberry-v3';
+var CACHE_NAME = 'eberry-v4';
 
 // Dominios de API → NUNCA cachear (datos dinámicos)
 var API_DOMAINS = [
@@ -31,7 +31,7 @@ var CDN_DOMAINS = [
 // usuario acepta la actualización desde el toast.
 // ─────────────────────────────────────────────────────────────
 self.addEventListener('install', function(e) {
-  console.log('[SW] Instalando v3...');
+  console.log('[SW] Instalando v4...');
   // Pre-cachear solo el root. Los CDN se cachean on-demand.
   e.waitUntil(
     caches.open(CACHE_NAME).then(function(cache) {
@@ -48,7 +48,7 @@ self.addEventListener('install', function(e) {
 // ACTIVATE: limpiar caches de versiones anteriores
 // ─────────────────────────────────────────────────────────────
 self.addEventListener('activate', function(e) {
-  console.log('[SW] Activado v3');
+  console.log('[SW] Activado v4 — fix clone bug');
   e.waitUntil(
     caches.keys().then(function(names) {
       return Promise.all(
@@ -206,8 +206,10 @@ function strategyCacheFirstCdn(request) {
   return caches.match(request).then(function(cached) {
     var fetchPromise = fetch(request).then(function(networkResp) {
       if (networkResp && networkResp.ok) {
+        // FIX v4: clonar ANTES de devolver el original — evita "Response body is already used"
+        var respClone = networkResp.clone();
         caches.open(CACHE_NAME).then(function(cache) {
-          cache.put(request, networkResp.clone());
+          cache.put(request, respClone);
         });
       }
       return networkResp;
@@ -228,8 +230,10 @@ function strategyCacheFirstLocal(request) {
     if (cached) return cached;
     return fetch(request).then(function(networkResp) {
       if (networkResp && networkResp.ok) {
+        // FIX v4: clonar ANTES de devolver original — evita "Response body is already used"
+        var respClone = networkResp.clone();
         caches.open(CACHE_NAME).then(function(cache) {
-          cache.put(request, networkResp.clone());
+          cache.put(request, respClone);
         });
       }
       return networkResp;
