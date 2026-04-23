@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_34';
+window.APP_VERSION = 'V20_35';
 (function(){
   // Toast persistente de "versión antigua detectada" — NO se puede cerrar, obliga a actualizar
   function showVersionMismatch(remoteV){
@@ -59,39 +59,79 @@ window.APP_VERSION = 'V20_34';
     });
   }
 
-  var _vChecking = false;
-  function checkVersion(){
-    if(_vChecking) return;  // evitar overlap
+  // V20_35: variables del scheduler con backoff — declaradas ANTES de usarse
+  var _vChecking = false, _vFailCount = 0, _vNextCheckTimer = null, _vBackoffMs = 300000;
+
+  // V20_35: checkVersion en window.* para que scheduleNextCheck y manualVersionCheck puedan llamarla
+  window.checkVersion = function(force){
+    if(_vChecking) return Promise.resolve({status:'busy'});
     _vChecking = true;
-    var url = 'version.txt?t=' + Date.now();  // cache-busting
-    fetch(url, {cache:'no-store'}).then(function(resp){
-      if(!resp.ok) return;
+    var url = 'version.txt?t=' + Date.now() + '&r=' + Math.random().toString(36).slice(2);
+    return fetch(url, {
+      cache:'no-store',
+      headers:{'Cache-Control':'no-cache, no-store, max-age=0','Pragma':'no-cache'}
+    }).then(function(resp){
+      if(!resp.ok) throw new Error('HTTP '+resp.status);
       return resp.text();
     }).then(function(txt){
-      if(!txt) return;
+      _vFailCount = 0;
+      if(!txt) return {status:'empty'};
       var remoteV = txt.trim().split('\n')[0];
       // V20_21: ack — si el usuario ya tocó "Actualizar" para esta versión remota, no mostrar popup aunque APP_VERSION difiera
       var _acked = '';
       try { _acked = localStorage.getItem('_ackedVersion') || ''; } catch(e){}
       console.log('[eBerry] Check versi\u00f3n: local='+window.APP_VERSION+' remota='+remoteV+' acked='+_acked);
-      if(remoteV && remoteV !== window.APP_VERSION && remoteV !== _acked){
+      if(remoteV && remoteV !== window.APP_VERSION && (force || remoteV !== _acked)){
+        if(force){ try { localStorage.removeItem('_ackedVersion'); } catch(e){} }
         console.warn('[eBerry] Versi\u00f3n NUEVA detectada: '+remoteV);
         showVersionMismatch(remoteV);
+        return {status:'new', remoteV:remoteV};
       }
-    }).catch(function(err){ /* sin red, ignorar */ })
-      .finally(function(){ _vChecking = false; });
+      return {status:'ok', remoteV:remoteV};
+    }).catch(function(err){
+      _vFailCount++;
+      console.warn('[eBerry] checkVersion error:', err && err.message ? err.message : err);
+      return {status:'error', error:String(err && err.message || err)};
+    }).finally(function(){ _vChecking = false; });
+  };
+
+  // V20_35: scheduler con backoff exponencial (recomendación optimizador)
+  function scheduleNextCheck(){
+    if(_vNextCheckTimer) clearTimeout(_vNextCheckTimer);
+    var delays = [30000, 60000, 120000, 300000, 600000, 1800000, 3600000];
+    var delay = _vFailCount > 0 ? delays[Math.min(_vFailCount-1, delays.length-1)] : _vBackoffMs;
+    _vNextCheckTimer = setTimeout(function(){
+      window.checkVersion().finally(scheduleNextCheck);
+    }, delay);
   }
 
-  // V20_20: polling agresivo — load + visibilitychange + focus + cada 30 segundos
-  if(document.readyState === 'complete') checkVersion();
-  else window.addEventListener('load', checkVersion);
+  if(document.readyState === 'complete') window.checkVersion().finally(scheduleNextCheck);
+  else window.addEventListener('load', function(){ window.checkVersion().finally(scheduleNextCheck); });
   document.addEventListener('visibilitychange', function(){
-    if(document.visibilityState === 'visible') checkVersion();
+    if(document.visibilityState === 'visible') window.checkVersion();
   });
-  window.addEventListener('focus', checkVersion);
-  // Polling periódico — detecta cambios en vivo sin cerrar/abrir la app
-  setInterval(checkVersion, 30000);
+  window.addEventListener('focus', function(){ window.checkVersion(); });
 })();
+
+// V20_35: botón manual en header — fuerza check ignorando _ackedVersion
+window.manualVersionCheck = function(){
+  var btn = document.getElementById('verCheckBtn');
+  if(btn){ btn.classList.add('spin'); btn.disabled = true; }
+  function done(){ if(btn){ btn.classList.remove('spin'); btn.disabled = false; } }
+  if(typeof window.checkVersion !== 'function'){ done(); return; }
+  window.checkVersion(true).then(function(res){
+    done();
+    if(!res) return;
+    if(res.status === 'new') return;
+    if(res.status === 'ok'){
+      if(typeof toast === 'function') toast('✓ Estás en la última versión ('+window.APP_VERSION+')');
+      return;
+    }
+    if(res.status === 'error' || res.status === 'empty'){
+      if(typeof toast === 'function') toast('⚠️ Sin conexión — intenta de nuevo');
+    }
+  }).catch(function(){ done(); if(typeof toast==='function') toast('⚠️ Sin conexión — intenta de nuevo'); });
+};
 
 // V15: Service Worker registration v2 — Network-First + toast de actualización
 (function(){
@@ -176,6 +216,11 @@ header{background:var(--g);color:#fff;padding:12px 14px 0;position:sticky;top:0;
 .logo{font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:2px}
 .logo em{color:var(--a);font-style:normal}
 .dpill{background:rgba(255,255,255,.18);border-radius:20px;padding:4px 11px;font-size:13px;font-weight:500}
+.ver-check-btn{background:rgba(255,255,255,.15);border:none;border-radius:50%;width:32px;height:32px;min-width:32px;color:#fff;font-size:16px;font-weight:700;cursor:pointer;padding:0;display:inline-flex;align-items:center;justify-content:center;transition:background .2s}
+.ver-check-btn:hover{background:rgba(255,255,255,.28)}
+.ver-check-btn:disabled{opacity:.6;cursor:default}
+.ver-check-btn.spin{animation:verSpin 1s linear infinite}
+@keyframes verSpin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
 .tabs{display:flex;gap:5px;overflow-x:auto;padding-bottom:8px;scrollbar-width:none}
 .tabs::-webkit-scrollbar{display:none}
 .tab{flex-shrink:0;background:rgba(255,255,255,.1);color:rgba(255,255,255,.85);border:none;border-radius:20px;padding:5px 12px;min-height:44px;display:inline-flex;align-items:center;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}
@@ -556,6 +601,7 @@ html.login-locked{overflow:hidden!important;height:100%!important}
     <div style="display:flex;align-items:center;gap:6px">
       <div class="dpill" id="hdate">—</div>
       <button onclick="showHistory()" style="background:rgba(255,255,255,.15);border:none;border-radius:20px;padding:4px 10px;color:#fff;font-size:12px;font-weight:600;cursor:pointer">📅</button>
+      <button id="verCheckBtn" class="ver-check-btn" onclick="window.manualVersionCheck()" title="Buscar actualización">↻</button>
       <button id="logoutBtn" onclick="logoutUser()" style="display:none;background:rgba(204,34,34,.75);border:none;border-radius:20px;padding:4px 10px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">🚪 Salir</button>
     </div>
   </div>
