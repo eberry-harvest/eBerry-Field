@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_35';
+window.APP_VERSION = 'V20_36';
 (function(){
   // Toast persistente de "versión antigua detectada" — NO se puede cerrar, obliga a actualizar
   function showVersionMismatch(remoteV){
@@ -896,13 +896,16 @@ html.login-locked{overflow:hidden!important;height:100%!important}
   <button onclick="exitReadOnly()" style="background:#cc2222;color:#fff;border:none;border-radius:6px;padding:8px 14px;font-weight:800;font-size:12px;cursor:pointer;min-height:36px">Salir</button>
 </div>
 <style>
-/* V20_34 — modo lectura: deshabilita inputs y oculta botones de escritura */
+/* V20_36 — modo lectura: deshabilita inputs (CSS amplio + disabled programático) */
 body.readOnly{padding-top:56px}
-body.readOnly .card input:not([type="date"]),
-body.readOnly .card select,
-body.readOnly .card textarea,
-body.readOnly .card button:not(.roExit):not(.mca){
-  pointer-events:none !important;opacity:.75 !important
+body.readOnly input,
+body.readOnly select,
+body.readOnly textarea{
+  pointer-events:none !important;opacity:.75 !important;user-select:none;
+  background:#f5f5f5 !important;cursor:not-allowed !important
+}
+body.readOnly button:not(.roExit):not(.mca):not(#verCheckBtn):not([onclick*="exitReadOnly"]):not([onclick*="showHistory"]):not([onclick*="logoutUser"]){
+  pointer-events:none !important;opacity:.6 !important;cursor:not-allowed !important
 }
 body.readOnly #btnSend,
 body.readOnly [onclick*="sendToSheets"],
@@ -2816,6 +2819,17 @@ function _enterReadOnly(payload){
   if(lbl) lbl.textContent = payload.fecha || '—';
   if(banner){ banner.style.display='flex'; }
   document.body.classList.add('readOnly');
+
+  // V20_36: disabled REAL en todos los inputs/selects/textareas (CSS pointer-events no bloquea teclado tras focus)
+  // Se ejecuta DESPUÉS del re-render para cubrir elementos recién creados
+  try {
+    document.querySelectorAll('input, select, textarea').forEach(function(el){
+      if(el.closest && el.closest('#readOnlyBanner')) return; // no deshabilitar el banner
+      if(el.id === 'roDate' || el.id === 'roSurquero') return; // inputs del modal historial (fuera de readOnly UX)
+      el.setAttribute('data-ro-prev-disabled', el.disabled ? '1' : '0');
+      el.disabled = true;
+    });
+  } catch(e){ console.warn('V20_36 disabled inputs fallo:', e); }
 }
 
 function exitReadOnly(){
@@ -2838,6 +2852,17 @@ function exitReadOnly(){
   // Banner off + re-render
   var b=gEl('readOnlyBanner'); if(b) b.style.display='none';
   document.body.classList.remove('readOnly');
+
+  // V20_36: restaurar disabled=false en todos los inputs (la clase .readOnly se quitó, pero el atributo sigue)
+  try {
+    document.querySelectorAll('input, select, textarea').forEach(function(el){
+      var prev = el.getAttribute('data-ro-prev-disabled');
+      if(prev === '1') el.disabled = true;
+      else el.disabled = false;
+      el.removeAttribute('data-ro-prev-disabled');
+    });
+  } catch(e){ console.warn('V20_36 restore inputs fallo:', e); }
+
   var list=gEl('wlist'); if(list) list.innerHTML='';
   workers.forEach(function(w,i){ if(list) list.appendChild(mkCard(w,i)); });
   try { updParam && updParam(); } catch(e){}
