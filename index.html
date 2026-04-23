@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_39';
+window.APP_VERSION = 'V20_40';
 (function(){
   // Toast persistente de "versión antigua detectada" — NO se puede cerrar, obliga a actualizar
   function showVersionMismatch(remoteV){
@@ -904,35 +904,19 @@ html.login-locked{overflow:hidden!important;height:100%!important}
   <button onclick="exitReadOnly()" style="background:#cc2222;color:#fff;border:none;border-radius:6px;padding:8px 14px;font-weight:800;font-size:12px;cursor:pointer;min-height:36px">Salir</button>
 </div>
 <style>
-/* V20_39 — modo lectura: bloquea solo EDICIÓN DE DATOS, permite navegación */
+/* V20_40 — modo lectura MÍNIMO: solo bloquea EDICIÓN DE DATOS, TODO lo demás funciona */
 body.readOnly{padding-top:56px}
-/* Inputs deshabilitados (no se pueden editar datos) */
+/* Inputs/selects/textareas disabled — no se pueden modificar datos */
 body.readOnly input,
 body.readOnly select,
 body.readOnly textarea{
   pointer-events:none !important;opacity:.75 !important;user-select:none;
   background:#f5f5f5 !important;cursor:not-allowed !important
 }
-/* Solo bloquear botones peligrosos (eliminar workers, cambiar actividades, etc.)
-   NO bloquear tabs ni botones de navegación — admin necesita poder moverse por las pestañas */
-body.readOnly button.xbtn,
-body.readOnly button.del,
-body.readOnly button.add-shift,
-body.readOnly button.shift-del,
-body.readOnly button[onclick*="delete"],
-body.readOnly button[onclick*="Del"],
-body.readOnly button[onclick*="addWorker"],
-body.readOnly button[onclick*="addGrpAct"],
-body.readOnly button[onclick*="save()"],
-body.readOnly button[onclick*="chAct"],
-body.readOnly button[onclick*="onQty"],
-body.readOnly button[onclick*="togTime"]{
-  pointer-events:none !important;opacity:.6 !important;cursor:not-allowed !important
-}
-/* Ocultar botones de envío/nuevo día (no aplican en modo lectura) */
-body.readOnly #btnSend,
+/* Ocultar solo botones de ENVÍO/NUEVO DÍA (no aplican en modo lectura) */
 body.readOnly [onclick*="sendToSheets"],
 body.readOnly [onclick*="openNewDay"]{display:none !important}
+/* TODO LO DEMÁS (tabs, botón PDF, generador, navegación, ver trabajadores, etc.) FUNCIONA */
 </style>
 
 <!-- NUEVO DIA MODAL -->
