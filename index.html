@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_42';
+window.APP_VERSION = 'V20_43';
 (function(){
   // Toast persistente de "versión antigua detectada" — NO se puede cerrar, obliga a actualizar
   function showVersionMismatch(remoteV){
@@ -3732,8 +3732,36 @@ function onIndField(inp){
 // V7: sanitizar qty como número antes de guardar
 // V19-FIX2: guardar número, no string
 function onQty(wi,ai,v){ var w=getW(wi); if(!w||!w.acts[ai])return; var n=parseFloat(v); w.acts[ai].qty=isFinite(n)?n:0; recalc(wi,ai); autoSave(); }
-function onIni(wi,ai,v){ var w=getW(wi); if(!w||!w.acts[ai])return; w.acts[ai].ini=v; w.acts[ai].showTime=true; recalc(wi,ai); autoSave(); checkOverlapsForWorker(wi); /* V20_31 */ }
-function onFin(wi,ai,v){ var w=getW(wi); if(!w||!w.acts[ai])return; w.acts[ai].fin=v; w.acts[ai].showTime=true; recalc(wi,ai); autoSave(); checkOverlapsForWorker(wi); /* V20_31 */ }
+// V20_43: validar overlap ANTES de persistir. Si overlap → revertir + mostrar modal + limpiar DOM.
+function onIni(wi,ai,v){
+  var w=getW(wi); if(!w||!w.acts[ai])return;
+  var prev = w.acts[ai].ini;
+  w.acts[ai].ini=v; w.acts[ai].showTime=true;
+  var _ov = checkOverlapsInWorker(w);
+  if(!_ov.ok){
+    // Revertir: restaurar valor anterior, limpiar DOM, mostrar modal bloqueante
+    w.acts[ai].ini = prev;
+    var _el = document.querySelector('[data-wi="'+wi+'"][data-ai="'+ai+'"][data-fld="ini"]');
+    if(_el) _el.value = prev || '';
+    openOverlap(_ov, w.name);
+    return; // NO recalc, NO autoSave — el valor no se guarda
+  }
+  recalc(wi,ai); autoSave();
+}
+function onFin(wi,ai,v){
+  var w=getW(wi); if(!w||!w.acts[ai])return;
+  var prev = w.acts[ai].fin;
+  w.acts[ai].fin=v; w.acts[ai].showTime=true;
+  var _ov = checkOverlapsInWorker(w);
+  if(!_ov.ok){
+    w.acts[ai].fin = prev;
+    var _el = document.querySelector('[data-wi="'+wi+'"][data-ai="'+ai+'"][data-fld="fin"]');
+    if(_el) _el.value = prev || '';
+    openOverlap(_ov, w.name);
+    return;
+  }
+  recalc(wi,ai); autoSave();
+}
 
 // Tau: obtener rate por hora real del worker — si tiene contractRate individual, usarlo;
 // si no, fallback al precio default de la actividad (act.p)
@@ -5795,11 +5823,25 @@ function onShift(wi,ai,si,field,val){
   var w=getW(wi); if(!w||!w.acts[ai])return;
   var a=w.acts[ai];
   if(!a.shifts) a.shifts=[{ini:a.ini||'',fin:a.fin||''}];
+  // V20_43: validar overlap ANTES de persistir. Si causa translape → revertir y bloquear.
+  var prevVal = a.shifts[si][field];
+  var prevActIni = a.ini, prevActFin = a.fin;
   a.shifts[si][field]=val;
   if(si===0){ a.ini=a.shifts[0].ini||''; a.fin=a.shifts[0].fin||''; }
+  var _ov = checkOverlapsInWorker(w);
+  if(!_ov.ok){
+    // Revertir todo — no se guarda el valor nuevo
+    a.shifts[si][field] = prevVal;
+    a.ini = prevActIni; a.fin = prevActFin;
+    // Limpiar el input del DOM para que refleje el valor anterior
+    var _idPrefix = (field==='ini') ? 'shi' : 'shf';
+    var _el = gEl(_idPrefix+wi+'_'+ai+'_'+si);
+    if(_el) _el.value = prevVal || '';
+    openOverlap(_ov, w.name);
+    return; // NO recalc, NO autoSave — el translape NO se permite
+  }
   a.showTime=true;
   recalc(wi,ai); autoSave();
-  checkOverlapsForWorker(wi); // V20_31: detectar translape con otras actividades
 }
 
 function totalShiftHours(a){
@@ -6593,11 +6635,33 @@ function setGrpVar(inp){
   var gi = parseInt(inp.dataset.gi);
   var v  = inp.dataset.v;
   if(!grpActs[gi]) return;
-  grpActs[gi].vars[v] = inp.value;
+  // V20_43: validar overlap ANTES de persistir si es horario (ini/fin)
+  if(v==='ini' || v==='fin'){
+    var prevVal = grpActs[gi].vars[v];
+    grpActs[gi].vars[v] = inp.value;
+    // checkOverlapsForGrpAct itera participantes y devuelve el primer overlap
+    var _overlap = false, _ovInfo = null, _ovName = '';
+    for(var _pi=0; _pi<(grpActs[gi].participantes||[]).length; _pi++){
+      var _wid = grpActs[gi].participantes[_pi];
+      var _wv = null;
+      for(var _wi=0; _wi<workers.length; _wi++){ if(workers[_wi].id===_wid){ _wv=workers[_wi]; break; } }
+      if(_wv){
+        var _ov = checkOverlapsInWorker(_wv);
+        if(!_ov.ok){ _overlap=true; _ovInfo=_ov; _ovName=_wv.name; break; }
+      }
+    }
+    if(_overlap){
+      // Revertir + limpiar DOM input
+      grpActs[gi].vars[v] = prevVal;
+      inp.value = prevVal || '';
+      openOverlap(_ovInfo, _ovName);
+      return; // NO calcGrpAct, NO autoSave
+    }
+  } else {
+    grpActs[gi].vars[v] = inp.value;
+  }
   calcGrpAct(gi);
   autoSave();
-  // V20_32: si se cambió el horario del grupal, validar overlap en todos los participantes
-  if(v==='ini' || v==='fin') checkOverlapsForGrpAct(gi);
 }
 
 // ── Omega: Conversión Pies ↔ Acres por rancho ──
