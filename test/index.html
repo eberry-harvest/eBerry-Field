@@ -24,7 +24,7 @@
 </script>
 <script>
 // V50 (port V20_23): estandarización de colores PDF
-window.APP_VERSION = 'V64';
+window.APP_VERSION = 'V65';
 (function(){
   function showVersionMismatch(remoteV){
     if(document.getElementById('ver-mismatch')) return;
@@ -923,9 +923,9 @@ html.login-locked{overflow:hidden!important;height:100%!important}
 </div>
 
 <!-- V61 (port V20_34): Banner modo lectura -->
-<div id="readOnlyBanner" role="alert" aria-live="assertive" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#fff3c4;border-bottom:2px solid #e6b800;padding:10px 14px;align-items:center;justify-content:space-between;gap:10px;font-size:13px;font-weight:700;color:#5a4500;box-shadow:0 2px 6px rgba(0,0,0,.12);min-height:44px;box-sizing:border-box">
+<div id="readOnlyBanner" role="alert" aria-live="assertive" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#c0392b;border-bottom:2px solid #922b21;padding:12px 14px;align-items:center;justify-content:space-between;gap:10px;font-size:14px;font-weight:700;color:#fff;box-shadow:0 2px 8px rgba(0,0,0,.2);min-height:50px;box-sizing:border-box">
   <span style="flex:1;line-height:1.3">📖 MODO LECTURA — Día <b id="roDateLbl">—</b> cargado desde Sheets</span>
-  <button onclick="exitReadOnly()" style="background:#cc2222;color:#fff;border:none;border-radius:6px;padding:8px 14px;font-weight:800;font-size:12px;cursor:pointer;min-height:36px">Salir</button>
+  <button onclick="exitReadOnly()" style="background:#fff;color:#c0392b;border:none;border-radius:6px;padding:10px 16px;font-weight:800;font-size:13px;cursor:pointer;min-height:44px">Salir</button>
 </div>
 <style>
 /* V63 (port V20_40) — modo lectura MÍNIMO: solo bloquea EDICIÓN DE DATOS, TODO lo demás funciona */
@@ -1116,8 +1116,29 @@ body.readOnly [onclick*="openNewDay"]{display:none !important}
         </div>
       </div>
     </div>
-    <label>Notas del día</label>
-    <textarea id="notas" data-save rows="2" placeholder="Observaciones..."></textarea>
+    <!-- V65: Notas como botón colapsable + textarea oculto por default -->
+    <div id="notaWrap" style="margin-top:10px">
+      <button id="notaToggleBtn" type="button" onclick="toggleNotaV65()" style="width:100%;padding:11px;background:var(--gp);color:var(--g);border:1.5px dashed var(--g2);border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;min-height:44px;display:flex;align-items:center;justify-content:center;gap:6px">
+        <span id="notaIconV65">＋</span> <span id="notaLabelV65">Agregar nota del día</span>
+      </button>
+      <div id="notaBox" style="display:none;margin-top:8px">
+        <textarea id="notas" data-save rows="3" placeholder="Observaciones del día (clima, incidentes, ausencias, etc.)" oninput="onNotaInput()" style="min-height:80px"></textarea>
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <button type="button" onclick="saveNotaV65()" style="flex:1;padding:10px;background:var(--b);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;min-height:44px">💾 Guardar nota</button>
+          <button type="button" onclick="cancelNotaV65()" style="padding:10px 14px;background:#eee;color:#333;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;min-height:44px">Cancelar</button>
+        </div>
+      </div>
+      <div id="notaPreview" style="display:none;margin-top:8px;padding:10px 12px;background:#fffbe6;border:1.5px solid #ffd54f;border-radius:8px;font-size:13px;color:#5a4500">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#b8860b;margin-bottom:4px">📝 Nota del día</div>
+        <div id="notaPreviewText" style="line-height:1.4"></div>
+        <button type="button" onclick="toggleNotaV65()" style="margin-top:6px;background:none;color:#5a4500;border:1px solid #ffd54f;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer">✏️ Editar</button>
+      </div>
+    </div>
+    <!-- V65: Botón Guardar manual del día completo — abajo de nota -->
+    <button id="btnSaveDay" type="button" onclick="save()" style="width:100%;margin-top:12px;padding:14px;background:var(--b);color:#fff;border:none;border-radius:10px;font-size:16px;font-weight:700;cursor:pointer;min-height:50px;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 2px 8px rgba(45,122,45,.2)">
+      <span style="font-size:20px">💾</span> Guardar
+    </button>
+    <div style="text-align:center;font-size:11px;color:var(--gr);margin-top:4px">Se guarda automáticamente — este botón es por si quieres guardar manualmente</div>
     <!-- V28-FIX-UI2: botón "Nuevo Día" eliminado de Parámetros — solo existe en Resumen -->
   </div>
   <!-- Rancho/finca/horario se mantienen como hidden para compatibilidad con data-save -->
@@ -1136,6 +1157,12 @@ body.readOnly [onclick*="openNewDay"]{display:none !important}
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
     <span style="font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--g);letter-spacing:1px">🏡 Ranchos del Día</span>
     <span id="ranchCountLabel" style="font-size:11px;font-weight:700;color:var(--gr);background:var(--gp);border-radius:12px;padding:3px 10px">0 ranchos</span>
+  </div>
+  <!-- V65: Empty state grande cuando no hay ranchos -->
+  <div id="ranchEmptyState" style="display:none;background:linear-gradient(135deg,#fff 0%,var(--gp) 100%);border:2px dashed var(--g2);border-radius:14px;padding:28px 20px;text-align:center;margin-bottom:12px">
+    <div style="font-size:48px;margin-bottom:10px">🏡</div>
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--g);letter-spacing:1px;margin-bottom:6px">Empieza agregando tu primer rancho</div>
+    <div style="font-size:13px;color:var(--gr);line-height:1.5">Selecciona un rancho abajo y toca <b>＋ Agregar</b>.<br>Puedes registrar hasta <b>3 ranchos</b> al día.</div>
   </div>
   <!-- Lista de bloques de rancho (generada por JS) -->
   <div id="ranchBlockList"></div>
@@ -1755,6 +1782,8 @@ function loginSuccess(user){
   renderRanchBar();
   // V30-FIX: updParam DESPUÉS de renderRanchBar (antes crasheaba porque hpill no existía)
   updParam();
+  // V65: inicializar estado visual de la nota (colapsada o con preview)
+  try { _initNotaV65(); } catch(e){ console.warn('V65 nota init fallo:', e); }
   // V28-FIX-UI3+UI4: auto-expandir primer rancho + activar página
   if(!_ranchos.length && gVal('rancho')){ _initRanchos(); renderRanchBar(); }
   // V29-FIX3: solo expandir si NO está ya expandido (evita colapsar lo que renderRanchBar ya expandió)
@@ -2492,12 +2521,22 @@ function _initRanchos(){
 
 // Renderizar la lista de bloques de rancho
 function renderRanchBar(){
+  // V65: mostrar/ocultar empty state
+  var empty = gEl('ranchEmptyState');
   // V26-FIX6: solo inicializar si hay rancho seleccionado (evita bloque "SIN RANCHO")
   if(!_ranchos.length){
     var rVal = gVal('rancho');
     if(rVal) _initRanchos();
-    else return; // Sin rancho aún — mostrar solo el selector de "Agregar"
+    else {
+      // V65: sin ranchos — mostrar empty state + limpiar lista
+      if(empty) empty.style.display='block';
+      var lst = gEl('ranchBlockList');
+      if(lst) lst.innerHTML='';
+      populateRanchAddSel();
+      return;
+    }
   }
+  if(empty) empty.style.display='none'; // hay ranchos — ocultar empty state
   var list = gEl('ranchBlockList');
   if(!list) return;
   list.innerHTML = '';
@@ -2571,7 +2610,9 @@ function renderRanchBar(){
 function populateRanchAddSel(){
   var sel = gEl('ranchAddSel');
   if(!sel) return;
-  sel.innerHTML = '<option value="">— Selecciona un rancho —</option>';
+  // V65: placeholder cambia según estado — pre-selecciona el rancho del surquero si es el 1ro
+  var placeholderTxt = (_ranchos.length === 0) ? '— Tu rancho asignado —' : '— Selecciona otro rancho —';
+  sel.innerHTML = '<option value="">'+placeholderTxt+'</option>';
   var ioe = currentUser ? (currentUser.ioe||'') : '';
   var isAdm = currentUser && currentUser.isAdmin;
   var ranchoList = getRanchoList(ioe, isAdm);
@@ -2582,6 +2623,10 @@ function populateRanchAddSel(){
       opt.textContent = ranchoList[i];
       sel.appendChild(opt);
     }
+  }
+  // V65: si surquero normal (no admin) y es el 1er rancho del día — pre-seleccionar el único disponible
+  if(_ranchos.length === 0 && !isAdm && ranchoList.length >= 1){
+    sel.value = ranchoList[0];
   }
 }
 
@@ -3389,6 +3434,67 @@ function updDate(){
   var p=v.split('-');
   if(p.length===3) gEl('hdate').textContent=p[2]+'/'+p[1]+'/'+p[0];
 }
+// V65: manejo de la nota del día (colapsable)
+function toggleNotaV65(){
+  if(typeof _readOnlyMode !== 'undefined' && _readOnlyMode){ toast && toast('🔒 Modo lectura'); return; }
+  var box=gEl('notaBox'), btn=gEl('notaToggleBtn'), prev=gEl('notaPreview');
+  if(!box || !btn || !prev) return;
+  if(box.style.display==='none'){
+    box.style.display='block';
+    btn.style.display='none';
+    prev.style.display='none';
+    setTimeout(function(){ var t=gEl('notas'); if(t) t.focus(); },100);
+  } else {
+    cancelNotaV65();
+  }
+}
+function saveNotaV65(){
+  var t=gEl('notas'), val=t?t.value.trim():'';
+  var box=gEl('notaBox'), btn=gEl('notaToggleBtn'), prev=gEl('notaPreview');
+  box.style.display='none';
+  if(val){
+    gEl('notaPreviewText').textContent=val;
+    prev.style.display='block';
+    btn.style.display='none';
+    try { if(typeof autoSave==='function') autoSave(); } catch(e){}
+    try { toast && toast('💾 Nota guardada'); } catch(e){}
+  } else {
+    prev.style.display='none';
+    btn.style.display='flex';
+  }
+}
+function cancelNotaV65(){
+  var t=gEl('notas'), val=t?t.value.trim():'';
+  var box=gEl('notaBox'), btn=gEl('notaToggleBtn'), prev=gEl('notaPreview');
+  box.style.display='none';
+  if(val){
+    gEl('notaPreviewText').textContent=val;
+    prev.style.display='block';
+    btn.style.display='none';
+  } else {
+    btn.style.display='flex';
+    prev.style.display='none';
+  }
+}
+function onNotaInput(){ /* hook para autoSave — ya lo maneja data-save */ }
+// V65: inicializar estado de la nota al cargar (si ya había contenido guardado)
+function _initNotaV65(){
+  var t=gEl('notas'); if(!t) return;
+  var val=(t.value||'').trim();
+  var box=gEl('notaBox'), btn=gEl('notaToggleBtn'), prev=gEl('notaPreview');
+  if(!box || !btn || !prev) return;
+  if(val){
+    gEl('notaPreviewText').textContent=val;
+    prev.style.display='block';
+    btn.style.display='none';
+    box.style.display='none';
+  } else {
+    btn.style.display='flex';
+    prev.style.display='none';
+    box.style.display='none';
+  }
+}
+
 function updParam(){
   updDate();
   var h=nh(gVal('hEnt'),gVal('hSal'));
