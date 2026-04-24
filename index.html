@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_40';
+window.APP_VERSION = 'V20_41';
 (function(){
   // Toast persistente de "versión antigua detectada" — NO se puede cerrar, obliga a actualizar
   function showVersionMismatch(remoteV){
@@ -3551,8 +3551,27 @@ function mkActRow(wid_,ai,_cont){
     })(wid_, ai);
     fincaRow.appendChild(fincaSel);
     div.appendChild(fincaRow);
+  } else {
+    // V20_41 FIX: fallback a input de texto libre si el rancho NO está en catálogo
+    // (evita que el usuario se quede sin poder escribir la finca cuando FINCAS_POR_RANCHO falló)
+    var fincaRowFB = document.createElement('div');
+    fincaRowFB.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:6px';
+    var fincaInp = document.createElement('input');
+    fincaInp.type = 'text';
+    fincaInp.id = 'finca_act_'+wid_+'_'+ai;
+    fincaInp.placeholder = '📍 Finca / Labor (escribir manualmente)';
+    fincaInp.value = (a.finca !== undefined && a.finca !== '') ? a.finca : '';
+    fincaInp.style.cssText = 'flex:1;padding:8px 10px;border:1.5px dashed var(--bd);border-radius:8px;font-family:\'DM Sans\',sans-serif;font-size:14px;min-height:44px;background:#fff;color:var(--dk)';
+    (function(wi2,ai2){
+      fincaInp.addEventListener('input', function(){
+        var w2=getW(wi2); if(!w2||!w2.acts[ai2])return;
+        w2.acts[ai2].finca = this.value;
+        autoSave();
+      });
+    })(wid_, ai);
+    fincaRowFB.appendChild(fincaInp);
+    div.appendChild(fincaRowFB);
   }
-  // else: rancho sin fincas en catálogo → no renderiza input. PDF tampoco mostrará fila de finca.
   // Tau: TODAS las actividades usan sistema de turnos con "Agregar turno"
   if(!a.shifts||!a.shifts.length){ a.shifts=[{ini:a.ini||'',fin:a.fin||''}]; }
   var tog=document.createElement('div');
@@ -7312,6 +7331,22 @@ function refreshDataBackground(){
         toast('✅ Actividades actualizadas (' + ALL_ACTS.length + ' cargadas)');
         console.log('✅ Delta2: Tasks recuperadas en background (' + ALL_ACTS.length + ' acts)');
       }
+    }
+  });
+  // V20_41 FIX: cargar catálogo de fincas también en background — antes se saltaba en ruta con cache
+  // Esto causaba FINCAS_POR_RANCHO={} vacío si el usuario login con cache y nunca guardó eb_fincas_cache
+  fetchFromScript('fincas', function(err, data){
+    if(!err && data && data.success && data.fincas){
+      FINCAS_POR_RANCHO = data.fincas;
+      try { localStorage.setItem('eb_fincas_cache', JSON.stringify(data.fincas)); } catch(e){}
+      console.log('✅ V20_41: Fincas cargadas (' + Object.keys(data.fincas).length + ' ranchos)');
+    } else {
+      // Fallback: cache local
+      try {
+        var cached = localStorage.getItem('eb_fincas_cache');
+        if(cached){ FINCAS_POR_RANCHO = JSON.parse(cached); console.log('⚠️ V20_41: Fincas desde cache'); }
+        else console.warn('⚠️ V20_41: Sin fincas — catálogo vacío');
+      } catch(e){}
     }
   });
 }
