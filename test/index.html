@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
 <title>eBerry Field App</title>
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -24,7 +24,7 @@
 </script>
 <script>
 // V50 (port V20_23): estandarización de colores PDF
-window.APP_VERSION = 'V72';
+window.APP_VERSION = 'V75';
 (function(){
   function showVersionMismatch(remoteV){
     if(document.getElementById('ver-mismatch')) return;
@@ -211,6 +211,9 @@ window.manualVersionCheck = function(){
 body{font-family:'DM Sans',sans-serif;background:var(--lt);color:var(--dk);padding-bottom:140px;-webkit-overflow-scrolling:touch}
 header{background:var(--g);color:#fff;padding:12px 14px 0;position:sticky;top:0;z-index:200;box-shadow:0 2px 16px rgba(0,0,0,.2)}
 body.readOnly header{top:56px} /* V67: empujar header bajo el banner de modo lectura */
+/* V75: hint visual en tabs durante modo lectura — el usuario ve que puede navegar pero todo es solo lectura */
+body.readOnly .tabs{opacity:.9;position:relative}
+body.readOnly .tabs::after{content:'📖 Solo lectura';position:absolute;top:50%;right:6px;transform:translateY(-50%);background:rgba(192,57,43,.85);color:#fff;font-size:9px;font-weight:700;padding:2px 6px;border-radius:10px;pointer-events:none;z-index:3}
 .htop{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
 .logo{font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:2px}
 .logo em{color:var(--a);font-style:normal}
@@ -1164,7 +1167,7 @@ body.readOnly [onclick*="openNewDay"]{display:none !important}
     <!-- V28-FIX-UI2: botón "Nuevo Día" eliminado de Parámetros — solo existe en Resumen -->
   </div>
   <!-- V67: Config del rancho activo — visible, se sincroniza al cambiar de pill -->
-  <div class="card" id="ranchoConfigCard" style="margin-top:12px">
+  <div class="card" id="ranchoConfigCard" style="margin-top:12px;display:none">
     <div class="ct" id="ranchoConfigTitle">⚙️ Configuración del Rancho Activo</div>
     <div class="r2" style="margin-bottom:8px">
       <div><label>Rancho</label>
@@ -1183,10 +1186,9 @@ body.readOnly [onclick*="openNewDay"]{display:none !important}
   </div>
   <input type="hidden" id="payH" data-save value="16.23">
   <input type="hidden" id="payMin" data-save value="16.23">
-</div>
 
-<!-- V25: SECCIÓN DE RANCHOS — bloques con tabs embebidas -->
-<div id="ranchesSection" style="padding:0 13px 13px">
+<!-- V73: SECCIÓN DE RANCHOS — ahora DENTRO de Parámetros (pg=0) para evitar clicks accidentales en otras pestañas -->
+<div id="ranchesSection" style="padding:0 13px 13px;margin-top:15px">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
     <span style="font-family:'Bebas Neue',sans-serif;font-size:18px;color:var(--g);letter-spacing:1px">🏡 Ranchos del Día</span>
     <span id="ranchCountLabel" style="font-size:11px;font-weight:700;color:var(--gr);background:var(--gp);border-radius:12px;padding:3px 10px">0 ranchos</span>
@@ -1208,9 +1210,10 @@ body.readOnly [onclick*="openNewDay"]{display:none !important}
   </div>
   <div style="text-align:center;margin-top:8px;font-size:11px;color:var(--gr)">Máximo 3 ranchos por día</div>
 </div>
+</div> <!-- V73: cierra pg=0 (Parámetros) -->
 
-<!-- V25: Contenedor donde se teletransportan las páginas al rancho activo -->
-<div id="pagesSlot" style="display:none">
+<!-- V74: pagesSlot contenedor de páginas — display:none quitado (en V66 se teleportaba dentro de rancho expandido, en V67+ ya no) -->
+<div id="pagesSlot">
 
 <!-- PAGE 1 — ANÁLISIS -->
 <div class="pg" id="p1an">
@@ -2866,6 +2869,13 @@ function renderParamsFinca(){
 }
 
 function syncRanchConfigToParams(){
+  // V75: ocultar card si no hay ranchos (antes se veía vacía y era confuso)
+  var configCard = gEl('ranchoConfigCard');
+  if(!_ranchos.length){
+    if(configCard) configCard.style.display = 'none';
+    return;
+  }
+  if(configCard) configCard.style.display = '';
   var r = _ranchos[_activeRanchoIdx]; if(!r) return;
   // Actualizar título de la card
   var titEl = gEl('ranchoConfigTitle');
@@ -5281,7 +5291,8 @@ function go(n){
   }
   if(n===6) refreshInvoiceAuto();
   if(n===7) initSemTab();
-  var pgs=document.querySelectorAll('.pg'); for(var i=0;i<pgs.length;i++) pgs[i].classList.toggle('on',i===n);
+  // V75: usar add/remove explícito (toggle alterna aunque el estado sea el mismo — bug: p0 desaparecía al go(0))
+  var pgs=document.querySelectorAll('.pg'); for(var i=0;i<pgs.length;i++){ if(i===n) pgs[i].classList.add('on'); else pgs[i].classList.remove('on'); }
   // V67: marcar tab global activa (tabs en el header, no sub-tabs de rancho)
   var gTabs = document.querySelectorAll('header .tabs .tab');
   for(var i=0;i<gTabs.length;i++) gTabs[i].classList.toggle('act', i===n);
