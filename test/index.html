@@ -1944,6 +1944,8 @@ function onRanchoChange(){
   if(currentUser && workers.length) saveQuiet();
   var rancho = gVal('rancho');
   _filterActsForRancho(rancho);
+  // V71 (port V20_42): refrescar dropdown de finca con catálogo del rancho nuevo
+  try { renderParamsFinca(); } catch(e){ console.warn('V71 renderParamsFinca fallo:', e); }
 
   // Gamma2: Sincronizar rancho → Semanal tab en tiempo real
   var semRanchoSel = gEl('semRancho');
@@ -3760,10 +3762,12 @@ function updParam(){
   updDate();
   var h=nh(gVal('hEnt'),gVal('hSal'));
   var li=t2m(gVal('lIni')),lf=t2m(gVal('lFin')),lm=(li!==null&&lf!==null)?Math.max(0,lf-li):0;
-  // V30-FIX: hpill ahora es por rancho (hpill_0, hpill_1, etc.)
-  var hpillEl=gEl('hpill_'+_activeRanchoIdx);
-  if(hpillEl) hpillEl.innerHTML=h?'<div class="hpill">⏱️ Jornada base: <b>'+h+' h</b> <span style="font-size:12px;font-weight:400;color:var(--gr)">(lonche: '+lm+' min)</span></div>':'';
+  // V71: hpill ahora es GLOBAL (único, en ranchoConfigCard dentro de Parámetros) — ya no por rancho
+  var hpillEl=gEl('hpill');
+  if(hpillEl) hpillEl.innerHTML=h?'⏱️ Jornada base: <b>'+h+' h</b> <span style="font-size:12px;font-weight:400;color:var(--gr)">(lonche: '+lm+' min)</span>':'';
   updBanner();
+  // V71 (port V20_42): refrescar dropdown de finca en Parámetros
+  try { renderParamsFinca(); } catch(e){ console.warn('V71 renderParamsFinca fallo:', e); }
 }
 function updBanner(){
   var h=nh(gVal('hEnt'),gVal('hSal'));
@@ -4278,8 +4282,26 @@ function mkActRow(wid_,ai,_cont){
     })(wid_, ai);
     fincaRow.appendChild(fincaSel);
     div.appendChild(fincaRow);
+  } else {
+    // V71 (port V20_41): fallback a input de texto libre si el rancho NO está en catálogo
+    var fincaRowFB = document.createElement('div');
+    fincaRowFB.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:6px';
+    var fincaInp = document.createElement('input');
+    fincaInp.type = 'text';
+    fincaInp.id = 'finca_act_'+wid_+'_'+ai;
+    fincaInp.placeholder = '📍 Finca / Labor (escribir manualmente)';
+    fincaInp.value = (a.finca !== undefined && a.finca !== '') ? a.finca : '';
+    fincaInp.style.cssText = 'flex:1;padding:8px 10px;border:1.5px dashed var(--bd);border-radius:8px;font-family:\'DM Sans\',sans-serif;font-size:14px;min-height:44px;background:#fff;color:var(--dk)';
+    (function(wi2,ai2){
+      fincaInp.addEventListener('input', function(){
+        var w2=getW(wi2); if(!w2||!w2.acts[ai2])return;
+        w2.acts[ai2].finca = this.value;
+        autoSave();
+      });
+    })(wid_, ai);
+    fincaRowFB.appendChild(fincaInp);
+    div.appendChild(fincaRowFB);
   }
-  // Si el rancho no está en FINCAS_POR_RANCHO, NO se renderiza input de finca.
   // Tau: TODAS las actividades usan sistema de turnos con "Agregar turno"
   if(!a.shifts||!a.shifts.length){ a.shifts=[{ini:a.ini||'',fin:a.fin||''}]; }
   var tog=document.createElement('div');
@@ -6479,11 +6501,24 @@ function onShift(wi,ai,si,field,val){
   var w=getW(wi); if(!w||!w.acts[ai])return;
   var a=w.acts[ai];
   if(!a.shifts) a.shifts=[{ini:a.ini||'',fin:a.fin||''}];
+  // V71 (port V20_43): validar overlap ANTES de persistir. Si causa translape → revertir y bloquear.
+  var prevVal = a.shifts[si][field];
+  var prevActIni = a.ini, prevActFin = a.fin;
   a.shifts[si][field]=val;
   if(si===0){ a.ini=a.shifts[0].ini||''; a.fin=a.shifts[0].fin||''; }
+  var _ov = checkOverlapsInWorker(w);
+  if(!_ov.ok){
+    // Revertir todo — no se guarda el valor nuevo
+    a.shifts[si][field] = prevVal;
+    a.ini = prevActIni; a.fin = prevActFin;
+    var _idPrefix = (field==='ini') ? 'shi' : 'shf';
+    var _el = gEl(_idPrefix+wi+'_'+ai+'_'+si);
+    if(_el) _el.value = prevVal || '';
+    openOverlap(_ov, w.name);
+    return; // NO recalc, NO autoSave — translape BLOQUEADO
+  }
   a.showTime=true;
   recalc(wi,ai); autoSave();
-  checkOverlapsForWorker(wi); // V58 (port V20_31)
 }
 
 function totalShiftHours(a){
@@ -7388,11 +7423,33 @@ function setGrpVar(inp){
   var gi = parseInt(inp.dataset.gi);
   var v  = inp.dataset.v;
   if(!grpActs[gi]) return;
-  grpActs[gi].vars[v] = inp.value;
+  // V71 (port V20_43): validar overlap ANTES de persistir si es horario (ini/fin)
+  if(v==='ini' || v==='fin'){
+    var prevVal = grpActs[gi].vars[v];
+    grpActs[gi].vars[v] = inp.value;
+    // Iterar participantes y buscar primer overlap
+    var _overlap = false, _ovInfo = null, _ovName = '';
+    for(var _pi=0; _pi<(grpActs[gi].participantes||[]).length; _pi++){
+      var _wid = grpActs[gi].participantes[_pi];
+      var _wv = null;
+      for(var _wi=0; _wi<workers.length; _wi++){ if(workers[_wi].id===_wid){ _wv=workers[_wi]; break; } }
+      if(_wv){
+        var _ov = checkOverlapsInWorker(_wv);
+        if(!_ov.ok){ _overlap=true; _ovInfo=_ov; _ovName=_wv.name; break; }
+      }
+    }
+    if(_overlap){
+      // Revertir + limpiar DOM input
+      grpActs[gi].vars[v] = prevVal;
+      inp.value = prevVal || '';
+      openOverlap(_ovInfo, _ovName);
+      return; // NO calcGrpAct, NO autoSave — translape BLOQUEADO
+    }
+  } else {
+    grpActs[gi].vars[v] = inp.value;
+  }
   calcGrpAct(gi);
   autoSave();
-  // V59 (port V20_32): validar overlap en participantes si cambió horario
-  if(v==='ini' || v==='fin') checkOverlapsForGrpAct(gi);
 }
 
 // ── Omega: Conversión Pies ↔ Acres por rancho ──
