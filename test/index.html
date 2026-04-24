@@ -24,7 +24,7 @@
 </script>
 <script>
 // V50 (port V20_23): estandarización de colores PDF
-window.APP_VERSION = 'V65';
+window.APP_VERSION = 'V66';
 (function(){
   function showVersionMismatch(remoteV){
     if(document.getElementById('ver-mismatch')) return;
@@ -2754,6 +2754,19 @@ function addRanchBlock(){
   if(_ranchos.length >= MAX_RANCHOS){ toast('\u26A0\uFE0F M\u00e1ximo '+MAX_RANCHOS+' ranchos por d\u00eda'); return; }
   var sel = gEl('ranchAddSel');
   var nombre = sel ? sel.value : '';
+  // V66 FIX: si dropdown vacío y es 1er rancho del día, auto-usar crew del surquero
+  if(!nombre && _ranchos.length === 0 && currentUser && currentUser.crew){
+    var _crewClean = String(currentUser.crew||'').replace(/\s*\d+$/,'').trim();
+    if(_crewClean) nombre = _crewClean;
+  }
+  // V66 FIX: si sigue vacío y hay UN solo rancho disponible en su contrato, usar ese
+  if(!nombre){
+    var _ioe = currentUser ? (currentUser.ioe||'') : '';
+    var _isAdm = currentUser && currentUser.isAdmin;
+    var _list = getRanchoList(_ioe, _isAdm);
+    var _pend = _list.filter(function(r){ return !_isRanchoDuplicado(r); });
+    if(_pend.length === 1) nombre = _pend[0];
+  }
   if(!nombre){ toast('\u26A0\uFE0F Selecciona un rancho'); return; }
   if(_isRanchoDuplicado(nombre)){ gEl('ranchDupOv').classList.add('on'); return; }
   // Guardar contexto actual
@@ -5008,7 +5021,24 @@ function go(n){
 }
 function next(){ if(pg<7)go(pg+1); }
 // V27-FIXA: prev no debe llegar a go(0) si hay bloque expandido — pg=1 es el mínimo dentro de un rancho
-function prev(){ if(pg>1)go(pg-1); else if(pg===1 && !_ranchos.length) go(0); }
+// V66 FIX: si pg>1 retrocede normal. Si pg===1 dentro de rancho, colapsa rancho y vuelve a Parámetros globales.
+function prev(){
+  if(pg>1){ go(pg-1); return; }
+  if(pg===1){
+    // Colapsar rancho activo (si lo hay) y volver a Parámetros globales (pg=0)
+    if(_ranchos.length && _activeRanchoIdx>=0){
+      var card = gEl('ranchBlock_'+_activeRanchoIdx);
+      if(card && card.classList.contains('expanded')){
+        // Devolver pagesSlot al body antes de colapsar
+        var slot = gEl('pagesSlot');
+        if(slot){ document.body.appendChild(slot); slot.style.display='none'; }
+        card.classList.remove('expanded');
+        try { _saveRanchoCtx(_activeRanchoIdx); if(currentUser) saveQuiet(); } catch(e){}
+      }
+    }
+    go(0);
+  }
+}
 function updNav(){
   gEl('np').style.display=pg===0?'none':'';
   var nn=gEl('nn');
