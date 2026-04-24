@@ -24,7 +24,7 @@
 </script>
 <script>
 // V50 (port V20_23): estandarización de colores PDF
-window.APP_VERSION = 'V68';
+window.APP_VERSION = 'V69';
 (function(){
   function showVersionMismatch(remoteV){
     if(document.getElementById('ver-mismatch')) return;
@@ -2694,9 +2694,31 @@ function populateRanchAddSel(){
       sel.appendChild(opt);
     }
   }
-  // V65: si surquero normal (no admin) y es el 1er rancho del día — pre-seleccionar el único disponible
-  if(_ranchos.length === 0 && !isAdm && ranchoList.length >= 1){
-    sel.value = ranchoList[0];
+  // V69: pre-seleccionar ESPECÍFICAMENTE el rancho del crew del surquero (no solo el 1er de lista)
+  if(_ranchos.length === 0 && !isAdm){
+    // Limpiar crew de números al final (ej: "Pennrose 5" → "Pennrose")
+    var crewClean = '';
+    if(currentUser && currentUser.crew){
+      crewClean = String(currentUser.crew).replace(/\s*\d+$/,'').trim();
+    }
+    // Buscar match exacto (case-insensitive) en la lista
+    var match = '';
+    for(var j=0;j<ranchoList.length;j++){
+      if(ranchoList[j].toLowerCase() === crewClean.toLowerCase()){
+        match = ranchoList[j]; break;
+      }
+    }
+    // Si no hay match exacto, buscar contains (ej: crew="Pennrose Field" y lista tiene "Pennrose")
+    if(!match && crewClean){
+      for(var k=0;k<ranchoList.length;k++){
+        if(ranchoList[k].toLowerCase().indexOf(crewClean.toLowerCase())>=0 ||
+           crewClean.toLowerCase().indexOf(ranchoList[k].toLowerCase())>=0){
+          match = ranchoList[k]; break;
+        }
+      }
+    }
+    // Si aún no hay match, fallback al primero de la lista
+    sel.value = match || (ranchoList.length >= 1 ? ranchoList[0] : '');
   }
 }
 
