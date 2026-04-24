@@ -24,7 +24,7 @@
 </script>
 <script>
 // V50 (port V20_23): estandarización de colores PDF
-window.APP_VERSION = 'V75';
+window.APP_VERSION = 'V76';
 (function(){
   function showVersionMismatch(remoteV){
     if(document.getElementById('ver-mismatch')) return;
@@ -2500,9 +2500,10 @@ function _loadRanchoCtx(idx){
   cajasP = r.cajasP || [];
   // Restaurar campos del form
   var _f = function(id,v){ var e=gEl(id); if(e) e.value=v||''; };
-  // V31-FIX2: para surqueros normales, el rancho viene del contrato (IOE), no del localStorage
-  // Solo admin puede restaurar rancho desde datos guardados
-  if(!currentUser || currentUser.isAdmin) _f('rancho',r.rancho);
+  // V76 FIX: SIEMPRE cargar rancho de _ranchos[idx] — en multi-rancho el rancho fue elegido
+  // por el surquero al agregar la pill, NO viene del contrato. Antes V31-FIX2 no cargaba para
+  // surqueros normales y el valor stale del input contaminaba el _saveRanchoCtx después.
+  _f('rancho',r.rancho);
   _f('finca',r.finca);
   _f('hEnt',r.hEnt); _f('hSal',r.hSal); _f('lIni',r.lIni); _f('lFin',r.lFin);
   _f('notas',r.notas);
@@ -2760,7 +2761,8 @@ function onRanchConfigChangeV67(field, value){
 // V70: si _activeRanchoIdx > 0 (pill #2 o #3) → select BLOQUEADO para preservar consistencia de datos
 function populateRanchoSelectV67(){
   var sel = gEl('rancho'); if(!sel) return;
-  var current = sel.value || (_ranchos[_activeRanchoIdx] ? _ranchos[_activeRanchoIdx].rancho : '') || '';
+  // V76 FIX: priorizar _ranchos[idx].rancho sobre sel.value (stale) para evitar contaminación cruzada
+  var current = (_ranchos[_activeRanchoIdx] && _ranchos[_activeRanchoIdx].rancho) || sel.value || '';
   var ioe = currentUser ? (currentUser.ioe||'') : '';
   var isAdm = currentUser && currentUser.isAdmin;
   var list = getRanchoList(ioe, isAdm);
