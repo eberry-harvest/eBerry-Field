@@ -24,7 +24,7 @@
 </script>
 <script>
 // V50 (port V20_23): estandarización de colores PDF
-window.APP_VERSION = 'V67';
+window.APP_VERSION = 'V68';
 (function(){
   function showVersionMismatch(remoteV){
     if(document.getElementById('ver-mismatch')) return;
@@ -2370,12 +2370,15 @@ function loadSheetsData(){
     if(!err && data && data.success && data.fincas){
       FINCAS_POR_RANCHO = data.fincas;
       try { localStorage.setItem('eb_fincas_cache', JSON.stringify(data.fincas)); } catch(e){}
+      console.log('✅ V68: Fincas cargadas (' + Object.keys(data.fincas).length + ' ranchos)');
     } else {
       try {
         var cached = localStorage.getItem('eb_fincas_cache');
-        if(cached) FINCAS_POR_RANCHO = JSON.parse(cached);
+        if(cached){ FINCAS_POR_RANCHO = JSON.parse(cached); console.log('⚠️ V68: Fincas desde cache'); }
       } catch(e){}
     }
+    // V68: refrescar dropdown de finca en Parámetros ahora que llegó el catálogo
+    try { if(typeof renderParamsFinca === 'function') renderParamsFinca(); } catch(e){}
   });
 }
 
@@ -2770,6 +2773,55 @@ function onPillClick(idx){
 }
 
 // V67: sincroniza inputs visibles (rancho, finca, hEnt/hSal/lIni/lFin) en tab Parámetros con los del rancho activo
+// V68: renderiza el dropdown/input de finca en Parámetros (portado de V20_42)
+// Si el rancho actual está en FINCAS_POR_RANCHO → <select> con las fincas; si no → input libre fallback
+function renderParamsFinca(){
+  var slot = gEl('fincaParamSlot');
+  var hidden = gEl('finca');
+  if(!slot || !hidden) return;
+  var rancho = gVal('rancho') || '';
+  var fincas = (typeof FINCAS_POR_RANCHO !== 'undefined' && FINCAS_POR_RANCHO && FINCAS_POR_RANCHO[rancho]) ? FINCAS_POR_RANCHO[rancho] : null;
+  var current = hidden.value || '';
+  slot.innerHTML = '';
+  if(fincas && fincas.length){
+    var sel = document.createElement('select');
+    sel.style.cssText = 'width:100%;padding:11px 12px;border:1.5px solid var(--bd);border-radius:8px;font-family:\'DM Sans\',sans-serif;font-size:16px;color:var(--dk);background:var(--lt);outline:none;min-height:44px';
+    var opt0 = document.createElement('option'); opt0.value=''; opt0.textContent='📍 Seleccionar labor...'; sel.appendChild(opt0);
+    var foundInList = false;
+    for(var i=0;i<fincas.length;i++){
+      var o = document.createElement('option');
+      o.value = fincas[i]; o.textContent = '📍 '+fincas[i];
+      if(fincas[i]===current){ o.selected=true; foundInList=true; }
+      sel.appendChild(o);
+    }
+    if(current && !foundInList){
+      var oL = document.createElement('option');
+      oL.value = current; oL.textContent = '⚠️ '+current+' (legacy)'; oL.selected = true;
+      sel.appendChild(oL);
+    }
+    sel.addEventListener('change', function(){
+      hidden.value = this.value;
+      // V68: guardar también en el rancho activo
+      if(_ranchos[_activeRanchoIdx]) _ranchos[_activeRanchoIdx].finca = this.value;
+      if(typeof autoSave === 'function') autoSave();
+    });
+    slot.appendChild(sel);
+  } else {
+    // Fallback: input libre si no hay catálogo para este rancho
+    var inp = document.createElement('input');
+    inp.type = 'text';
+    inp.value = current;
+    inp.placeholder = 'Ej: Block 5';
+    inp.style.cssText = 'width:100%;padding:11px 12px;border:1.5px solid var(--bd);border-radius:8px;font-family:\'DM Sans\',sans-serif;font-size:16px;color:var(--dk);background:var(--lt);outline:none;min-height:44px';
+    inp.addEventListener('input', function(){
+      hidden.value = this.value;
+      if(_ranchos[_activeRanchoIdx]) _ranchos[_activeRanchoIdx].finca = this.value;
+      if(typeof autoSave === 'function') autoSave();
+    });
+    slot.appendChild(inp);
+  }
+}
+
 function syncRanchConfigToParams(){
   var r = _ranchos[_activeRanchoIdx]; if(!r) return;
   // Actualizar título de la card
@@ -8062,6 +8114,15 @@ function refreshDataBackground(){
       saveCache(ALL_WORKERS, ALL_ACTS, LIDERES);
       if(wasFallback) console.log('✅ Delta2: Workers recuperados en background (' + ALL_WORKERS.length + ')');
     }
+  });
+  // V68 (port V20_41): cargar catálogo de fincas también en background
+  fetchFromScript('fincas', function(err, data){
+    if(!err && data && data.success && data.fincas){
+      FINCAS_POR_RANCHO = data.fincas;
+      try { localStorage.setItem('eb_fincas_cache', JSON.stringify(data.fincas)); } catch(e){}
+      console.log('✅ V68: Fincas (background) cargadas (' + Object.keys(data.fincas).length + ' ranchos)');
+    }
+    try { if(typeof renderParamsFinca === 'function') renderParamsFinca(); } catch(e){}
   });
   fetchFromScript('tasks', function(err, data){
     if(!err && data && data.success && data.tasks){
