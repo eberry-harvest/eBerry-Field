@@ -24,7 +24,7 @@
 </script>
 <script>
 // V50 (port V20_23): estandarización de colores PDF
-window.APP_VERSION = 'V70';
+window.APP_VERSION = 'V72';
 (function(){
   function showVersionMismatch(remoteV){
     if(document.getElementById('ver-mismatch')) return;
@@ -2809,10 +2809,10 @@ function onPillClick(idx){
   _filterActsForRancho(gVal('rancho'));
   // Re-render pills con la nueva activa
   renderRanchBar();
-  // Refrescar la tab actual con los datos del rancho nuevo
-  try { go(pg); } catch(e){ console.warn('V67 go(pg) fallo:', e); }
-  // Sincronizar inputs de config del rancho en tab Parámetros
+  // V72: sincronizar inputs PRIMERO (antes de go) para que funciones tengan datos correctos
   try { syncRanchConfigToParams(); } catch(e){}
+  // Refrescar la tab actual con los datos del rancho nuevo
+  try { go(pg); } catch(e){ console.warn('V72 go(pg) fallo:', e); }
 }
 
 // V67: sincroniza inputs visibles (rancho, finca, hEnt/hSal/lIni/lFin) en tab Parámetros con los del rancho activo
@@ -3031,9 +3031,16 @@ function addRanchBlock(){
     estAcres:'', estAncho:'', estIni:'', estFin:'',
     hilAcres:'', hilAncho:'', hilIni:'', hilFin:''
   });
-  // Re-render y expandir el nuevo
+  // V72 FIX: hacer swap al nuevo rancho + sincronizar inputs visibles
+  _activeRanchoIdx = newIdx;
+  try { _loadRanchoCtx(newIdx); } catch(e){}
+  try { _filterActsForRancho(nombre); } catch(e){}
   renderRanchBar();
-  toggleRanchBlock(newIdx);
+  // Sincronizar select #rancho + dropdown de finca con el rancho recién agregado
+  try { syncRanchConfigToParams(); } catch(e){ console.warn('V72 sync fallo:', e); }
+  // Refrescar contenido de la tab activa con datos del nuevo rancho
+  try { go(pg); } catch(e){}
+  if(currentUser) saveQuiet();
   toast('\u2705 Rancho '+nombre+' agregado');
 }
 
