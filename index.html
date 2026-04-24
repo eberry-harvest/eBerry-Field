@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_41';
+window.APP_VERSION = 'V20_42';
 (function(){
   // Toast persistente de "versión antigua detectada" — NO se puede cerrar, obliga a actualizar
   function showVersionMismatch(remoteV){
@@ -1099,7 +1099,10 @@ body.readOnly [onclick*="openNewDay"]{display:none !important}
         </div>
       </div>
     </div>
-    <label>Finca / Labor</label><input type="text" id="finca" data-save placeholder="Ej: Block 5 Norte">
+    <!-- V20_42: Finca en Parámetros igual que en actividades — dropdown si catálogo, input libre si no -->
+    <label>Finca / Labor</label>
+    <div id="fincaParamSlot"></div>
+    <input type="hidden" id="finca" data-save value="">
   </div>
   <div class="card">
     <div class="ct">⏰ Horario Base del Grupo</div>
@@ -1827,6 +1830,9 @@ function onRanchoChange(){
   // V20-FIX2: guardar ANTES de re-filtrar ACTS — evita serializar con ACTS del rancho nuevo
   // V20_02-HOTFIX: solo guardar si hay workers (evita borrar datos durante login)
   if(currentUser && workers.length) saveQuiet();
+
+  // V20_42: al cambiar rancho, refrescar dropdown de finca con el catálogo nuevo
+  try { renderParamsFinca(); } catch(e){ console.warn('V20_42 renderParamsFinca fallo:', e); }
 
   var rancho = gVal('rancho');
   if(!rancho) return;
@@ -3039,6 +3045,53 @@ function updParam(){
   var li=t2m(gVal('lIni')),lf=t2m(gVal('lFin')),lm=(li!==null&&lf!==null)?Math.max(0,lf-li):0;
   gEl('hpill').innerHTML=h?'<div class="hpill">⏱️ Jornada base: <b>'+h+' h</b> <span style="font-size:12px;font-weight:400;color:var(--gr)">(lonche: '+lm+' min)</span></div>':'';
   updBanner();
+  try { renderParamsFinca(); } catch(e){ console.warn('V20_42 renderParamsFinca fallo:', e); }
+}
+
+// V20_42: dropdown de finca en Parámetros (comportamiento igual al de actividades)
+function renderParamsFinca(){
+  var slot = gEl('fincaParamSlot');
+  var hidden = gEl('finca');
+  if(!slot || !hidden) return;
+  var rancho = gVal('rancho') || '';
+  var fincas = (FINCAS_POR_RANCHO && FINCAS_POR_RANCHO[rancho]) ? FINCAS_POR_RANCHO[rancho] : null;
+  var current = hidden.value || '';
+  slot.innerHTML = ''; // reset
+  if(fincas && fincas.length){
+    var sel = document.createElement('select');
+    sel.style.cssText = 'width:100%;padding:11px 12px;border:1.5px solid var(--bd);border-radius:8px;font-family:\'DM Sans\',sans-serif;font-size:16px;color:var(--dk);background:var(--lt);outline:none;min-height:44px';
+    var opt0 = document.createElement('option'); opt0.value=''; opt0.textContent='📍 Seleccionar labor...'; sel.appendChild(opt0);
+    var foundInList = false;
+    for(var i=0;i<fincas.length;i++){
+      var o = document.createElement('option');
+      o.value = fincas[i]; o.textContent = '📍 '+fincas[i];
+      if(fincas[i]===current){ o.selected=true; foundInList=true; }
+      sel.appendChild(o);
+    }
+    // Legacy: si el valor guardado no está en catálogo, agregar opción warning
+    if(current && !foundInList){
+      var oL = document.createElement('option');
+      oL.value = current; oL.textContent = '⚠️ '+current+' (legacy)'; oL.selected = true;
+      sel.appendChild(oL);
+    }
+    sel.addEventListener('change', function(){
+      hidden.value = this.value;
+      if(typeof autoSave === 'function') autoSave();
+    });
+    slot.appendChild(sel);
+  } else {
+    // Fallback: input libre si no hay catálogo
+    var inp = document.createElement('input');
+    inp.type = 'text';
+    inp.value = current;
+    inp.placeholder = 'Ej: Block 5 Norte';
+    inp.style.cssText = 'width:100%;padding:11px 12px;border:1.5px solid var(--bd);border-radius:8px;font-family:\'DM Sans\',sans-serif;font-size:16px;color:var(--dk);background:var(--lt);outline:none;min-height:44px';
+    inp.addEventListener('input', function(){
+      hidden.value = this.value;
+      if(typeof autoSave === 'function') autoSave();
+    });
+    slot.appendChild(inp);
+  }
 }
 function updBanner(){
   var h=nh(gVal('hEnt'),gVal('hSal'));
@@ -7339,15 +7392,17 @@ function refreshDataBackground(){
     if(!err && data && data.success && data.fincas){
       FINCAS_POR_RANCHO = data.fincas;
       try { localStorage.setItem('eb_fincas_cache', JSON.stringify(data.fincas)); } catch(e){}
-      console.log('✅ V20_41: Fincas cargadas (' + Object.keys(data.fincas).length + ' ranchos)');
+      console.log('✅ V20_42: Fincas cargadas (' + Object.keys(data.fincas).length + ' ranchos)');
     } else {
       // Fallback: cache local
       try {
         var cached = localStorage.getItem('eb_fincas_cache');
-        if(cached){ FINCAS_POR_RANCHO = JSON.parse(cached); console.log('⚠️ V20_41: Fincas desde cache'); }
-        else console.warn('⚠️ V20_41: Sin fincas — catálogo vacío');
+        if(cached){ FINCAS_POR_RANCHO = JSON.parse(cached); console.log('⚠️ V20_42: Fincas desde cache'); }
+        else console.warn('⚠️ V20_42: Sin fincas — catálogo vacío');
       } catch(e){}
     }
+    // V20_42: refrescar dropdown de finca en Parámetros con el catálogo recién cargado
+    try { if(typeof renderParamsFinca === 'function') renderParamsFinca(); } catch(e){}
   });
 }
 
