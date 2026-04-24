@@ -24,7 +24,7 @@
 </script>
 <script>
 // V50 (port V20_23): estandarización de colores PDF
-window.APP_VERSION = 'V66';
+window.APP_VERSION = 'V67';
 (function(){
   function showVersionMismatch(remoteV){
     if(document.getElementById('ver-mismatch')) return;
@@ -210,6 +210,7 @@ window.manualVersionCheck = function(){
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'DM Sans',sans-serif;background:var(--lt);color:var(--dk);padding-bottom:140px;-webkit-overflow-scrolling:touch}
 header{background:var(--g);color:#fff;padding:12px 14px 0;position:sticky;top:0;z-index:200;box-shadow:0 2px 16px rgba(0,0,0,.2)}
+body.readOnly header{top:56px} /* V67: empujar header bajo el banner de modo lectura */
 .htop{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
 .logo{font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:2px}
 .logo em{color:var(--a);font-style:normal}
@@ -220,6 +221,17 @@ header{background:var(--g);color:#fff;padding:12px 14px 0;position:sticky;top:0;
 .ver-check-btn.spin{animation:verSpin 1s linear infinite}
 @keyframes verSpin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
 .tabs{display:flex;gap:5px;overflow-x:auto;padding-bottom:8px;scrollbar-width:none}
+/* V67: pills de ranchos (reemplazan cards colapsables) */
+.ranch-pill{flex-shrink:0;background:#f1f3fa;color:var(--g);border:1.5px dashed var(--bd);border-radius:22px;padding:8px 12px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer;min-height:44px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;transition:all .18s;margin-right:6px;margin-bottom:6px}
+.ranch-pill:active{transform:scale(.96)}
+.ranch-pill.act{background:var(--g);color:#fff;border:1.5px solid var(--g);box-shadow:0 2px 8px rgba(26,43,140,.25)}
+.ranch-pill .pname{font-family:'Bebas Neue',sans-serif;letter-spacing:1px;font-size:15px}
+.ranch-pill .pcount{background:#fff;color:var(--g);font-size:11px;font-weight:800;padding:2px 6px;border-radius:10px;min-width:22px;text-align:center;border:1px solid var(--bd)}
+.ranch-pill.act .pcount{background:rgba(255,255,255,.88);color:var(--g);border:none}
+.ranch-pill .pclose{font-size:11px;color:#d94040;padding:2px 4px;margin-left:2px;border-radius:50%;cursor:pointer}
+.ranch-pill:not(.act) .pclose{color:#999}
+.ranch-pill .pclose:hover{background:#ffdada}
+#ranchBlockList{display:flex;flex-wrap:wrap;align-items:center;padding:4px 0}
 .tabs::-webkit-scrollbar{display:none}
 .tab{flex-shrink:0;background:rgba(255,255,255,.1);color:rgba(255,255,255,.85);border:none;border-radius:20px;padding:5px 12px;min-height:44px;display:inline-flex;align-items:center;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}
 .tab.act{background:var(--a);color:var(--dk)}
@@ -626,7 +638,17 @@ html.login-locked{overflow:hidden!important;height:100%!important}
       <button id="logoutBtn" onclick="logoutUser()" style="display:none;background:rgba(204,34,34,.75);border:none;border-radius:20px;padding:4px 10px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">🚪 Salir</button>
     </div>
   </div>
-  <!-- V25: tabs eliminados del header — ahora viven dentro de cada bloque de rancho -->
+  <!-- V67 (Opción B): tabs globales RESTAURADAS arriba, pills de ranchos al lado, lógica multi-rancho mantiene swap de contexto -->
+  <div class="tabs">
+    <button class="tab act" onclick="go(0)">① Parámetros</button>
+    <button class="tab" onclick="go(1)">② Análisis</button>
+    <button class="tab" onclick="go(2)">③ Trabajadores</button>
+    <button class="tab" onclick="go(3)">④ Act. Grupales</button>
+    <button class="tab" onclick="go(4)">⑤ Resumen</button>
+    <button class="tab" onclick="go(5)">⑥ Ausencias</button>
+    <button class="tab" onclick="go(6)">⑦ Invoice</button>
+    <button class="tab" onclick="go(7)">⑧ Semanal</button>
+  </div>
 </header>
 
 <!-- V25: Modal rancho duplicado -->
@@ -1141,13 +1163,23 @@ body.readOnly [onclick*="openNewDay"]{display:none !important}
     <div style="text-align:center;font-size:11px;color:var(--gr);margin-top:4px">Se guarda automáticamente — este botón es por si quieres guardar manualmente</div>
     <!-- V28-FIX-UI2: botón "Nuevo Día" eliminado de Parámetros — solo existe en Resumen -->
   </div>
-  <!-- Rancho/finca/horario se mantienen como hidden para compatibilidad con data-save -->
-  <input type="hidden" id="rancho" data-save value="">
-  <input type="hidden" id="finca" data-save value="">
-  <input type="hidden" id="hEnt" data-save value="">
-  <input type="hidden" id="hSal" data-save value="">
-  <input type="hidden" id="lIni" data-save value="">
-  <input type="hidden" id="lFin" data-save value="">
+  <!-- V67: Config del rancho activo — visible, se sincroniza al cambiar de pill -->
+  <div class="card" id="ranchoConfigCard" style="margin-top:12px">
+    <div class="ct" id="ranchoConfigTitle">⚙️ Configuración del Rancho Activo</div>
+    <div class="r2" style="margin-bottom:8px">
+      <div><label>Rancho</label>
+        <select id="rancho" data-save onchange="onRanchoChangeV67(this.value)" style="width:100%;padding:10px 11px;border:1.5px solid var(--bd);border-radius:8px;font-size:15px;font-family:DM Sans,sans-serif;min-height:44px;background:var(--lt)"></select>
+      </div>
+      <div><label>Finca / Labor</label><div id="fincaParamSlot"></div><input type="hidden" id="finca" data-save value=""></div>
+    </div>
+    <div class="r4">
+      <div><label>Entrada</label><input type="time" id="hEnt" data-save step="1800" onchange="onRanchConfigChangeV67('hEnt',this.value)"></div>
+      <div><label>Salida</label><input type="time" id="hSal" data-save step="1800" onchange="onRanchConfigChangeV67('hSal',this.value)"></div>
+      <div><label>L.Ini</label><input type="time" id="lIni" data-save step="1800" onchange="onRanchConfigChangeV67('lIni',this.value)"></div>
+      <div><label>L.Fin</label><input type="time" id="lFin" data-save step="1800" onchange="onRanchConfigChangeV67('lFin',this.value)"></div>
+    </div>
+    <div id="hpill" style="background:var(--gp);border-radius:8px;padding:9px 12px;font-size:13px;font-weight:600;color:var(--g);margin-top:9px"></div>
+  </div>
   <input type="hidden" id="payH" data-save value="16.23">
   <input type="hidden" id="payMin" data-save value="16.23">
 </div>
@@ -1407,10 +1439,7 @@ body.readOnly [onclick*="openNewDay"]{display:none !important}
     <button class="qrbtn" id="faceIdBtn" onclick="startFaceID()" title="Reconocimiento Facial" style="background:#8e44ad">👤</button>
     <button class="abtn" onclick="addFrom()">+ Agregar</button>
   </div>
-  <div class="nav">
-    <button class="np" id="np" onclick="prev()">← Atrás</button>
-    <button class="nn" id="nn" onclick="next()">Siguiente →</button>
-  </div>
+  <!-- V67: botones prev/next eliminados — las tabs globales reemplazan la navegación secuencial -->
 </div>
 
 <script>
@@ -1784,6 +1813,8 @@ function loginSuccess(user){
   updParam();
   // V65: inicializar estado visual de la nota (colapsada o con preview)
   try { _initNotaV65(); } catch(e){ console.warn('V65 nota init fallo:', e); }
+  // V67: sincronizar config del rancho activo en los inputs visibles
+  try { syncRanchConfigToParams(); } catch(e){ console.warn('V67 sync config fallo:', e); }
   // V28-FIX-UI3+UI4: auto-expandir primer rancho + activar página
   if(!_ranchos.length && gVal('rancho')){ _initRanchos(); renderRanchBar(); }
   // V29-FIX3: solo expandir si NO está ya expandido (evita colapsar lo que renderRanchBar ya expandió)
@@ -2540,6 +2571,42 @@ function renderRanchBar(){
   var list = gEl('ranchBlockList');
   if(!list) return;
   list.innerHTML = '';
+  // V67: asegurar que pagesSlot está en body (cards colapsables eliminadas)
+  var _slotX = gEl('pagesSlot');
+  if(_slotX && _slotX.parentNode !== document.body){
+    document.body.appendChild(_slotX);
+    _slotX.style.display = '';
+  }
+  // V67: renderizar PILLS simples en vez de cards colapsables
+  for(var pIdx=0; pIdx<_ranchos.length; pIdx++){
+    var rP = _ranchos[pIdx];
+    var nP = rP.rancho || 'Sin rancho';
+    var cP = (rP.workers||[]).length;
+    var aP = (pIdx === _activeRanchoIdx);
+    var pill = document.createElement('button');
+    pill.className = 'ranch-pill' + (aP ? ' act' : '');
+    pill.id = 'ranchPill_'+pIdx;
+    pill.dataset.ranchIdx = pIdx;
+    pill.setAttribute('aria-pressed', aP ? 'true' : 'false');
+    pill.setAttribute('aria-label', 'Rancho '+nP+', '+cP+' trabajadores');
+    pill.innerHTML = '<span class="pname">'+esc(nP.toUpperCase())+'</span>'
+                   + '<span class="pcount">'+cP+'</span>'
+                   + ' <span class="pclose" title="Eliminar">x</span>';
+    (function(idx){
+      pill.addEventListener('click', function(ev){
+        var tg = ev.target;
+        if(tg && tg.classList && tg.classList.contains('pclose')){
+          ev.stopPropagation();
+          removeRanchBlock(idx);
+          return;
+        }
+        onPillClick(idx);
+      });
+    })(pIdx);
+    list.appendChild(pill);
+  }
+  // V67: saltar el loop viejo de cards (todo ya está hecho)
+  if(true){ /* skip legacy card loop below */ } else
   for(var i=0; i<_ranchos.length; i++){
     var r = _ranchos[i];
     var name = r.rancho || 'Sin rancho';
@@ -2631,6 +2698,94 @@ function populateRanchAddSel(){
 }
 
 // Toggle expandir/colapsar un bloque de rancho
+// V67: cambios en config del rancho activo (inputs en tab Parámetros)
+function onRanchoChangeV67(newRancho){
+  if(!_ranchos[_activeRanchoIdx]) return;
+  // Validar que no esté duplicado
+  for(var i=0;i<_ranchos.length;i++){
+    if(i !== _activeRanchoIdx && _ranchos[i].rancho && _ranchos[i].rancho.toLowerCase() === (newRancho||'').toLowerCase()){
+      toast('⚠️ Rancho ya agregado en otro bloque');
+      gEl('rancho').value = _ranchos[_activeRanchoIdx].rancho || '';
+      return;
+    }
+  }
+  _ranchos[_activeRanchoIdx].rancho = newRancho;
+  _filterActsForRancho(newRancho);
+  try { renderParamsFinca(); } catch(e){}
+  try { renderRanchBar(); } catch(e){} // re-render pills para mostrar nuevo nombre
+  try { onRanchoChange(); } catch(e){}
+  try { updParam(); } catch(e){}
+  if(typeof autoSave === 'function') autoSave();
+}
+
+function onRanchConfigChangeV67(field, value){
+  if(!_ranchos[_activeRanchoIdx]) return;
+  _ranchos[_activeRanchoIdx][field] = value;
+  try { updParam(); } catch(e){}
+  if(typeof autoSave === 'function') autoSave();
+}
+
+// V67: poblar el select #rancho con las opciones disponibles según crew del surquero
+function populateRanchoSelectV67(){
+  var sel = gEl('rancho'); if(!sel) return;
+  var current = sel.value || (_ranchos[_activeRanchoIdx] ? _ranchos[_activeRanchoIdx].rancho : '') || '';
+  var ioe = currentUser ? (currentUser.ioe||'') : '';
+  var isAdm = currentUser && currentUser.isAdmin;
+  var list = getRanchoList(ioe, isAdm);
+  sel.innerHTML = '<option value="">— Selecciona rancho —</option>';
+  var found = false;
+  for(var i=0;i<list.length;i++){
+    var o = document.createElement('option');
+    o.value = list[i]; o.textContent = list[i];
+    if(list[i] === current){ o.selected = true; found = true; }
+    sel.appendChild(o);
+  }
+  if(current && !found){
+    var oL = document.createElement('option');
+    oL.value = current; oL.textContent = current + ' (actual)'; oL.selected = true;
+    sel.appendChild(oL);
+  }
+}
+
+// V67: click en pill de rancho — swap sin cambiar tab activa
+function onPillClick(idx){
+  if(idx === _activeRanchoIdx){
+    // Click en pill ya activa → no hace nada (mantener tab)
+    return;
+  }
+  if(idx < 0 || idx >= _ranchos.length) return;
+  // Guardar contexto del rancho actual
+  _saveRanchoCtx(_activeRanchoIdx);
+  if(currentUser) saveQuiet();
+  // Swap a rancho nuevo
+  _activeRanchoIdx = idx;
+  _loadRanchoCtx(idx);
+  _filterActsForRancho(gVal('rancho'));
+  // Re-render pills con la nueva activa
+  renderRanchBar();
+  // Refrescar la tab actual con los datos del rancho nuevo
+  try { go(pg); } catch(e){ console.warn('V67 go(pg) fallo:', e); }
+  // Sincronizar inputs de config del rancho en tab Parámetros
+  try { syncRanchConfigToParams(); } catch(e){}
+}
+
+// V67: sincroniza inputs visibles (rancho, finca, hEnt/hSal/lIni/lFin) en tab Parámetros con los del rancho activo
+function syncRanchConfigToParams(){
+  var r = _ranchos[_activeRanchoIdx]; if(!r) return;
+  // Actualizar título de la card
+  var titEl = gEl('ranchoConfigTitle');
+  if(titEl) titEl.textContent = '⚙️ Configuración de ' + (r.rancho || 'Rancho');
+  // Primero poblar select de rancho
+  try { populateRanchoSelectV67(); } catch(e){}
+  var ids = ['finca','hEnt','hSal','lIni','lFin'];
+  for(var i=0;i<ids.length;i++){
+    var el = gEl(ids[i]);
+    if(el && el.value !== (r[ids[i]]||'')) el.value = r[ids[i]]||'';
+  }
+  try { if(typeof renderParamsFinca === 'function') renderParamsFinca(); } catch(e){}
+  try { updParam(); } catch(e){}
+}
+
 function toggleRanchBlock(idx){
   var card = gEl('ranchBlock_'+idx);
   if(!card) return;
@@ -5005,19 +5160,14 @@ function go(n){
   if(n===6) refreshInvoiceAuto();
   if(n===7) initSemTab();
   var pgs=document.querySelectorAll('.pg'); for(var i=0;i<pgs.length;i++) pgs[i].classList.toggle('on',i===n);
-  // V26-FIX3: actualizar ranch-tabs del bloque activo (ya no hay .tab en header)
-  var activeBlock=gEl('ranchBlock_'+_activeRanchoIdx);
-  if(activeBlock){
-    var rtabs=activeBlock.querySelectorAll('.ranch-tab');
-    // V28-FIX-UI1: tab "Params" es índice 0 (n===0), las demás son i===n (offset por el tab extra)
-    for(var i=0;i<rtabs.length;i++) rtabs[i].classList.toggle('act', i===n);
-  }
-  gEl('addbar').classList.toggle('on',n===2 && activeBlock && activeBlock.classList.contains('expanded'));
+  // V67: marcar tab global activa (tabs en el header, no sub-tabs de rancho)
+  var gTabs = document.querySelectorAll('header .tabs .tab');
+  for(var i=0;i<gTabs.length;i++) gTabs[i].classList.toggle('act', i===n);
+  // addbar solo visible en tab Trabajadores (n===2)
+  var addbarEl = gEl('addbar'); if(addbarEl) addbarEl.classList.toggle('on', n===2);
   var ausBar=gEl('ausBar'); if(ausBar) ausBar.style.display=(n===5?'block':'none');
   pg=n; updNav();
-  // V26-FIX7: scroll al bloque activo, no al tope
-  if(activeBlock) activeBlock.scrollIntoView({behavior:'smooth',block:'start'});
-  else window.scrollTo(0,0);
+  window.scrollTo(0,0);
 }
 function next(){ if(pg<7)go(pg+1); }
 // V27-FIXA: prev no debe llegar a go(0) si hay bloque expandido — pg=1 es el mínimo dentro de un rancho
@@ -5039,14 +5189,8 @@ function prev(){
     go(0);
   }
 }
-function updNav(){
-  gEl('np').style.display=pg===0?'none':'';
-  var nn=gEl('nn');
-  if(pg===1){ nn.textContent='💾 Guardar'; nn.onclick=save; }
-  else if(pg===5){ nn.textContent='💾 Guardar'; nn.onclick=save; }
-  else if(pg===7){ nn.textContent='💾 Guardar'; nn.onclick=save; }
-  else { nn.textContent='Siguiente →'; nn.onclick=next; }
-}
+// V67: updNav vacío — los botones prev/next fueron eliminados, tabs globales manejan la navegación
+function updNav(){ /* no-op en V67 */ }
 function toast(msg){ var t=gEl('toast'); t.textContent=msg; t.classList.add('on'); setTimeout(function(){ t.classList.remove('on'); },2500); }
 // V12-FIX2: esc() eliminada — usar esc() global (más completa: escapa & < > ")
 // Psi: toast with face photo thumbnail
