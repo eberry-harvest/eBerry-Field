@@ -24,7 +24,7 @@
 </script>
 <script>
 // V50 (port V20_23): estandarización de colores PDF
-window.APP_VERSION = 'V69';
+window.APP_VERSION = 'V70';
 (function(){
   function showVersionMismatch(remoteV){
     if(document.getElementById('ver-mismatch')) return;
@@ -1169,6 +1169,7 @@ body.readOnly [onclick*="openNewDay"]{display:none !important}
     <div class="r2" style="margin-bottom:8px">
       <div><label>Rancho</label>
         <select id="rancho" data-save onchange="onRanchoChangeV67(this.value)" style="width:100%;padding:10px 11px;border:1.5px solid var(--bd);border-radius:8px;font-size:15px;font-family:DM Sans,sans-serif;min-height:44px;background:var(--lt)"></select>
+        <div id="ranchoLockHint" style="display:none;margin-top:4px;font-size:10px;color:var(--gr);font-style:italic">🔒 Rancho fijo — elimina esta pill para cambiarlo</div>
       </div>
       <div><label>Finca / Labor</label><div id="fincaParamSlot"></div><input type="hidden" id="finca" data-save value=""></div>
     </div>
@@ -2751,6 +2752,7 @@ function onRanchConfigChangeV67(field, value){
 }
 
 // V67: poblar el select #rancho con las opciones disponibles según crew del surquero
+// V70: si _activeRanchoIdx > 0 (pill #2 o #3) → select BLOQUEADO para preservar consistencia de datos
 function populateRanchoSelectV67(){
   var sel = gEl('rancho'); if(!sel) return;
   var current = sel.value || (_ranchos[_activeRanchoIdx] ? _ranchos[_activeRanchoIdx].rancho : '') || '';
@@ -2769,6 +2771,23 @@ function populateRanchoSelectV67(){
     var oL = document.createElement('option');
     oL.value = current; oL.textContent = current + ' (actual)'; oL.selected = true;
     sel.appendChild(oL);
+  }
+  // V70: congelar si NO es el primer rancho — los datos ya están vinculados al rancho elegido al agregar
+  var isFirstRancho = (_activeRanchoIdx === 0);
+  sel.disabled = !isFirstRancho;
+  if(!isFirstRancho){
+    sel.style.background = '#f0f0f0';
+    sel.style.cursor = 'not-allowed';
+    sel.title = '🔒 Rancho congelado — los datos ya están vinculados. Para cambiar, elimina esta pill y agrega una nueva.';
+  } else {
+    sel.style.background = 'var(--lt)';
+    sel.style.cursor = '';
+    sel.title = '';
+  }
+  // Mostrar/ocultar hint visual sobre el lock
+  var lockHint = gEl('ranchoLockHint');
+  if(lockHint){
+    lockHint.style.display = isFirstRancho ? 'none' : 'block';
   }
 }
 
