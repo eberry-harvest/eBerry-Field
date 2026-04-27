@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_46';
+window.APP_VERSION = 'V20_48';
 (function(){
   // Toast persistente de "versión antigua detectada" — NO se puede cerrar, obliga a actualizar
   function showVersionMismatch(remoteV){
@@ -887,7 +887,12 @@ html.login-locked{overflow:hidden!important;height:100%!important}
         <input type="date" id="cloudLoadDate" aria-label="Fecha a consultar en Sheets"
                style="flex:1;min-width:140px;padding:10px;border:1.5px solid var(--bd);border-radius:8px;font-size:16px;min-height:44px;background:#fff">
         <button class="btn" id="cloudLoadBtn" onclick="loadDayFromSheets()"
-                style="background:var(--g);color:#fff;min-height:44px;padding:0 18px;white-space:nowrap;font-weight:700">☁️ Cargar</button>
+                style="background:var(--g);color:#fff;min-height:44px;padding:0 18px;white-space:nowrap;font-weight:700">☁️ Cargar día</button>
+      </div>
+      <!-- V20_48: nueva opción para cargar SEMANA completa (7 fetches paralelos) -->
+      <div style="margin-top:8px">
+        <button class="btn" id="cloudLoadWeekBtn" onclick="loadWeekFromSheets()"
+                style="background:#1a3a5c;color:#fff;min-height:44px;width:100%;padding:0 18px;font-weight:700">📅 Cargar SEMANA completa (lun a dom)</button>
       </div>
       <div id="cloudLoadStatus" aria-live="polite" style="margin-top:8px;font-size:12px;color:var(--gr);min-height:16px"></div>
     </div>
@@ -2708,6 +2713,10 @@ function checkOverlapsForWorker(wi){
 // ============================================================================
 var _readOnlyMode = false;
 var _localBackup = null;
+// V20_47: payload original recibido en modo lectura (para poblar tabla semanal por actividad)
+var _readOnlyPayload = null;
+// V20_48: array de 7 payloads (lun..dom) cuando admin carga SEMANA completa
+var _readOnlyWeekPayloads = null;
 
 // Ajusta fecha min/max del date picker al abrir modal historial
 function _setCloudDateLimits(){
@@ -2773,9 +2782,132 @@ function loadDayFromSheets(){
       toast('⚠️ Error de conexión');
     })
     .finally(function(){
-      btn.disabled=false; btn.textContent='☁️ Cargar';
+      btn.disabled=false; btn.textContent='☁️ Cargar día';
       if(st) st.textContent='';
     });
+}
+
+// V20_48: cargar SEMANA completa — hace 7 fetches a loadDay (lun a dom) en paralelo
+// y consolida los resultados para que la pestaña Semanal muestre los 7 días llenos.
+function loadWeekFromSheets(){
+  if(_readOnlyMode){ toast('⚠️ Ya estás en modo lectura — sal primero'); return; }
+  var inp=gEl('cloudLoadDate'); var st=gEl('cloudLoadStatus'); var btn=gEl('cloudLoadWeekBtn');
+  var fecha = inp && inp.value;
+  if(!fecha){ if(st) st.textContent='⚠️ Selecciona una fecha de la semana'; return; }
+  var isAdmin = !!(currentUser && currentUser.isAdmin);
+  var targetSurquero;
+  if(isAdmin){
+    var sel = gEl('cloudLoadSurquero');
+    targetSurquero = sel && sel.value;
+    if(!targetSurquero){ if(st) st.textContent='⚠️ Selecciona un surquero'; return; }
+  } else {
+    targetSurquero = (currentUser && currentUser.name) || gVal('surquero') || '';
+    if(!targetSurquero){ toast('⚠️ No se detecta surquero activo'); return; }
+  }
+  var myName = (currentUser && currentUser.name) || gVal('surquero') || '';
+
+  // Calcular el lunes de la semana de la fecha elegida
+  var refD = new Date(fecha + 'T12:00:00');
+  if(isNaN(refD.getTime())){ if(st) st.textContent='⚠️ Fecha inválida'; return; }
+  var dow = refD.getDay(); // 0=dom
+  var diff = dow === 0 ? -6 : 1 - dow;
+  refD.setDate(refD.getDate() + diff);
+  var dates = [];
+  for(var d=0; d<7; d++){
+    var dd = new Date(refD); dd.setDate(refD.getDate()+d);
+    var mo = dd.getMonth()+1, dy = dd.getDate();
+    dates.push(dd.getFullYear()+'-'+(mo<10?'0'+mo:mo)+'-'+(dy<10?'0'+dy:dy));
+  }
+
+  btn.disabled=true; btn.textContent='⏳ Cargando 7 días…';
+  if(st) st.textContent='⏳ Consultando '+dates[0]+' al '+dates[6]+' …';
+
+  // 7 fetches en paralelo
+  var fetches = dates.map(function(f){
+    var url = APPS_SCRIPT_URL
+      + '?action=loadDay'
+      + '&fecha='    + encodeURIComponent(f)
+      + '&surquero=' + encodeURIComponent(myName)
+      + '&isAdmin='  + (isAdmin?'true':'false')
+      + '&claimedSurquero=' + encodeURIComponent(targetSurquero);
+    return fetch(url, {method:'GET', cache:'no-store'})
+      .then(function(r){ return r.json(); })
+      .catch(function(err){ return {success:false, error:String(err), fecha:f}; });
+  });
+
+  Promise.all(fetches).then(function(results){
+    // Validar — al menos uno con datos
+    var withData = 0;
+    for(var i=0; i<results.length; i++){
+      var r = results[i];
+      if(r && r.success && !r.empty &&
+         ((r.workers&&r.workers.length) || (r.grpActs&&r.grpActs.length) || (r.ausencias&&r.ausencias.length))){
+        withData++;
+      }
+    }
+    if(!withData){
+      if(st) st.textContent='';
+      alert('📭 No hay datos de "'+targetSurquero+'" en ningún día de la semana '+dates[0]+' al '+dates[6]);
+      return;
+    }
+    // Día primario = el que admin seleccionó (queda en pestañas Trabajadores/Grupales)
+    var primaryIdx = -1;
+    for(var pi=0; pi<dates.length; pi++){ if(dates[pi]===fecha){ primaryIdx=pi; break; } }
+    if(primaryIdx<0) primaryIdx = 0;
+    var primaryPayload = results[primaryIdx];
+    if(!primaryPayload || !primaryPayload.success || primaryPayload.empty){
+      // Si el día primario no tiene datos, tomar el primero con datos
+      for(var di=0; di<results.length; di++){
+        if(results[di] && results[di].success && !results[di].empty){ primaryPayload = results[di]; break; }
+      }
+    }
+    if(!primaryPayload){ if(st) st.textContent='⚠️ Sin payload primario'; return; }
+    // Guardar los 7 payloads ANTES de _enterReadOnly (que limpia cuando aplica)
+    var weekPayloads = [];
+    for(var wi=0; wi<7; wi++){
+      var rr = results[wi];
+      weekPayloads.push((rr && rr.success && !rr.empty) ? rr : null);
+    }
+    _enterReadOnly(primaryPayload);
+    // Después de _enterReadOnly, setear los payloads de la semana
+    _readOnlyWeekPayloads = weekPayloads;
+    // V20_48: agregar a workers[] los que aparecen en otros días pero NO en el primary,
+    // para que todos los workers de la semana aparezcan en la tabla Semanal.
+    // Estos quedan marcados con _weekOnly:true (acts vacías para el día primario).
+    for(var di=0; di<7; di++){
+      var wpd = weekPayloads[di];
+      if(!wpd || !wpd.workers) continue;
+      wpd.workers.forEach(function(pw){
+        if(!pw || !pw.name) return;
+        var exists = false;
+        for(var ww=0; ww<workers.length; ww++){
+          if(workers[ww].name === pw.name){ exists = true; break; }
+        }
+        if(!exists){
+          workers.push({
+            id: wid++, name: pw.name, empNum: pw.empNum||'',
+            open: false, acts: [], totalPay: 0,
+            _frozen: true, _weekOnly: true
+          });
+        }
+      });
+    }
+    // Re-renderizar wlist con todos los workers de la semana
+    var listEl = gEl('wlist');
+    if(listEl){
+      listEl.innerHTML = '';
+      workers.forEach(function(w,i){ listEl.appendChild(mkCard(w,i)); });
+    }
+    try { updParts && updParts(); } catch(e){}
+    // Re-popular tabla semanal con los 7 días si ya está construida
+    try { if(typeof buildSemTable === 'function') buildSemTable(); } catch(e){}
+    gEl('histOv').classList.remove('on');
+    toast('📖 Semana cargada — '+withData+' día(s) con datos');
+  })
+  .finally(function(){
+    btn.disabled=false; btn.textContent='📅 Cargar SEMANA completa (lun a dom)';
+    if(st) st.textContent='';
+  });
 }
 
 function _enterReadOnly(payload){
@@ -2794,6 +2926,10 @@ function _enterReadOnly(payload){
 
   // 2) Activar flag ANTES de mutar (wrappers de autoSave/sendToSheets ya bloquean)
   _readOnlyMode = true;
+  // V20_47: guardar payload original para popular tabla semanal cuando admin elija actividad
+  _readOnlyPayload = payload;
+  // V20_48: limpiar payloads de semana — loadWeekFromSheets los setea DESPUÉS si aplica
+  _readOnlyWeekPayloads = null;
 
   // 3) Hidratar workers desde payload — NO recalcular, usar qty/price congelados
   workers = []; wid = 1;
@@ -2832,6 +2968,26 @@ function _enterReadOnly(payload){
     });
     w.totalPay = w.acts.reduce(function(a,b){ return a+(parseFloat(b.pay)||0); },0);
     workers.push(w);
+  });
+
+  // V20_47 FIX grupales: agregar a workers[] los participantes de grupales que NO trabajaron
+  // en actividades individuales ese día. Antes: el match `workers[wi].name===pw.name` fallaba
+  // y partIds quedaba vacío → grupal aparecía sin gente → Serafín veía la pestaña "vacía".
+  (payload.grpActs||[]).forEach(function(pg){
+    (pg.workers||[]).forEach(function(pw){
+      if(!pw || !pw.name) return;
+      var existsInWorkers = false;
+      for(var wi=0;wi<workers.length;wi++){
+        if(workers[wi].name === pw.name){ existsInWorkers = true; break; }
+      }
+      if(!existsInWorkers){
+        workers.push({
+          id: wid++, name: pw.name, empNum: pw.empNum||'',
+          open: true, acts: [], totalPay: 0,
+          _frozen: true, _grupalOnly: true
+        });
+      }
+    });
   });
 
   // 4) Grupales: cada entrada del payload trae workers[] (participantes) con qty/unitPrice del grupo
@@ -2880,6 +3036,26 @@ function _enterReadOnly(payload){
   try { updParts && updParts(); } catch(e){}
   try { renderGrpActs && renderGrpActs(); } catch(e){}
 
+  // V20_47: preparar pestaña Semanal — setear lunes de la semana del día cargado
+  // y llamar initSemTab para que el dropdown de actividades se popule.
+  // Cuando admin entre a la pestaña Semanal y elija actividad, buildSemTable popula
+  // la columna del día cargado desde _readOnlyPayload (ver populateSemFromReadOnly).
+  try {
+    if(payload.fecha){
+      var _d = new Date(payload.fecha + 'T12:00:00');
+      if(!isNaN(_d.getTime())){
+        var _dow = _d.getDay(); // 0=dom
+        var _diff = _dow === 0 ? -6 : 1 - _dow;
+        _d.setDate(_d.getDate() + _diff);
+        var _mo = _d.getMonth()+1, _dy = _d.getDate();
+        var _monday = _d.getFullYear()+'-'+(_mo<10?'0'+_mo:_mo)+'-'+(_dy<10?'0'+_dy:_dy);
+        var _wkEl = gEl('semWeekStart');
+        if(_wkEl) _wkEl.value = _monday;
+      }
+    }
+    if(typeof initSemTab === 'function') initSemTab();
+  } catch(e){ console.warn('V20_47 setup semanal fallo:', e); }
+
   // 8) Banner visible
   var banner = gEl('readOnlyBanner');
   var lbl = gEl('roDateLbl');
@@ -2903,8 +3079,14 @@ function exitReadOnly(){
   if(!_readOnlyMode || !_localBackup){
     var b=gEl('readOnlyBanner'); if(b) b.style.display='none';
     document.body.classList.remove('readOnly');
-    _readOnlyMode=false; return;
+    _readOnlyMode=false;
+    _readOnlyPayload = null; // V20_47
+    _readOnlyWeekPayloads = null; // V20_48
+    return;
   }
+  // V20_47: limpiar payload del modo lectura
+  _readOnlyPayload = null;
+  _readOnlyWeekPayloads = null; // V20_48
   // Restaurar snapshot
   workers = _localBackup.workers;
   grpActs = _localBackup.grpActs;
@@ -4814,12 +4996,12 @@ function showHistory(){
         // el admin no podía consultar sus hojas porque el dropdown solo tenía LIDERES.
         // TODO futuro: limpiar hardcodes de 'ADM' en el código (ver memoria).
         sel.innerHTML = '<option value="">— Selecciona surquero —</option>' +
-          '<option value="ADM">👑 ADM </option>' +
+          '<option value="ADM">👑 ADM (mis hojas)</option>' +
           list.map(function(n){ return '<option value="'+esc(n)+'">'+esc(n)+'</option>'; }).join('');
       } else {
         // V20_38: LIDERES vacío (ej: offline o sin carga del MASTER) — mostrar mensaje + ADM
         sel.innerHTML = '<option value="">⚠️ Sin lista de surqueros — recarga la app</option>' +
-          '<option value="ADM">👑 ADM </option>';
+          '<option value="ADM">👑 ADM (mis hojas)</option>';
       }
     }
   } catch(e){ console.warn('V20_38 populate surqueros fallo:', e); }
@@ -8894,6 +9076,69 @@ function buildSemTable(){
 
   // Restaurar datos si existen
   restoreSemInputs();
+
+  // V20_47: en modo lectura, popular la columna del día cargado desde Sheets
+  // con los datos del worker para la actividad seleccionada (qty/ENT/SAL/L.INI/L.FIN).
+  if(_readOnlyMode && _readOnlyPayload){
+    try { _populateSemFromReadOnly(); } catch(e){ console.warn('V20_47 populate semanal fallo:', e); }
+  }
+}
+
+// V20_47/V20_48: poblar la(s) columna(s) del día cargado en la tabla semanal.
+// V20_47: si solo hay _readOnlyPayload (1 día) → popula 1 columna.
+// V20_48: si hay _readOnlyWeekPayloads (semana completa) → popula los 7 días que tengan datos.
+function _populateSemFromReadOnly(){
+  var actIdx = gVal('semActivity');
+  var weekStart = gVal('semWeekStart');
+  if(!actIdx || !weekStart) return;
+  var selAct = ALL_ACTS[parseInt(actIdx)];
+  if(!selAct) return;
+  var lunD = new Date(weekStart + 'T12:00:00');
+  if(isNaN(lunD.getTime())) return;
+
+  // Helper: popula 1 día de la tabla con un payload
+  function _popOneDay(dayIdx, payload){
+    if(dayIdx < 0 || dayIdx > 6) return;
+    if(!payload || !payload.workers) return;
+    var pwl = payload.workers;
+    for(var w=0; w<workers.length; w++){
+      var wk = workers[w];
+      var pw = null;
+      for(var pi=0; pi<pwl.length; pi++){
+        if(pwl[pi].name === wk.name){ pw = pwl[pi]; break; }
+      }
+      if(!pw || !pw.acts) continue;
+      var match = null;
+      for(var ai=0; ai<pw.acts.length; ai++){
+        if(pw.acts[ai].actEs === selAct.es){ match = pw.acts[ai]; break; }
+      }
+      if(!match) continue;
+      var cellId = 'sem_' + wk.id + '_d' + dayIdx;
+      var qtyEl = gEl(cellId+'_qty');
+      if(qtyEl && (match.qty !== undefined && match.qty !== '')) qtyEl.value = match.qty;
+      var iniEl = gEl(cellId+'_ini'); if(iniEl && match.hEnt) iniEl.value = match.hEnt;
+      var finEl = gEl(cellId+'_fin'); if(finEl && match.hSal) finEl.value = match.hSal;
+      var liEl  = gEl(cellId+'_li');  if(liEl  && match.hLIni) liEl.value  = match.hLIni;
+      var lfEl  = gEl(cellId+'_lf');  if(lfEl  && match.hLFin) lfEl.value  = match.hLFin;
+      try { calcSemHours(wk.id, dayIdx); } catch(e){}
+    }
+  }
+
+  if(_readOnlyWeekPayloads && _readOnlyWeekPayloads.length === 7){
+    // V20_48: SEMANA completa — iterar los 7 payloads
+    for(var wd=0; wd<7; wd++){
+      _popOneDay(wd, _readOnlyWeekPayloads[wd]);
+    }
+  } else if(_readOnlyPayload && _readOnlyPayload.fecha){
+    // V20_47: 1 solo día — calcular dayIdx desde la fecha
+    var fechaD = new Date(_readOnlyPayload.fecha + 'T12:00:00');
+    if(!isNaN(fechaD.getTime())){
+      var diffMs = fechaD - lunD;
+      var dayIdx = Math.round(diffMs / 86400000);
+      _popOneDay(dayIdx, _readOnlyPayload);
+    }
+  }
+  try { calcSemDayTotals && calcSemDayTotals(); } catch(e){}
 }
 
 function calcSemHours(wid, dayIdx){
