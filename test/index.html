@@ -24,7 +24,7 @@
 </script>
 <script>
 // V50 (port V20_23): estandarización de colores PDF
-window.APP_VERSION = 'V79';
+window.APP_VERSION = 'V80';
 (function(){
   function showVersionMismatch(remoteV){
     if(document.getElementById('ver-mismatch')) return;
@@ -964,6 +964,110 @@ body.readOnly textarea{
 body.readOnly [onclick*="sendToSheets"],
 body.readOnly [onclick*="openNewDay"]{display:none !important}
 /* Tabs, PDF, navegación, ver historial, etc. — TODO FUNCIONA en modo lectura */
+
+/* ─────────────────────────────────────────────────────────────────────
+   V80 — Fixes responsive (5 skills auditaron)
+   Serafín reportó: "opciones escondidas a la derecha, muy abajo,
+   fuera de foco transparente, se ve feo".
+   Causas detectadas: box-sizing inconsistente, padding-bottom excesivo,
+   tabs con overflow sin feedback, modales sin media queries, grids
+   1fr 1fr sin colapsar a 1fr en móvil, selects sin min-width:0,
+   tabla semanal con widths fijos.
+   ─────────────────────────────────────────────────────────────────── */
+
+/* GLOBAL — sin media query (aplica siempre) */
+*, *::before, *::after { box-sizing: border-box; }
+body { padding-bottom: 90px; }
+.md { box-sizing: border-box; }
+.mok, .mca { min-height: 44px; display: flex; align-items: center; justify-content: center; }
+.tabs { scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
+.tab { min-height: 44px; }
+.btn { word-wrap: break-word; overflow-wrap: break-word; white-space: normal; line-height: 1.3; }
+.arh select, .arh > select { min-width: 0; }
+.arh { min-width: 0; }
+.wc { overflow: hidden; }
+.wsum { min-width: 0; }
+.tinp input { min-height: 44px; }
+.shi { min-height: 44px; }
+.shift-del { min-height: 44px; min-width: 44px; }
+.pin-btn { min-height: 44px; min-width: 44px; }
+.ir, .sr { flex-wrap: wrap; gap: 8px; }
+.ik, .sn { min-width: 100px; flex-shrink: 0; }
+/* Overlay menos pesado — antes .5/.85 sentía "fuera de foco" feo */
+.ov { background: rgba(0,0,0,.45); }
+.qrOv { background: rgba(0,0,0,.75); }
+/* Toast/savepill no se desbordan en pantallas chicas */
+.toast { max-width: calc(100vw - 32px); box-sizing: border-box; }
+
+/* MÓVILES — 480px y abajo (la mayoría de surqueros) */
+@media (max-width: 480px) {
+  /* Modales: padding ajustado y respetar viewport */
+  .md { padding: 14px 12px 24px; max-width: calc(100vw - 16px); margin: 0 8px; }
+  .qrOv { padding: 12px; }
+  .qrBox { max-width: calc(100vw - 16px); }
+  /* histOv: lista interna debe scrollar bien */
+  #histOv .md { display: flex; flex-direction: column; max-height: 88vh; }
+  #histList { flex: 1; min-height: 0; overflow-y: auto; }
+  /* Header: tabs y logo más compactos */
+  header { padding: 10px 12px 0; }
+  .tab { padding: 6px 10px; font-size: 12px; }
+  .logo { font-size: 19px; }
+  .dpill { font-size: 11px; padding: 2px 8px; }
+  /* Ranch add bar: stack vertical en móvil para no comprimir */
+  #ranchAddBar { flex-direction: column; gap: 6px; }
+  #ranchAddBar select, #ranchAddBar button { width: 100%; min-height: 44px; }
+  /* Login card */
+  .login-card { padding: 20px 16px; }
+  /* Botones de tabla y card .btn */
+  .btn { font-size: 14px; padding: 12px 14px; }
+  /* Tabla semanal: scroll horizontal interno + tipografía reducida */
+  table#semTable { font-size: 11px; }
+  .sem-time-txt { width: 70px; font-size: 10px; padding: 2px; }
+  .sem-input { font-size: 10px; padding: 2px 4px; }
+  .sem-name { min-width: 90px; font-size: 11px; }
+  /* Ausencias bar */
+  #ausBar { padding: 6px 10px 4px; }
+  #ausBar input { font-size: 14px; padding: 9px 10px; }
+  #ausBar button { padding: 9px 12px; font-size: 13px; min-height: 44px; }
+}
+
+/* MÓVILES PEQUEÑOS — 360px y abajo (Samsung Galaxy A serie viejas, iPhone SE) */
+@media (max-width: 360px) {
+  /* Reducir padding del body porque la pantalla es muy chica */
+  body { padding: 0 10px 90px; }
+  /* Grids 2 columnas → 1 columna (rancho/finca, qr cantidad/monto, time entrada/salida) */
+  .r2 { grid-template-columns: 1fr; }
+  .qr { grid-template-columns: 1fr; }
+  .tinp.on { grid-template-columns: 1fr; }
+  .r4 { grid-template-columns: 1fr 1fr; }
+  /* Shift-row: el botón ✕ pasa a línea propia */
+  .shift-row { grid-template-columns: 1fr 1fr; }
+  .shift-row .shift-del { grid-column: 1 / -1; width: 100%; margin-top: 4px; }
+  /* Tabs aún más compactas */
+  .tab { padding: 5px 7px; font-size: 11px; }
+  /* Pills de rancho compactas */
+  .ranch-pill { margin-right: 3px; margin-bottom: 3px; padding: 6px 9px; font-size: 12px; }
+  /* Tabla semanal súper compacta */
+  table#semTable { font-size: 10px; }
+  .sem-time-txt { width: 60px; font-size: 9px; }
+  .sem-input { font-size: 9px; padding: 1px 3px; }
+  .sem-name { min-width: 70px; font-size: 10px; }
+  /* Modales aún más estrechos */
+  .md { padding: 12px 10px 20px; margin: 0 6px; }
+  /* Botones de la barra de añadir trabajador (search + QR) */
+  .addbar { gap: 6px; padding: 6px 10px 2px; }
+  .addbar input { font-size: 14px; }
+  .qrbtn { width: 42px; height: 42px; font-size: 16px; }
+  .abtn { padding: 10px 12px; font-size: 13px; }
+  /* Login PIN más compacto */
+  .login-card { padding: 16px 12px; }
+}
+
+/* TABLET LANDSCAPE — sobre 900px, garantizar que no haya stretch raro */
+@media (min-width: 900px) {
+  body { max-width: 900px; margin: 0 auto; }
+  body.readOnly header { width: 100%; max-width: 900px; left: 50%; transform: translateX(-50%); }
+}
 </style>
 
 <!-- NUEVO DIA MODAL -->
