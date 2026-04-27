@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_45';
+window.APP_VERSION = 'V20_46';
 (function(){
   // Toast persistente de "versión antigua detectada" — NO se puede cerrar, obliga a actualizar
   function showVersionMismatch(remoteV){
@@ -4809,11 +4809,17 @@ function showHistory(){
       surqueros.forEach(function(n){ uniq[n.toLowerCase()] = n; });
       var list = Object.keys(uniq).map(function(k){ return uniq[k]; }).sort();
       if(list.length){
+        // V20_46: agregar opción 'ADM' al inicio para que admin pueda traer SUS propias hojas.
+        // Cuando admin envía datos a FIELD_DROP, queda con surquero='ADM' — sin esta opción
+        // el admin no podía consultar sus hojas porque el dropdown solo tenía LIDERES.
+        // TODO futuro: limpiar hardcodes de 'ADM' en el código (ver memoria).
         sel.innerHTML = '<option value="">— Selecciona surquero —</option>' +
+          '<option value="ADM">👑 ADM (mis hojas)</option>' +
           list.map(function(n){ return '<option value="'+esc(n)+'">'+esc(n)+'</option>'; }).join('');
       } else {
-        // V20_38: LIDERES vacío (ej: offline o sin carga del MASTER) — mostrar mensaje
-        sel.innerHTML = '<option value="">⚠️ Sin lista de surqueros — recarga la app</option>';
+        // V20_38: LIDERES vacío (ej: offline o sin carga del MASTER) — mostrar mensaje + ADM
+        sel.innerHTML = '<option value="">⚠️ Sin lista de surqueros — recarga la app</option>' +
+          '<option value="ADM">👑 ADM (mis hojas)</option>';
       }
     }
   } catch(e){ console.warn('V20_38 populate surqueros fallo:', e); }
