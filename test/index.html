@@ -24,7 +24,7 @@
 </script>
 <script>
 // V50 (port V20_23): estandarización de colores PDF
-window.APP_VERSION = 'V76';
+window.APP_VERSION = 'V78';
 (function(){
   function showVersionMismatch(remoteV){
     if(document.getElementById('ver-mismatch')) return;
@@ -2515,6 +2515,25 @@ function _loadRanchoCtx(idx){
   _f('hilIni',r.hilIni); _f('hilFin',r.hilFin);
 }
 
+// V78 FIX: re-renderizar TODO el UI del rancho activo (workers + grupales + ausencias).
+// Antes: _loadRanchoCtx solo actualizaba variables JS pero el DOM seguía mostrando
+// el rancho anterior — el surquero pensaba que sus trabajadores se perdieron.
+function _renderActiveRanchoUI(){
+  try {
+    var list = gEl('wlist');
+    if(list){
+      list.innerHTML = '';
+      for(var i=0;i<workers.length;i++) list.appendChild(mkCard(workers[i],i));
+      if(!workers.length) showEmptyState();
+      // recalcular totales después del render
+      setTimeout(function(){ for(var i=0;i<workers.length;i++) updTot(workers[i].id); }, 50);
+    }
+  } catch(e){ console.warn('V78 render wlist fallo:', e); }
+  try { if(typeof renderGrpActs === 'function') renderGrpActs(); } catch(e){}
+  try { if(typeof updParts === 'function') updParts(); } catch(e){}
+  try { if(typeof renderAusencias === 'function') renderAusencias(); } catch(e){}
+}
+
 // V21: Cambiar de rancho activo (swap)
 function switchRancho(newIdx){
   if(newIdx === _activeRanchoIdx) return;
@@ -2531,6 +2550,8 @@ function switchRancho(newIdx){
   var semSel = gEl('semRancho');
   if(semSel && gVal('rancho')){ semSel.value = gVal('rancho'); }
   updParam(); updBanner();
+  // V78 FIX: re-render del DOM con datos del nuevo rancho (workers/grpActs/ausencias)
+  _renderActiveRanchoUI();
 }
 
 // V21: Validar que un rancho no esté duplicado
@@ -2816,6 +2837,8 @@ function onPillClick(idx){
   renderRanchBar();
   // V72: sincronizar inputs PRIMERO (antes de go) para que funciones tengan datos correctos
   try { syncRanchConfigToParams(); } catch(e){}
+  // V78 FIX: re-render del wlist/grpActs/ausencias con los datos del rancho nuevo
+  _renderActiveRanchoUI();
   // Refrescar la tab actual con los datos del rancho nuevo
   try { go(pg); } catch(e){ console.warn('V72 go(pg) fallo:', e); }
 }
@@ -3050,6 +3073,8 @@ function addRanchBlock(){
   renderRanchBar();
   // Sincronizar select #rancho + dropdown de finca con el rancho recién agregado
   try { syncRanchConfigToParams(); } catch(e){ console.warn('V72 sync fallo:', e); }
+  // V78 FIX: re-render del wlist/grpActs/ausencias con el rancho recién creado (vacío)
+  _renderActiveRanchoUI();
   // Refrescar contenido de la tab activa con datos del nuevo rancho
   try { go(pg); } catch(e){}
   if(currentUser) saveQuiet();
@@ -3555,11 +3580,37 @@ function _enterReadOnly(payload){
     var el = gEl(id); if(el && topFields[id]!=null && topFields[id]!=='') el.value = topFields[id];
   });
 
+  // V77 FIX multi-rancho: hidratar _ranchos[0] con los datos cargados desde Sheets.
+  // En V76 el modo lectura solo poblaba globales (workers/grpActs/ausencias) y NO
+  // reflejaba los datos en _ranchos[], por lo que el pill no aparecía y la pestaña
+  // Trabajadores se veía vacía aunque los datos estuvieran en memoria.
+  try {
+    if(typeof _ranchos !== 'undefined'){
+      _ranchos = [{
+        rancho: payload.rancho || '',
+        finca: '',
+        hEnt: topFields.hEnt || '',
+        hSal: topFields.hSal || '',
+        lIni: '', lFin: '',
+        workers: workers, wid: wid,
+        grpActs: grpActs, ausencias: ausencias,
+        estP: [], hilP: [], cajasP: [],
+        notas:'', cajasTotal:'', cajasPrecio:'', cajasIni:'', cajasFin:'',
+        estAcres:'', estAncho:'', estIni:'', estFin:'',
+        hilAcres:'', hilAncho:'', hilIni:'', hilFin:''
+      }];
+      _activeRanchoIdx = 0;
+    }
+  } catch(e){ console.warn('V77 readOnly _ranchos hidratar fallo:', e); }
+
   var list = gEl('wlist'); if(list) list.innerHTML = '';
   workers.forEach(function(w,i){ if(list) list.appendChild(mkCard(w,i)); });
   try { updParam && updParam(); } catch(e){}
   try { updParts && updParts(); } catch(e){}
   try { renderGrpActs && renderGrpActs(); } catch(e){}
+  // V77 FIX multi-rancho: re-renderizar pills + sincronizar config rancho con params
+  try { if(typeof renderRanchBar === 'function') renderRanchBar(); } catch(e){}
+  try { if(typeof syncRanchConfigToParams === 'function') syncRanchConfigToParams(); } catch(e){}
 
   var banner = gEl('readOnlyBanner');
   var lbl = gEl('roDateLbl');
@@ -5247,7 +5298,18 @@ function checkDateChange(savedData){
   // ✅ Fix: si hay workers guardados, auto-archivar pero NO resetear.
   // El surquero/admin puede estar trabajando con datos de otro día intencionalmente.
   // Solo resetear si NO hay workers (datos vacíos de un día pasado sin utilidad).
+  // V78 FIX multi-rancho: revisar también _ranchos[].workers porque workers globales
+  // top-level solo refleja el rancho activo. Si activeIdx era un rancho vacío al cerrar,
+  // savedData.w podía estar vacío aunque otros ranchos tuvieran trabajadores.
   var hasWorkers = savedData.w && savedData.w.length > 0;
+  if(!hasWorkers && savedData._ranchos && savedData._ranchos.length){
+    for(var _ri=0; _ri<savedData._ranchos.length; _ri++){
+      var _r78 = savedData._ranchos[_ri] || {};
+      if((_r78.workers && _r78.workers.length) || (_r78.grpActs && _r78.grpActs.length) || (_r78.ausencias && _r78.ausencias.length)){
+        hasWorkers = true; break;
+      }
+    }
+  }
   if(hasWorkers){
     // Archivar al historial por si acaso, pero dejar que load() los cargue
     var histKey = getUserHistKey(savedFecha);
