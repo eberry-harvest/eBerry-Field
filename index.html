@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_44';
+window.APP_VERSION = 'V20_45';
 (function(){
   // Toast persistente de "versión antigua detectada" — NO se puede cerrar, obliga a actualizar
   function showVersionMismatch(remoteV){
@@ -9166,7 +9166,7 @@ function generateSemPDF(){
     +'.total{font-weight:700;background:#d0d8ff;color:#1a2b8c}'
     +'.grand{font-weight:900;background:#1a2b8c;color:#fff}'
     +'.ft{font-size:8px;color:#1a2b8c;text-align:center;margin-top:6px;border-top:1px solid #1a2b8c;padding-top:5px}'
-    +'@media print{.nopr{display:none}@page{size:landscape;margin:10mm}*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}table{table-layout:fixed;-webkit-text-size-adjust:100%}th,td{word-break:break-word}}'
+    +'@media print{.nopr{display:none}@page{size:landscape;margin:10mm}*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}table{table-layout:fixed;-webkit-text-size-adjust:100%}th,td{white-space:nowrap}.name{white-space:normal!important;word-break:break-word}}'
     +'</style></head><body>';
 
   // Gamma2: Header con logo eBerry (igual que Daily Payroll)
@@ -9251,12 +9251,12 @@ function generateSemPDF(){
 
   // ── Tabla: Header fila 1 — Días con colspan ──
   html += '<table><thead>';
-  html += '<tr><th rowspan="2">No</th><th rowspan="2">Emp #</th><th rowspan="2" style="min-width:160px;width:160px">Nombre / Name</th>';
+  html += '<tr><th rowspan="2" style="width:32px">No</th><th rowspan="2" style="width:60px">Emp #</th><th rowspan="2" style="min-width:140px;max-width:170px">Nombre / Name</th>';
   for(var d=0;d<7;d++){
     if(dayColSpans[d] === 0) continue; // V16: omitir días sin datos
     html += '<th colspan="'+dayColSpans[d]+'" style="border-bottom:'+(dayColSpans[d]>1?'1px solid #8899cc':'none')+'">'+SEM_DAYS[d]+'<br>'+dates[d]+'</th>';
   }
-  html += '<th rowspan="2" style="background:#0f1a3d">TOTAL</th></tr>';
+  html += '<th rowspan="2" style="background:#0f1a3d;min-width:55px">TOTAL</th></tr>';
 
   // Header fila 2 — etiquetas T1/T2 si hay multi-columna
   html += '<tr>';
