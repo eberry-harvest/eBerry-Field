@@ -24,7 +24,7 @@
 </script>
 <script>
 // V50 (port V20_23): estandarización de colores PDF
-window.APP_VERSION = 'V78';
+window.APP_VERSION = 'V79';
 (function(){
   function showVersionMismatch(remoteV){
     if(document.getElementById('ver-mismatch')) return;
@@ -2878,18 +2878,23 @@ function renderParamsFinca(){
     });
     slot.appendChild(sel);
   } else {
-    // Fallback: input libre si no hay catálogo para este rancho
-    var inp = document.createElement('input');
-    inp.type = 'text';
-    inp.value = current;
-    inp.placeholder = 'Ej: Block 5';
-    inp.style.cssText = 'width:100%;padding:11px 12px;border:1.5px solid var(--bd);border-radius:8px;font-family:\'DM Sans\',sans-serif;font-size:16px;color:var(--dk);background:var(--lt);outline:none;min-height:44px';
-    inp.addEventListener('input', function(){
-      hidden.value = this.value;
-      if(_ranchos[_activeRanchoIdx]) _ranchos[_activeRanchoIdx].finca = this.value;
-      if(typeof autoSave === 'function') autoSave();
-    });
-    slot.appendChild(inp);
+    // V79 FIX: rancho sin catálogo → select DISABLED (no input libre).
+    // Antes el fallback era input editable; Serafín pidió que solo se capture finca via dropdown.
+    // Si el rancho no tiene fincas en el catálogo, el campo queda visible pero bloqueado.
+    var selDis = document.createElement('select');
+    selDis.disabled = true;
+    selDis.style.cssText = 'width:100%;padding:11px 12px;border:1.5px solid var(--bd);border-radius:8px;font-family:\'DM Sans\',sans-serif;font-size:16px;color:#888;background:#f5f5f5;outline:none;min-height:44px;cursor:not-allowed';
+    var optDis = document.createElement('option');
+    optDis.value = ''; optDis.textContent = '— Sin fincas en catálogo —';
+    selDis.appendChild(optDis);
+    if(current){
+      var optLeg = document.createElement('option');
+      optLeg.value = current; optLeg.textContent = '⚠️ '+current+' (legacy)'; optLeg.selected = true;
+      selDis.appendChild(optLeg);
+    }
+    slot.appendChild(selDis);
+    // Limpiar finca guardada si no estaba en catálogo (excepto legacy preservado visualmente)
+    // Nota: NO sobrescribimos hidden.value para no perder valor legacy del día.
   }
 }
 
@@ -4353,23 +4358,25 @@ function mkActRow(wid_,ai,_cont){
     fincaRow.appendChild(fincaSel);
     div.appendChild(fincaRow);
   } else {
-    // V71 (port V20_41): fallback a input de texto libre si el rancho NO está en catálogo
+    // V79 FIX: rancho sin catálogo → select DISABLED (antes era input libre editable).
+    // Solo se permite capturar finca por dropdown. Si el rancho no tiene fincas en
+    // el catálogo, el campo queda visible pero bloqueado para evitar typos.
     var fincaRowFB = document.createElement('div');
     fincaRowFB.style.cssText = 'display:flex;align-items:center;gap:6px;margin-bottom:6px';
-    var fincaInp = document.createElement('input');
-    fincaInp.type = 'text';
-    fincaInp.id = 'finca_act_'+wid_+'_'+ai;
-    fincaInp.placeholder = '📍 Finca / Labor (escribir manualmente)';
-    fincaInp.value = (a.finca !== undefined && a.finca !== '') ? a.finca : '';
-    fincaInp.style.cssText = 'flex:1;padding:8px 10px;border:1.5px dashed var(--bd);border-radius:8px;font-family:\'DM Sans\',sans-serif;font-size:14px;min-height:44px;background:#fff;color:var(--dk)';
-    (function(wi2,ai2){
-      fincaInp.addEventListener('input', function(){
-        var w2=getW(wi2); if(!w2||!w2.acts[ai2])return;
-        w2.acts[ai2].finca = this.value;
-        autoSave();
-      });
-    })(wid_, ai);
-    fincaRowFB.appendChild(fincaInp);
+    var fincaSelFB = document.createElement('select');
+    fincaSelFB.id = 'finca_act_'+wid_+'_'+ai;
+    fincaSelFB.disabled = true;
+    fincaSelFB.style.cssText = 'flex:1;padding:8px 10px;border:1.5px dashed var(--bd);border-radius:8px;font-family:\'DM Sans\',sans-serif;font-size:14px;min-height:44px;background:#f5f5f5;color:#888;cursor:not-allowed';
+    var actFincaValFB = (a.finca !== undefined && a.finca !== '') ? a.finca : '';
+    var _optFB = document.createElement('option');
+    _optFB.value=''; _optFB.textContent='— Sin fincas en catálogo —';
+    fincaSelFB.appendChild(_optFB);
+    if(actFincaValFB){
+      var _optFBL = document.createElement('option');
+      _optFBL.value = actFincaValFB; _optFBL.textContent = '⚠️ '+actFincaValFB+' (legacy)'; _optFBL.selected = true;
+      fincaSelFB.appendChild(_optFBL);
+    }
+    fincaRowFB.appendChild(fincaSelFB);
     div.appendChild(fincaRowFB);
   }
   // Tau: TODAS las actividades usan sistema de turnos con "Agregar turno"
@@ -7181,8 +7188,12 @@ function _fincaRanchHtml(idx, ranchoName, currentVal){
     html += '</select>';
     return html;
   } else {
-    // Fallback: rancho sin catálogo → input libre
-    return '<input type="text" value="'+esc(cv)+'" onchange="onRanchConfigChange('+idx+',\'finca\',this.value)" placeholder="Ej: Block 5">';
+    // V79 FIX: rancho sin catálogo → select DISABLED (antes era input libre editable).
+    var html3 = '<select disabled style="width:100%;padding:8px 10px;border:1.5px solid var(--bd);border-radius:8px;font-size:14px;font-family:DM Sans,sans-serif;min-height:44px;background:#f5f5f5;color:#888;cursor:not-allowed">';
+    html3 += '<option value="">— Sin fincas en catálogo —</option>';
+    if(cv) html3 += '<option value="'+esc(cv)+'" selected>⚠️ '+esc(cv)+' (legacy)</option>';
+    html3 += '</select>';
+    return html3;
   }
 }
 
@@ -7208,8 +7219,12 @@ function _fincaGrpHtml(gi, currentVal, placeholderTxt){
     html += '</select>';
     return html;
   } else {
-    // Fallback: rancho sin catálogo → input libre (por ahora)
-    return '<input type="text" value="'+esc(cv)+'" placeholder="'+esc(placeholderTxt||'Finca / Labor')+'" data-gi="'+gi+'" data-v="finca" oninput="setGrpVar(this)" style="font-size:16px;padding:9px 10px;width:100%">';
+    // V79 FIX: rancho sin catálogo → select DISABLED (antes era input libre editable).
+    var html2 = '<select disabled style="font-size:16px;padding:9px 10px;width:100%;min-height:44px;background:#f5f5f5;color:#888;cursor:not-allowed">';
+    html2 += '<option value="">— Sin fincas en catálogo —</option>';
+    if(cv) html2 += '<option value="'+esc(cv)+'" selected>⚠️ '+esc(cv)+' (legacy)</option>';
+    html2 += '</select>';
+    return html2;
   }
 }
 
