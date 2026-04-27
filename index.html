@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_48';
+window.APP_VERSION = 'V20_49';
 (function(){
   // Toast persistente de "versión antigua detectada" — NO se puede cerrar, obliga a actualizar
   function showVersionMismatch(remoteV){
@@ -2910,6 +2910,34 @@ function loadWeekFromSheets(){
   });
 }
 
+// V20_49: parsea fecha en cualquier formato razonable a "YYYY-MM-DD".
+// Maneja: "YYYY-MM-DD" (ya OK), "MM/DD/YYYY", "MM/DD/YY" (asume 20YY si <50, 19YY si >=50),
+// "DD/MM/YYYY" si los 2 primeros números son >12, ISO con tiempo "YYYY-MM-DDTHH...".
+// Devuelve "" si no puede parsearse.
+function _normalizeFechaV49(f){
+  if(!f) return '';
+  f = String(f).trim();
+  // Quitar parte de tiempo si existe (ISO)
+  if(f.indexOf('T') > 0) f = f.substring(0, f.indexOf('T'));
+  // Caso 1: ya en YYYY-MM-DD
+  if(/^\d{4}-\d{1,2}-\d{1,2}$/.test(f)){
+    var _p1 = f.split('-');
+    return _p1[0]+'-'+(_p1[1].length<2?'0'+_p1[1]:_p1[1])+'-'+(_p1[2].length<2?'0'+_p1[2]:_p1[2]);
+  }
+  // Caso 2: MM/DD/YYYY o MM/DD/YY o DD/MM/YYYY
+  if(/^\d{1,2}\/\d{1,2}\/\d{2,4}$/.test(f)){
+    var _p2 = f.split('/');
+    var _a = parseInt(_p2[0],10), _b = parseInt(_p2[1],10), _c = parseInt(_p2[2],10);
+    if(_c < 100) _c = (_c < 50 ? 2000+_c : 1900+_c);
+    // Si _a > 12, asumimos DD/MM/YYYY; sino MM/DD/YYYY (locale US)
+    var _mm, _dd;
+    if(_a > 12 && _b <= 12){ _dd = _a; _mm = _b; }
+    else { _mm = _a; _dd = _b; }
+    return _c+'-'+(_mm<10?'0'+_mm:_mm)+'-'+(_dd<10?'0'+_dd:_dd);
+  }
+  return '';
+}
+
 function _enterReadOnly(payload){
   // 1) Snapshot del estado vivo actual (en memoria, nunca en localStorage)
   _localBackup = {
@@ -3019,9 +3047,11 @@ function _enterReadOnly(payload){
     return { name:a.name||'', empNum:a.empNum||'', motivo:a.motivo||'', _frozen:true };
   });
 
-  // 6) Restaurar campos top del payload
+  // 6) Restaurar campos top del payload — V20_49: normalizar fecha por si viene en formato raro
+  var _fechaNorm = _normalizeFechaV49(payload.fecha) || payload.fecha || '';
+  if(_fechaNorm) payload.fecha = _fechaNorm;
   var topFields = {
-    rancho: payload.rancho, fecha: payload.fecha, numBus: payload.numBus,
+    rancho: payload.rancho, fecha: _fechaNorm, numBus: payload.numBus,
     hEnt: _iniAll.length ? _iniAll.sort()[0] : '',
     hSal: _finAll.length ? _finAll.sort().reverse()[0] : ''
   };
@@ -3036,25 +3066,76 @@ function _enterReadOnly(payload){
   try { updParts && updParts(); } catch(e){}
   try { renderGrpActs && renderGrpActs(); } catch(e){}
 
-  // V20_47: preparar pestaña Semanal — setear lunes de la semana del día cargado
-  // y llamar initSemTab para que el dropdown de actividades se popule.
-  // Cuando admin entre a la pestaña Semanal y elija actividad, buildSemTable popula
-  // la columna del día cargado desde _readOnlyPayload (ver populateSemFromReadOnly).
+  // V20_49: preparar pestaña Semanal con auto-selección de rancho/actividad para que
+  // el admin vea los datos sin tener que elegir nada manualmente.
   try {
-    if(payload.fecha){
-      var _d = new Date(payload.fecha + 'T12:00:00');
-      if(!isNaN(_d.getTime())){
-        var _dow = _d.getDay(); // 0=dom
+    // (a) Si payload.rancho viene vacío, intentar inferirlo del primer worker
+    //     en ALL_WORKERS (todos los del día trabajan para el mismo rancho).
+    if((!payload.rancho || payload.rancho === '') && (payload.workers||[]).length){
+      var _firstW = payload.workers[0];
+      for(var _wi=0; _wi<ALL_WORKERS.length; _wi++){
+        if(ALL_WORKERS[_wi].name === _firstW.name && ALL_WORKERS[_wi].crew){
+          var _crewClean = String(ALL_WORKERS[_wi].crew).replace(/\s*\d+$/,'').trim();
+          if(_crewClean){
+            payload.rancho = _crewClean;
+            var _rEl = gEl('rancho'); if(_rEl) _rEl.value = _crewClean;
+          }
+          break;
+        }
+      }
+    }
+    // (b) Calcular lunes con parseo robusto de fecha (acepta YYYY-MM-DD y MM/DD/YYYY).
+    var _fechaRaw = payload.fecha || '';
+    var _fechaIso = _normalizeFechaV49(_fechaRaw);
+    if(_fechaIso){
+      var _d = new Date(_fechaIso + 'T12:00:00');
+      if(!isNaN(_d.getTime()) && _d.getFullYear() >= 2000){
+        var _dow = _d.getDay();
         var _diff = _dow === 0 ? -6 : 1 - _dow;
         _d.setDate(_d.getDate() + _diff);
         var _mo = _d.getMonth()+1, _dy = _d.getDate();
         var _monday = _d.getFullYear()+'-'+(_mo<10?'0'+_mo:_mo)+'-'+(_dy<10?'0'+_dy:_dy);
         var _wkEl = gEl('semWeekStart');
         if(_wkEl) _wkEl.value = _monday;
+      } else {
+        console.warn('V20_49: payload.fecha mal parseada:', _fechaRaw, '→ Date inválida');
       }
     }
+    // (c) initSemTab construye dropdown de rancho + actividades del rancho activo.
     if(typeof initSemTab === 'function') initSemTab();
-  } catch(e){ console.warn('V20_47 setup semanal fallo:', e); }
+    // (d) Auto-seleccionar la primera actividad encontrada en payload — preferir tipo Hora
+    //     porque indica envío SEMANAL (1 actividad × 7 días).
+    var _firstActEs = '';
+    var _foundHora = false;
+    for(var _wpi=0; _wpi<(payload.workers||[]).length && !_foundHora; _wpi++){
+      var _wp = payload.workers[_wpi];
+      for(var _api=0; _api<(_wp.acts||[]).length; _api++){
+        var _ap = _wp.acts[_api];
+        if(!_firstActEs && _ap.actEs) _firstActEs = _ap.actEs;
+        if(_ap.tipo === 'Hora' && _ap.actEs){ _firstActEs = _ap.actEs; _foundHora = true; break; }
+      }
+    }
+    if(_firstActEs){
+      // Buscar índice en ALL_ACTS
+      var _semSel = gEl('semActivity');
+      if(_semSel){
+        for(var _ai=0; _ai<ALL_ACTS.length; _ai++){
+          if(ALL_ACTS[_ai].es === _firstActEs){
+            // Verificar que esa opción existe en el dropdown (initSemTab lo populó)
+            for(var _oi=0; _oi<_semSel.options.length; _oi++){
+              if(String(_semSel.options[_oi].value) === String(_ai)){
+                _semSel.value = String(_ai);
+                // Construir tabla y popular datos del payload
+                if(typeof buildSemTable === 'function') buildSemTable();
+                break;
+              }
+            }
+            break;
+          }
+        }
+      }
+    }
+  } catch(e){ console.warn('V20_49 setup semanal fallo:', e); }
 
   // 8) Banner visible
   var banner = gEl('readOnlyBanner');
