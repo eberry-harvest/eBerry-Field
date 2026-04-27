@@ -4814,12 +4814,12 @@ function showHistory(){
         // el admin no podía consultar sus hojas porque el dropdown solo tenía LIDERES.
         // TODO futuro: limpiar hardcodes de 'ADM' en el código (ver memoria).
         sel.innerHTML = '<option value="">— Selecciona surquero —</option>' +
-          '<option value="ADM">👑 ADM (mis hojas)</option>' +
+          '<option value="ADM">👑 ADM </option>' +
           list.map(function(n){ return '<option value="'+esc(n)+'">'+esc(n)+'</option>'; }).join('');
       } else {
         // V20_38: LIDERES vacío (ej: offline o sin carga del MASTER) — mostrar mensaje + ADM
         sel.innerHTML = '<option value="">⚠️ Sin lista de surqueros — recarga la app</option>' +
-          '<option value="ADM">👑 ADM (mis hojas)</option>';
+          '<option value="ADM">👑 ADM </option>';
       }
     }
   } catch(e){ console.warn('V20_38 populate surqueros fallo:', e); }
