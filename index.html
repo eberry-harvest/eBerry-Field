@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_53';
+window.APP_VERSION = 'V20_54';
 (function(){
   // Toast persistente de "versión antigua detectada" — NO se puede cerrar, obliga a actualizar
   function showVersionMismatch(remoteV){
@@ -5697,40 +5697,57 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
         trTotal+='<td style="text-align:center;border:1px solid #000;border-top:3px solid #1a2b8c;color:#1a2b8c;font-weight:700">'+smartNum(_subTot)+' h</td>';
       }
     } else if(!col4.hr && _NS>1){
-      // V20_26: TOTAL no-Hora por sub-columna. Para cada sub-shift, sumar qty de workers presentes.
-      // anyQty=false (sin qty) → fallback a horas referenciales por sub-col.
-      for(var sst2_=0;sst2_<_NS;sst2_++){
-        var _tarK2=col4.shifts[sst2_].key;
-        var _subTotQ=0;
-        var _subTotH=0;
-        var _anyQtySub=false;
-        for(var wts2=0;wts2<wks.length;wts2++){
-          var _cN2=col4.esName||(ACTS[col4.ai]?ACTS[col4.ai].es:'');
-          var _cF2=(col4.finca||'').trim();
-          for(var ka2=0;ka2<wks[wts2].acts.length;ka2++){
-            var _wAct2=wks[wts2].acts[ka2];
-            var _wN2=_wAct2.esName||(ACTS[_wAct2.ai]?ACTS[_wAct2.ai].es:'');
-            var _wT2=_wAct2.tipo||(ACTS[_wAct2.ai]?ACTS[_wAct2.ai].tipo:'')||'';
-            var _wF2=(_wAct2.finca||'').trim();
-            if(_wN2!==_cN2||_wT2!==(col4.tipo||'')||_wF2!==_cF2) continue;
-            var _inShift=false;
-            if(_wAct2.shifts&&_wAct2.shifts.length){
-              for(var ssy_=0;ssy_<_wAct2.shifts.length;ssy_++){
-                var _wkY=(_wAct2.shifts[ssy_].ini||'')+'|'+(_wAct2.shifts[ssy_].fin||'');
-                if(_wkY===_tarK2){ _inShift=true; _subTotH+=nh(_wAct2.shifts[ssy_].ini||'',_wAct2.shifts[ssy_].fin||'')||0; }
-              }
-            } else {
-              var _wkY2=(_wAct2.ini||'')+'|'+(_wAct2.fin||'');
-              if(_wkY2===_tarK2){ _inShift=true; _subTotH+=nh(_wAct2.ini||'',_wAct2.fin||'')||0; }
-            }
-            if(_inShift && parseFloat(_wAct2.qty)){
-              _subTotQ+=parseFloat(_wAct2.qty);
-              _anyQtySub=true;
-            }
+      // V20_54: TOTAL no-Hora — qty NO se subdivide por shift (es del día completo).
+      // Bug previo (V20_26): sumaba qty en cada sub-shift donde aparecía el worker → doble conteo.
+      // Fix: sumar qty UNA vez por worker (acumular total único) y emitir 1 celda con colspan=N.
+      // Si no hay qty → fallback a horas referenciales por sub-col (preserva visibilidad de shifts).
+      var _totQUni=0;
+      var _anyQtyUni=false;
+      for(var wts2=0;wts2<wks.length;wts2++){
+        var _cN2=col4.esName||(ACTS[col4.ai]?ACTS[col4.ai].es:'');
+        var _cF2=(col4.finca||'').trim();
+        for(var ka2=0;ka2<wks[wts2].acts.length;ka2++){
+          var _wAct2=wks[wts2].acts[ka2];
+          var _wN2=_wAct2.esName||(ACTS[_wAct2.ai]?ACTS[_wAct2.ai].es:'');
+          var _wT2=_wAct2.tipo||(ACTS[_wAct2.ai]?ACTS[_wAct2.ai].tipo:'')||'';
+          var _wF2=(_wAct2.finca||'').trim();
+          if(_wN2!==_cN2||_wT2!==(col4.tipo||'')||_wF2!==_cF2) continue;
+          if(parseFloat(_wAct2.qty)){
+            _totQUni+=parseFloat(_wAct2.qty);
+            _anyQtyUni=true;
           }
         }
-        var _subLbl=_anyQtySub?smartNum(_subTotQ):(_subTotH>0?smartNum(_subTotH)+' h':'');
-        trTotal+='<td style="text-align:center;border:1px solid #000;border-top:3px solid #1a2b8c;color:#1a2b8c;font-weight:700">'+_subLbl+'</td>';
+      }
+      if(_anyQtyUni){
+        trTotal+='<td colspan="'+_NS+'" style="text-align:center;border:1px solid #000;border-top:3px solid #1a2b8c;color:#1a2b8c;font-weight:700">'+smartNum(_totQUni)+'</td>';
+      } else {
+        // Fallback horas por sub-col (sin qty → mostrar referencia temporal)
+        for(var sst2_=0;sst2_<_NS;sst2_++){
+          var _tarK2=col4.shifts[sst2_].key;
+          var _subTotH=0;
+          for(var wts3=0;wts3<wks.length;wts3++){
+            var _cN3=col4.esName||(ACTS[col4.ai]?ACTS[col4.ai].es:'');
+            var _cF3=(col4.finca||'').trim();
+            for(var ka3=0;ka3<wks[wts3].acts.length;ka3++){
+              var _wAct3=wks[wts3].acts[ka3];
+              var _wN3=_wAct3.esName||(ACTS[_wAct3.ai]?ACTS[_wAct3.ai].es:'');
+              var _wT3=_wAct3.tipo||(ACTS[_wAct3.ai]?ACTS[_wAct3.ai].tipo:'')||'';
+              var _wF3=(_wAct3.finca||'').trim();
+              if(_wN3!==_cN3||_wT3!==(col4.tipo||'')||_wF3!==_cF3) continue;
+              if(_wAct3.shifts&&_wAct3.shifts.length){
+                for(var ssy_=0;ssy_<_wAct3.shifts.length;ssy_++){
+                  var _wkY=(_wAct3.shifts[ssy_].ini||'')+'|'+(_wAct3.shifts[ssy_].fin||'');
+                  if(_wkY===_tarK2) _subTotH+=nh(_wAct3.shifts[ssy_].ini||'',_wAct3.shifts[ssy_].fin||'')||0;
+                }
+              } else {
+                var _wkY2=(_wAct3.ini||'')+'|'+(_wAct3.fin||'');
+                if(_wkY2===_tarK2) _subTotH+=nh(_wAct3.ini||'',_wAct3.fin||'')||0;
+              }
+            }
+          }
+          var _subLbl=_subTotH>0?smartNum(_subTotH)+' h':'';
+          trTotal+='<td style="text-align:center;border:1px solid #000;border-top:3px solid #1a2b8c;color:#1a2b8c;font-weight:700">'+_subLbl+'</td>';
+        }
       }
     } else {
       trTotal+='<td'+_csp+' style="text-align:center;border:1px solid #000;border-top:3px solid #1a2b8c;color:#1a2b8c;font-weight:700">'+totLbl+'</td>';
@@ -5835,39 +5852,14 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
         var wActFinca2=(wAct2.finca||'').trim();
         if(wActName2===col2Name && wActTipo2===col2Tipo && wActFinca2===col2Finca){found2=wAct2;break;}
       }
-      // V20_26: Daywork/qty SE DISTRIBUYE por sub-shift igual que Hora.
-      // Si worker tiene shifts, qty va en la sub-col donde trabajó (colspan si contiguos).
-      // Si no tiene shifts → fallback colspan=N (preserva comportamiento anterior).
+      // V20_54: Daywork/Pieces/Caja/$ NO se subdivide por shift — qty es del día completo.
+      // Bug previo (V20_26): _computeFrags emitía la qty en cada "start" → doble pago si shifts no contiguos.
+      // Fix: si !col.hr y multi-shift, emitir 1 sola celda con colspan=N mostrando qty UNA vez.
       if(found2 && !col2.hr && parseFloat(found2.qty)){
         if(_NW<=1){
           td+='<td style="text-align:center">'+smartNum(found2.qty)+'</td>';
-          continue;
-        }
-        var _wKeysQ=[];
-        if(found2.shifts && found2.shifts.length){
-          for(var swq_=0;swq_<found2.shifts.length;swq_++){
-            _wKeysQ.push((found2.shifts[swq_].ini||'')+'|'+(found2.shifts[swq_].fin||''));
-          }
-        } else if(found2.ini||found2.fin){
-          _wKeysQ.push((found2.ini||'')+'|'+(found2.fin||''));
-        }
-        if(!_wKeysQ.length){
+        } else {
           td+='<td colspan="'+_NW+'" style="text-align:center">'+smartNum(found2.qty)+'</td>';
-          continue;
-        }
-        var _fragsQ=_computeFrags(col2.shifts, function(idx){
-          return _wKeysQ.indexOf(col2.shifts[idx].key)>=0;
-        });
-        for(var sq_=0;sq_<_NW;sq_++){
-          var _frQ=_fragsQ[sq_];
-          if(_frQ.type==='start'){
-            var _cspW2=_frQ.span>1?' colspan="'+_frQ.span+'"':'';
-            td+='<td'+_cspW2+' style="text-align:center">'+smartNum(found2.qty)+'</td>';
-          } else if(_frQ.type==='continue'){
-            // skip (cubierto por colspan)
-          } else {
-            td+='<td></td>';
-          }
         }
         continue;
       }
