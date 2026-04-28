@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_65';
+window.APP_VERSION = 'V20_66';
 (function(){
   // Toast persistente de "versión antigua detectada" — NO se puede cerrar, obliga a actualizar
   function showVersionMismatch(remoteV){
@@ -3279,7 +3279,10 @@ function _enterReadOnly(payload){
       w.acts.push({
         ai: aiIdx, esName: pa.actEs||'', tipo: pa.tipo||'',
         qty: qty, ini: pa.hEnt||'', fin: pa.hSal||'',
-        showTime: !!(pa.hEnt||pa.hSal),
+        // V20_66: siempre expandir horario al cargar día → muestra inputs INICIO/FIN inmediatamente.
+        // Antes: solo expandía si hEnt/hSal venían poblados → palomita marcada pero inputs ocultos para acts sin horario.
+        // Usuario tenía que destildar/re-tildar para verlos. Ahora se ven al toque, listo para editar/visualizar.
+        showTime: true,
         finca: pa.finca||'',
         shifts: (pa.hEnt||pa.hSal) ? [{ini:pa.hEnt||'', fin:pa.hSal||''}] : [],
         pay: payEst,
