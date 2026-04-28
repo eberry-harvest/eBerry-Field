@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_62';
+window.APP_VERSION = 'V20_63';
 (function(){
   // Toast persistente de "versión antigua detectada" — NO se puede cerrar, obliga a actualizar
   function showVersionMismatch(remoteV){
@@ -3375,7 +3375,8 @@ function _enterReadOnly(payload){
   var topFields = {
     rancho: payload.rancho, fecha: _fechaNorm, numBus: payload.numBus,
     hEnt: _iniAll.length ? _iniAll.sort()[0] : '',
-    hSal: _finAll.length ? _finAll.sort().reverse()[0] : ''
+    hSal: _finAll.length ? _finAll.sort().reverse()[0] : '',
+    notas: payload.note || ''  // V20_63: hidratar notas del día desde pestaña Note
   };
   Object.keys(topFields).forEach(function(id){
     var el = gEl(id); if(el && topFields[id]!=null && topFields[id]!=='') el.value = topFields[id];
@@ -6267,8 +6268,12 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     +'<tbody>'+metaRows+rows+'</tbody>'
     +'</table>'
     // V12-FIX: Ausencias removidas del PDF (solo van a Google Sheets)
-    // ── V5: Bloque de Análisis de Rendimiento en el PDF ──
+    // ── V20_63: Notas + Análisis en HOJA SEPARADA con page-break-before:always ──
+    // Si hay nota O análisis → ambos van en hoja nueva. Si hay ambos, nota como encabezado.
+    // Si solo hay nota (sin pérdidas) → hoja con solo la nota.
+    // Si no hay ninguno → no se agrega hoja extra.
     +(function(){
+      // ── 1) Calcular HTML del Análisis (si aplica) ──
       var globalH = nh(vals.hEnt||'',vals.hSal||'');
       var anRows='', totalLoss=0, wLoss=0;
       for(var wi=0;wi<wks.length;wi++){
@@ -6313,17 +6318,37 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
             +'<tr style="background:#fff5f5"><td colspan="3" style="border:1px solid #ecc;padding:2px 8px">'+wDetails+'</td></tr>';
         }
       }
-      if(!anRows) return '';
-      // V14-FIX: Quitado overflow:hidden + page-break-inside:avoid — causaban salto de página innecesario
-      return '<div style="margin-top:14px;border:2px solid #c00;border-radius:8px">'
-        +'<div style="background:#c00;color:#fff;padding:7px 12px;font-weight:700;font-size:11px;display:flex;justify-content:space-between;border-radius:6px 6px 0 0">'
-        +'<span>&#x1F4C9; AN&Aacute;LISIS DE RENDIMIENTO &mdash; P&Eacute;RDIDAS</span>'
-        +'<span>'+wLoss+' trabajador(es) &bull; Total: -$'+totalLoss.toFixed(2)+'</span></div>'
-        +'<table style="width:100%;border-collapse:collapse">'
-        +'<tr style="background:#ffe5e5"><th style="padding:4px 8px;font-size:9px;text-align:left;border:1px solid #ecc">Trabajador</th><th style="padding:4px 8px;font-size:9px;text-align:center;border:1px solid #ecc">Tarifa/h</th><th style="padding:4px 8px;font-size:9px;text-align:right;border:1px solid #ecc">P&eacute;rdida</th></tr>'
-        +anRows
-        +'<tr style="background:#8b0000;color:#fff;font-weight:700"><td colspan="2" style="padding:5px 8px;font-size:10px;border:1px solid #c00">TOTAL P&Eacute;RDIDA EMPRESA</td><td style="padding:5px 8px;font-size:12px;text-align:right;border:1px solid #c00">-$'+totalLoss.toFixed(2)+'</td></tr>'
-        +'</table></div>';
+      var analisisHTML = '';
+      if(anRows){
+        analisisHTML = '<div style="margin-top:14px;border:2px solid #c00;border-radius:8px">'
+          +'<div style="background:#c00;color:#fff;padding:7px 12px;font-weight:700;font-size:11px;display:flex;justify-content:space-between;border-radius:6px 6px 0 0">'
+          +'<span>&#x1F4C9; AN&Aacute;LISIS DE RENDIMIENTO &mdash; P&Eacute;RDIDAS</span>'
+          +'<span>'+wLoss+' trabajador(es) &bull; Total: -$'+totalLoss.toFixed(2)+'</span></div>'
+          +'<table style="width:100%;border-collapse:collapse">'
+          +'<tr style="background:#ffe5e5"><th style="padding:4px 8px;font-size:9px;text-align:left;border:1px solid #ecc">Trabajador</th><th style="padding:4px 8px;font-size:9px;text-align:center;border:1px solid #ecc">Tarifa/h</th><th style="padding:4px 8px;font-size:9px;text-align:right;border:1px solid #ecc">P&eacute;rdida</th></tr>'
+          +anRows
+          +'<tr style="background:#8b0000;color:#fff;font-weight:700"><td colspan="2" style="padding:5px 8px;font-size:10px;border:1px solid #c00">TOTAL P&Eacute;RDIDA EMPRESA</td><td style="padding:5px 8px;font-size:12px;text-align:right;border:1px solid #c00">-$'+totalLoss.toFixed(2)+'</td></tr>'
+          +'</table></div>';
+      }
+      // ── 2) Calcular HTML de la Nota (si existe) ──
+      var noteText = (vals.note || (typeof gVal==='function' && gVal('notas')) || '').trim();
+      var notaHTML = '';
+      if(noteText){
+        notaHTML = '<div style="border:2px solid #f5c518;border-radius:8px;background:#fffdf0">'
+          +'<div style="background:#f5c518;color:#3a2c00;padding:7px 12px;font-weight:700;font-size:11px;border-radius:6px 6px 0 0">'
+          +'&#x1F4DD; NOTAS DEL D&Iacute;A &mdash; OBSERVACIONES'
+          +'</div>'
+          +'<div style="padding:10px 14px;font-size:11px;color:#3a2c00;white-space:pre-wrap;line-height:1.5">'+esc(noteText)+'</div>'
+          +'</div>';
+      }
+      // ── 3) Si no hay ni nota ni análisis → no agregar hoja extra ──
+      if(!notaHTML && !analisisHTML) return '';
+      // ── 4) Combinar en hoja separada con page-break-before:always ──
+      // Nota arriba (encabezado), análisis abajo. Si solo hay nota, va sola.
+      return '<div style="page-break-before:always;padding-top:8px">'
+        +(notaHTML ? notaHTML + (analisisHTML ? '<div style="height:14px"></div>' : '') : '')
+        +(analisisHTML || '')
+        +'</div>';
     })()
     +'<div class="ft">'+esc(vals.rancho||'')+' &nbsp;|&nbsp; '+esc(vals.fecha||'')+' &nbsp;|&nbsp; '+wks.length+' trabajadores &nbsp;|&nbsp; Bus: #'+esc(String(vals.numBus||''))+' &nbsp;|&nbsp; Surquero: '+(currentUser&&currentUser.isAdmin?'ADM':esc(vals.surquero||''))+' &nbsp;|&nbsp; Generado: '+new Date().toLocaleString()+' &nbsp;|&nbsp; App: '+(window.APP_VERSION||'?')+(_readOnlyMode?' &nbsp;|&nbsp; 📖 REGENERADO DESDE SHEETS':'')+'</div>'
     +'<div class="nopr" style="text-align:center;margin-top:16px"><button onclick="window.print()" style="background:#1a7a4a;color:#fff;border:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-right:10px">🖨️ Imprimir / Guardar PDF</button><button onclick="window.close()" style="background:#eee;color:#555;border:none;padding:12px 20px;border-radius:8px;font-size:14px;cursor:pointer">Cerrar</button></div>'
@@ -6708,6 +6733,7 @@ function sendToSheets() {
     numBus:   gVal('numBus'),
     surquero: gVal('surquero'),
     finca:    gVal('finca'),
+    note:     gVal('notas')||'', // V20_63: notas del día → pestaña "Note" en MASTER
     workers:  []
   };
 
