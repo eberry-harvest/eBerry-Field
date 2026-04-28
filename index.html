@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_51';
+window.APP_VERSION = 'V20_52';
 (function(){
   // Toast persistente de "versión antigua detectada" — NO se puede cerrar, obliga a actualizar
   function showVersionMismatch(remoteV){
@@ -2966,7 +2966,8 @@ function _setupSemReadOnly(payload){
   // (b) Calcular lunes
   var _fechaRaw = payload.fecha || '';
   var _fechaIso = _normalizeFechaV49(_fechaRaw);
-  console.log('[V20_51 setupSem] fechaRaw=', _fechaRaw, '→ fechaIso=', _fechaIso);
+  console.log('[V20_52 setupSem] fechaRaw=', _fechaRaw, '→ fechaIso=', _fechaIso);
+  var _monday = '';
   if(_fechaIso){
     var _d = new Date(_fechaIso + 'T12:00:00');
     if(!isNaN(_d.getTime()) && _d.getFullYear() >= 2000){
@@ -2974,20 +2975,26 @@ function _setupSemReadOnly(payload){
       var _diff = _dow === 0 ? -6 : 1 - _dow;
       _d.setDate(_d.getDate() + _diff);
       var _mo = _d.getMonth()+1, _dy = _d.getDate();
-      var _monday = _d.getFullYear()+'-'+(_mo<10?'0'+_mo:_mo)+'-'+(_dy<10?'0'+_dy:_dy);
-      var _wkEl = gEl('semWeekStart');
-      if(_wkEl) _wkEl.value = _monday;
-      console.log('[V20_51 setupSem] semWeekStart seteado a:', _monday);
+      _monday = _d.getFullYear()+'-'+(_mo<10?'0'+_mo:_mo)+'-'+(_dy<10?'0'+_dy:_dy);
     } else {
-      console.warn('[V20_51 setupSem] fecha mal parseada:', _fechaRaw);
+      console.warn('[V20_52 setupSem] fecha mal parseada:', _fechaRaw);
     }
   }
 
   // (c) initSemTab — popula dropdown rancho + actividades
   if(typeof initSemTab === 'function'){
     initSemTab();
-    console.log('[V20_51 setupSem] tras initSemTab — semRancho.value=', gVal('semRancho'),
+    console.log('[V20_52 setupSem] tras initSemTab — semRancho.value=', gVal('semRancho'),
+                'semWeekStart=', gVal('semWeekStart'),
                 'semActivity opciones=', (gEl('semActivity') ? gEl('semActivity').options.length : 'null'));
+  }
+
+  // V20_52 FIX CRÍTICO: initSemTab → loadSemData LEE del localStorage y sobrescribe
+  // semWeekStart con un valor viejo. Aquí re-forzamos el lunes correcto del payload.
+  if(_monday){
+    var _wkEl = gEl('semWeekStart');
+    if(_wkEl) _wkEl.value = _monday;
+    console.log('[V20_52 setupSem] semWeekStart RE-FORZADO a:', _monday, '(después de initSemTab)');
   }
 
   // (d) Buscar primera actividad del payload (preferir tipo Hora)
@@ -3001,24 +3008,38 @@ function _setupSemReadOnly(payload){
       if(_ap.tipo === 'Hora' && _ap.actEs){ _firstActEs = _ap.actEs; _foundHora = true; break; }
     }
   }
-  console.log('[V20_51 setupSem] firstActEs=', _firstActEs, 'foundHora=', _foundHora);
+  console.log('[V20_52 setupSem] firstActEs=', _firstActEs, 'foundHora=', _foundHora);
 
   if(!_firstActEs){
-    console.warn('[V20_51 setupSem] no se encontró actividad en payload.workers — la tabla quedará vacía');
+    console.warn('[V20_52 setupSem] no se encontró actividad en payload.workers — la tabla quedará vacía');
     return;
   }
 
-  // (e) Buscar índice en ALL_ACTS y seleccionar en dropdown
+  // (e) Buscar índice en ALL_ACTS — V20_52: filtrar POR RANCHO para evitar elegir
+  // una actividad con el mismo nombre pero de otro rancho (ALL_ACTS tiene duplicados
+  // entre ranchos: idx=4 puede ser Pennrose y idx=57 DeWar con nombre similar).
   var _semSel = gEl('semActivity');
-  if(!_semSel){ console.warn('[V20_51 setupSem] gEl(semActivity) null'); return; }
+  if(!_semSel){ console.warn('[V20_52 setupSem] gEl(semActivity) null'); return; }
 
+  var _ranchoActual = (payload.rancho || gVal('rancho') || '').toLowerCase().trim();
   var _allActsIdx = -1;
+  // Intento 1: match exacto por es + rancho
   for(var _ai=0; _ai<ALL_ACTS.length; _ai++){
-    if(ALL_ACTS[_ai].es === _firstActEs){ _allActsIdx = _ai; break; }
+    if(ALL_ACTS[_ai].es === _firstActEs &&
+       String(ALL_ACTS[_ai].farm||'').toLowerCase().trim() === _ranchoActual){
+      _allActsIdx = _ai; break;
+    }
   }
-  console.log('[V20_51 setupSem] firstActEs en ALL_ACTS idx=', _allActsIdx);
+  // Intento 2: si no encontró match exacto, fallback al primer match por es (legacy)
   if(_allActsIdx < 0){
-    console.warn('[V20_51 setupSem] actividad "'+_firstActEs+'" NO está en ALL_ACTS — payload.rancho debe coincidir con una actividad cargada');
+    for(var _ai2=0; _ai2<ALL_ACTS.length; _ai2++){
+      if(ALL_ACTS[_ai2].es === _firstActEs){ _allActsIdx = _ai2; break; }
+    }
+  }
+  console.log('[V20_52 setupSem] firstActEs en ALL_ACTS idx=', _allActsIdx,
+              '(rancho buscado="'+_ranchoActual+'" → farm="'+(_allActsIdx>=0?ALL_ACTS[_allActsIdx].farm:'?')+'")');
+  if(_allActsIdx < 0){
+    console.warn('[V20_52 setupSem] actividad "'+_firstActEs+'" NO está en ALL_ACTS');
     return;
   }
 
@@ -3030,27 +3051,24 @@ function _setupSemReadOnly(payload){
     }
   }
   if(!_foundInDropdown){
-    // Diagnóstico: la actividad no está en el dropdown de actividades del rancho actual.
-    // Esto pasa si payload.rancho no coincide con ALL_ACTS[idx].farm.
     var _availOpts = [];
     for(var _oi2=0; _oi2<_semSel.options.length; _oi2++){
       _availOpts.push(_semSel.options[_oi2].value+'='+_semSel.options[_oi2].textContent.substr(0,40));
     }
-    console.warn('[V20_51 setupSem] actividad idx '+_allActsIdx+' NO está en dropdown semActivity. Opciones disponibles: '+_availOpts.length+'\n'+_availOpts.join('\n'));
-    // Fallback: forzar agregando la opción manualmente para que la tabla se construya
+    console.warn('[V20_52 setupSem] actividad idx '+_allActsIdx+' NO está en dropdown semActivity. Opciones disponibles: '+_availOpts.length+'\n'+_availOpts.join('\n'));
     var _opt = document.createElement('option');
     _opt.value = String(_allActsIdx);
     var _act = ALL_ACTS[_allActsIdx];
-    _opt.textContent = _act.es + (_act.en ? ' / '+_act.en : '') + ' [forzado]';
+    _opt.textContent = _act.es + (_act.en ? ' / '+_act.en : '');
     _semSel.appendChild(_opt);
-    console.log('[V20_51 setupSem] opción forzada agregada al dropdown');
+    console.log('[V20_52 setupSem] opción agregada al dropdown');
   }
 
   _semSel.value = String(_allActsIdx);
-  console.log('[V20_51 setupSem] semActivity seteado a:', _semSel.value);
+  console.log('[V20_52 setupSem] semActivity seteado a:', _semSel.value);
   if(typeof buildSemTable === 'function'){
     buildSemTable();
-    console.log('[V20_51 setupSem] buildSemTable llamado — fin del setup');
+    console.log('[V20_52 setupSem] buildSemTable llamado — fin del setup');
   }
 }
 
