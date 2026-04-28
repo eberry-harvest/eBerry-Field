@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_67';
+window.APP_VERSION = 'V20_68';
 (function(){
   // Toast persistente de "versión antigua detectada" — NO se puede cerrar, obliga a actualizar
   function showVersionMismatch(remoteV){
@@ -3388,6 +3388,20 @@ function _enterReadOnly(payload){
   // 7) Re-render
   var list = gEl('wlist'); if(list) list.innerHTML = '';
   workers.forEach(function(w,i){ if(list) list.appendChild(mkCard(w,i)); });
+
+  // V20_68: defensa adicional — forzar clases 'on' en pill toggle/inputs después del render
+  // para garantizar que el horario se vea expandido aunque a.showTime venga undefined del payload.
+  try {
+    workers.forEach(function(w){
+      (w.acts||[]).forEach(function(a, ai){
+        var tg = gEl('tg'+w.id+'_'+ai);
+        var tf = gEl('tf'+w.id+'_'+ai);
+        if(tg) tg.classList.add('on');
+        if(tf) tf.classList.add('on');
+      });
+    });
+  } catch(e){ console.warn('V20_68 force expand fallo:', e); }
+
   try { updParam && updParam(); } catch(e){}
   try { updParts && updParts(); } catch(e){}
   try { renderGrpActs && renderGrpActs(); } catch(e){}
@@ -4152,12 +4166,12 @@ function mkActRow(wid_,ai,_cont){
   // Tau: TODAS las actividades usan sistema de turnos con "Agregar turno"
   if(!a.shifts||!a.shifts.length){ a.shifts=[{ini:a.ini||'',fin:a.fin||''}]; }
   var tog=document.createElement('div');
-  tog.className='ttog'+((a.showTime||window._readOnlyMode)?' on':''); tog.id='tg'+wid_+'_'+ai;
+  tog.className='ttog'+(a.showTime?' on':''); tog.id='tg'+wid_+'_'+ai;
   var togLbl = act.hr ? '⏰ Horario (requerido para calcular pago)' : '⏰ Registrar horario (referencia)';
   tog.innerHTML='<div class="tbox">✓</div><span class="tlbl">'+togLbl+'</span>';
   (function(wi2,ai2){ tog.addEventListener('click',function(){ togTime(wi2,ai2); }); })(wid_,ai);
   div.appendChild(tog);
-  var tf=document.createElement('div'); tf.className='tinp'+((a.showTime||window._readOnlyMode)?' on':''); tf.id='tf'+wid_+'_'+ai;
+  var tf=document.createElement('div'); tf.className='tinp'+(a.showTime?' on':''); tf.id='tf'+wid_+'_'+ai;
   div.appendChild(tf);
   renderShifts(wid_,ai);
   var bdg=document.createElement('div');
