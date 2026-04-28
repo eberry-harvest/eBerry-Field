@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_60';
+window.APP_VERSION = 'V20_62';
 (function(){
   // Toast persistente de "versión antigua detectada" — NO se puede cerrar, obliga a actualizar
   function showVersionMismatch(remoteV){
@@ -570,6 +570,24 @@ html.login-locked{overflow:hidden!important;height:100%!important}
 .actInputBox::-webkit-outer-spin-button,.actInputBox::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
 .actInputBox[type=number]{-moz-appearance:textfield}
 @media(max-width:360px){.actInputCell{flex:1 1 100%}}
+
+/* V20_61: responsive header — evitar scroll horizontal en celular.
+   Tabs hacen wrap a 2-3 líneas, header se acomoda. Pill savepill visible siempre. */
+@media(max-width:768px){
+  .tabs{flex-wrap:wrap;overflow-x:visible;padding-bottom:6px}
+  .tab{font-size:11px;padding:7px 10px;min-height:38px;flex:0 1 auto}
+  .htop{flex-wrap:wrap;gap:6px}
+  #savepill{order:99;flex-basis:auto}
+}
+@media(max-width:480px){
+  .tab{font-size:10px;padding:6px 8px;min-height:36px}
+  .dpill{font-size:11px;padding:3px 8px}
+  .htop{gap:4px;margin-bottom:4px}
+  .htop button{font-size:11px!important;padding:4px 8px!important}
+  /* Esconder labels largos en pantallas chicas — solo iconos */
+  .conn-badge .conn-dot+span{display:none}
+  .queue-badge span:not(#queueCount){display:none}
+}
 .sem-time-txt{width:90px;font-size:12px;letter-spacing:0.5px}
 .sem-time-txt::placeholder{color:#bbc;font-size:10px}
 .sem-total{font-weight:700;color:var(--g);font-size:12px;background:#eef1ff}
@@ -582,6 +600,89 @@ html.login-locked{overflow:hidden!important;height:100%!important}
 .queue-badge{display:none;background:rgba(255,152,0,.9);color:#fff;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;cursor:pointer}
 .days-warn{display:none;background:rgba(204,34,34,.9);color:#fff;padding:2px 8px;border-radius:12px;font-size:10px;font-weight:700;animation:offPulse 2s infinite}
 .loading-txt{color:#fff;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600}
+
+/* ═══════════════════════════════════════════════════════════ */
+/* V20_62: responsive — mobile-first con tablet (≥768px) y desktop (≥1200px) */
+/* ═══════════════════════════════════════════════════════════ */
+
+/* V20_62: responsive — base mobile-first para grids dinámicos.
+   En mobile (<768px) los containers .resp-grid se comportan como bloque normal (1 col).
+   Los hijos directos (.wc, .ga, .aus-card) ya tienen margin-bottom propio. */
+.resp-grid{display:block}
+
+/* V20_62: responsive — TABLET (≥768px y <1200px) */
+@media(min-width:768px){
+  /* Body con padding cómodo y sin desperdiciar tanto espacio */
+  body{padding-left:20px;padding-right:20px}
+  /* Header tabs en una sola línea cómoda (sobreescribe wrap del V20_61 a partir de 768) */
+  header{padding:14px 20px 0}
+  .htop{flex-wrap:nowrap;gap:10px}
+  .tabs{flex-wrap:nowrap;overflow-x:auto;justify-content:flex-start;gap:8px}
+  .tab{font-size:13px;padding:8px 14px;min-height:44px}
+  .pg{padding:18px 8px}
+  /* Cards con padding más cómodo */
+  .card{padding:18px;margin-bottom:14px}
+  /* Workers list en 2 columnas */
+  .resp-grid-workers{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:12px;align-items:start}
+  .resp-grid-workers > .wc{margin-bottom:0}
+  /* Grupales en 2 columnas (cards más grandes) */
+  .resp-grid-grupales{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:14px;align-items:start}
+  .resp-grid-grupales > .ga{margin-bottom:0}
+  /* Ausencias en 2 columnas (cards más chicas) */
+  .resp-grid-ausencias{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:10px;align-items:start}
+  .resp-grid-ausencias > .aus-card{margin-bottom:0}
+  /* Archivos: cards de años en 2 columnas */
+  .resp-grid-arch{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:14px;align-items:start}
+  .resp-grid-arch > *{margin-bottom:0}
+  /* Modales con max-width más generoso */
+  .md{max-width:600px;border-radius:14px}
+  .ov{align-items:center}
+  /* Bottom bar centrada con max-width */
+  .btm{max-width:100%}
+  /* PIN login card más holgado */
+  .login-card{max-width:420px}
+}
+
+/* V20_62: responsive — DESKTOP (≥1200px) */
+@media(min-width:1200px){
+  /* Body centrado con max-width — evita "feo" en pantallas grandes */
+  body{max-width:1400px;margin:0 auto;padding:0 32px 140px;background:var(--lt)}
+  /* Header sigue full-width visualmente con sticky pero el contenido está centrado */
+  header{margin:0 -32px;padding:14px 32px 0}
+  .htop{gap:14px}
+  .tabs{justify-content:center;gap:10px}
+  .tab{font-size:13px;padding:8px 16px}
+  .pg{padding:24px 0}
+  /* Cards aún más cómodas */
+  .card{padding:20px;margin-bottom:16px}
+  /* Workers en 3 columnas */
+  .resp-grid-workers{grid-template-columns:repeat(auto-fit,minmax(400px,1fr));gap:16px}
+  /* Grupales 2 columnas con minmax más alto */
+  .resp-grid-grupales{grid-template-columns:repeat(auto-fit,minmax(480px,1fr));gap:16px}
+  /* Ausencias 3 columnas */
+  .resp-grid-ausencias{grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+  /* Archivos 2-3 columnas */
+  .resp-grid-arch{grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:16px}
+  /* Bottom bar centrada en desktop alineada al body */
+  .btm{left:50%;right:auto;transform:translateX(-50%);max-width:1400px;width:100%;border-radius:12px 12px 0 0}
+  /* Resumen del día (#p3): info+por trabajador en 2 columnas */
+  #p3 .card:nth-of-type(1),
+  #p3 .card:nth-of-type(2){display:grid;grid-template-columns:1fr;gap:8px}
+  /* Análisis tab: banner más espacioso */
+  .an-banner{gap:14px}
+  /* Modales más anchos */
+  .md{max-width:720px}
+  /* Tabla semanal: aprovechar ancho */
+  #semTableWrap .card{padding:16px}
+}
+
+/* V20_62: responsive — DESKTOP XL (≥1600px) — opcional, para monitores grandes */
+@media(min-width:1600px){
+  .resp-grid-workers{grid-template-columns:repeat(3,1fr)}
+  .resp-grid-grupales{grid-template-columns:repeat(2,1fr)}
+  .resp-grid-arch{grid-template-columns:repeat(3,1fr)}
+}
+
 </style>
 </head>
 <body>
@@ -1159,14 +1260,14 @@ body.readOnly [onclick*="openNewDay"]{display:none !important}
   </div>
   <div style="font-size:13px;color:var(--gr);margin-bottom:11px">Usa la barra de abajo para agregar 👇</div>
   <div class="banner" id="banner"></div>
-  <div id="wlist"></div>
+  <div id="wlist" class="resp-grid resp-grid-workers"></div>
 </div>
 
 <!-- PAGE 2 -->
 <div class="pg" id="p2">
   <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px;margin-bottom:3px">Actividades Grupales</div>
   <div style="font-size:13px;color:var(--gr);margin-bottom:14px">Actividades compartidas entre varios trabajadores</div>
-  <div id="grpActList"></div>
+  <div id="grpActList" class="resp-grid resp-grid-grupales"></div>
   <div id="grpEmpty" style="text-align:center;padding:50px 20px;color:var(--gr)">
     <div style="font-size:40px;margin-bottom:12px">👥</div>
     <div style="font-size:15px;font-weight:600;margin-bottom:6px">Sin actividades grupales</div>
@@ -1225,7 +1326,7 @@ body.readOnly [onclick*="openNewDay"]{display:none !important}
 <div class="pg" id="p4">
   <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px;margin-bottom:3px">Ausencias del Día</div>
   <div id="ausHdr" style="font-size:13px;color:var(--gr);margin-bottom:14px">Personas de tu equipo que no trabajaron hoy</div>
-  <div id="ausenciasList"></div>
+  <div id="ausenciasList" class="resp-grid resp-grid-ausencias"></div>
   <div id="ausenciasEmpty" style="text-align:center;padding:40px 20px;color:var(--gr)">
     <div style="font-size:40px;margin-bottom:12px">✅</div>
     <div style="font-size:15px;font-weight:600;margin-bottom:6px">Sin ausencias registradas</div>
@@ -1341,7 +1442,7 @@ body.readOnly [onclick*="openNewDay"]{display:none !important}
   <div id="archStorageIndicator" style="margin-bottom:14px"></div>
 
   <!-- Lista dinámica de años -->
-  <div id="archYearList"></div>
+  <div id="archYearList" class="resp-grid resp-grid-arch"></div>
 
   <!-- Importar archivo -->
   <div class="card" style="margin-top:14px">
@@ -4790,14 +4891,85 @@ function _persistState(vals, wSave){
   } catch(e){ console.warn('[eBerry] localStorage lleno — historial no guardado:', e.message); }
 }
 
+// V20_61: flag de activación del autoSave.
+// Razón: cuando alguien enseña la app o juega con ella sin agregar trabajadores ni hora de
+// entrada, el autoSave anterior contaminaba el localStorage con datos de prueba. Ahora el
+// autoSave SOLO se activa cuando se cumplen las condiciones reales de captura (1+ trabajador
+// y hEnt en Parámetros) O cuando el usuario presiona manualmente el botón 💾 Guardar.
+// Modo lectura sigue bloqueando todo (override más fuerte).
+window._autoSaveActive = false;
+
+function _autoSaveConditionMet(){
+  try {
+    var hasWorker = (typeof workers !== 'undefined' && workers && workers.length > 0);
+    var hasHEnt = !!(typeof gVal === 'function' && gVal('hEnt'));
+    return hasWorker && hasHEnt;
+  } catch(e){ return false; }
+}
+// Devuelve true si se debe permitir el autoSave; actualiza la pill visual.
+function _autoSaveReady(){
+  if(typeof _readOnlyMode!=='undefined' && _readOnlyMode){ _updateSavePill('readonly'); return false; }
+  if(window._autoSaveActive){ return true; }
+  if(_autoSaveConditionMet()){
+    window._autoSaveActive = true;
+    _updateSavePill('auto'); // V20_61: feedback visual inmediato al cruzar el umbral (Pausa → Auto)
+    return true;
+  }
+  _updateSavePill('paused');
+  return false;
+}
+// V20_61: Pill UI con colores semánticos solicitados por Serafín:
+//  paused → AMARILLO (modo enseñanza/demo, no guarda)
+//  auto/saved → VERDE (auto-guardado activo, datos seguros)
+//  readonly → AZUL (modo lectura, viendo día desde Sheets)
+//  error → ROJO (falla localStorage)
+function _updateSavePill(state){
+  var p = (typeof gEl==='function') ? gEl('savepill') : null;
+  if(!p) return;
+  // Reset bg para que destaque sobre el header azul
+  if(state==='readonly'){
+    p.textContent = '🔒 Lectura';
+    p.style.background = 'rgba(33,150,243,.95)'; // azul
+    p.style.color = '#fff';
+    return;
+  }
+  if(state==='paused'){
+    p.textContent = '⏸️ Pausa';
+    p.style.background = '#f5c518'; // amarillo
+    p.style.color = '#3a2c00';
+    return;
+  }
+  if(state==='saved'){
+    p.textContent = '✓ Guardado';
+    p.style.background = '#27ae60'; // verde brillante
+    p.style.color = '#fff';
+    return;
+  }
+  if(state==='error'){
+    p.textContent = '⚠️ ERROR';
+    p.style.background = '#c0392b'; // rojo
+    p.style.color = '#fff';
+    return;
+  }
+  // 'auto' (idle, activo)
+  p.textContent = '● Auto';
+  p.style.background = '#1f8a4a'; // verde más oscuro (idle)
+  p.style.color = '#fff';
+}
+
 function save(){
   // V20_38 FIX: bloquear guardado manual en modo lectura (evita contaminar localStorage con datos del día cargado)
   if(_readOnlyMode){ toast('🔒 Modo lectura — no se puede guardar'); return; }
+  // V20_61: el botón manual ACTIVA permanentemente el autoSave para esta sesión
+  window._autoSaveActive = true;
   try {
     var s=_serializeState();
     _persistState(s.vals, s.wSave);
-    toast('💾 Guardado');
-  }catch(e){ toast('Error al guardar: '+e.message); }
+    toast('💾 Guardado — auto-guardado activado');
+    _updateSavePill('saved');
+    if(_asTimer2)clearTimeout(_asTimer2);
+    _asTimer2=setTimeout(function(){ _updateSavePill('auto'); },2000);
+  }catch(e){ toast('Error al guardar: '+e.message); _updateSavePill('error'); }
 }
 
 function load(){
@@ -5095,35 +5267,37 @@ function toastWithPhoto(msg, thumbB64){
 
 var _asTimer=null, _asTimer2=null;
 function autoSave(){
+  // V20_61: respeta el guard — si no está activo (modo enseñanza/demo), no programar guardado
+  if(!_autoSaveReady()) return;
   if(_asTimer)clearTimeout(_asTimer);
   _asTimer=setTimeout(function(){ saveQuiet(); },800);
 }
 function saveQuiet(){
   if(!currentUser) return;
+  // V20_61: doble check — el heartbeat/visibility podrían llamar saveQuiet sin pasar por autoSave
+  if(!_autoSaveReady()) return;
   try{
     var s=_serializeState();
     _persistState(s.vals, s.wSave);
-    var p=gEl('savepill'); if(!p)return;
-    p.textContent='✓ Guardado'; p.style.color='rgba(255,255,255,.95)';
+    _updateSavePill('saved');
     if(_asTimer2)clearTimeout(_asTimer2);
-    _asTimer2=setTimeout(function(){ p.textContent='● Auto'; p.style.color='rgba(255,255,255,.45)'; },2000);
+    _asTimer2=setTimeout(function(){ _updateSavePill('auto'); },2000);
   }catch(e){
     console.warn('[eBerry] saveQuiet error:', e.message);
     // V17-FIX6: error VISIBLE — el surquero debe saber que no se guardó
-    var p=gEl('savepill');
-    if(p){ p.textContent='⚠️ ERROR'; p.style.color='#ff4444'; }
+    _updateSavePill('error');
     try{ toast('⚠️ Error al guardar — revisa espacio del teléfono'); }catch(e2){}
   }
 }
 
 window.addEventListener('DOMContentLoaded',function(){
-  // Save pill
+  // Save pill — V20_61: empieza en estado "Pausa" hasta que se cumplan condiciones o se guarde manual
   var htop=document.querySelector('.htop');
   if(htop){
     var pill=document.createElement('div');
     pill.id='savepill';
-    pill.style.cssText='background:rgba(255,255,255,.12);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;color:rgba(255,255,255,.45);margin-left:5px;white-space:nowrap';
-    pill.textContent='● Auto';
+    pill.style.cssText='background:rgba(255,255,255,.12);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;color:rgba(255,255,255,.5);margin-left:5px;white-space:nowrap';
+    pill.textContent='⏸️ Pausa';
     var dpill=htop.querySelector('.dpill');
     if(dpill&&dpill.parentNode){ dpill.parentNode.insertBefore(pill,dpill.nextSibling); }
     else { htop.appendChild(pill); }
@@ -5136,7 +5310,16 @@ window.addEventListener('DOMContentLoaded',function(){
       el.addEventListener('input',autoSave);
     })(ids[i]);
   }
-  window.addEventListener('visibilitychange',function(){ if(document.visibilityState==='hidden'&&currentUser) saveQuiet(); });
+  // V20_61: si carga la app con condiciones ya cumplidas (datos previos en localStorage),
+  // mostrar "● Auto" desde el inicio en vez de "⏸️ Pausa"
+  setTimeout(function(){
+    if(_autoSaveConditionMet()){ window._autoSaveActive = true; _updateSavePill('auto'); }
+    else { _updateSavePill('paused'); }
+  }, 500);
+  window.addEventListener('visibilitychange',function(){
+    // V20_61: visibility solo guarda si autoSave está activo
+    if(document.visibilityState==='hidden' && currentUser && _autoSaveReady()) saveQuiet();
+  });
 });
 
 function showHistory(){
@@ -7838,17 +8021,8 @@ function startKeepAlive(){
 window.addEventListener('DOMContentLoaded', function(){
   migrateActsToNames();
 
-  // Save pill
-  var htop=document.querySelector('.htop');
-  if(htop){
-    var pill=document.createElement('div');
-    pill.id='savepill';
-    pill.style.cssText='background:rgba(255,255,255,.12);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;color:rgba(255,255,255,.45);margin-left:5px;white-space:nowrap';
-    pill.textContent='● Auto';
-    var dpill=htop.querySelector('.dpill');
-    if(dpill&&dpill.parentNode){ dpill.parentNode.insertBefore(pill,dpill.nextSibling); }
-    else { htop.appendChild(pill); }
-  }
+  // V20_61: pill duplicada eliminada — la pill se crea solo en el handler arriba (~L5161)
+  // que es el que respeta el guard de _autoSaveReady. Aquí solo registramos los listeners de inputs.
 
   var ids=['rancho','fecha','numBus','numCam','finca','notas','hEnt','hSal','lIni','lFin'];
   for(var i=0;i<ids.length;i++){
@@ -7858,7 +8032,8 @@ window.addEventListener('DOMContentLoaded', function(){
       el.addEventListener('input',autoSave);
     })(ids[i]);
   }
-  window.addEventListener('visibilitychange',function(){ if(document.visibilityState==='hidden'&&currentUser) saveQuiet(); });
+  // V20_61: visibilitychange con guard
+  window.addEventListener('visibilitychange',function(){ if(document.visibilityState==='hidden'&&currentUser&&_autoSaveReady()) saveQuiet(); });
 
   // Try cache first for instant login display
   var cache = loadCache();
@@ -7939,8 +8114,9 @@ function refreshDataBackground(){
 }
 
 // V7: heartbeat autosave con referencia para cleanup
-var _autoSaveTimer = setInterval(function(){ if(currentUser) saveQuiet(); }, 30000);
-window.addEventListener('pagehide', function(){ if(currentUser) saveQuiet(); });
+// V20_61: heartbeat 30s respeta el guard — no guarda si está en pausa (modo enseñanza/lectura)
+var _autoSaveTimer = setInterval(function(){ if(currentUser && _autoSaveReady()) saveQuiet(); }, 30000);
+window.addEventListener('pagehide', function(){ if(currentUser && _autoSaveReady()) saveQuiet(); });
 
 // V20_59: limpieza automática 14d ELIMINADA — los días se acumulan hasta que el admin/surquero
 // los exporte y elimine manualmente desde la pestaña ⑨ Archivos.
