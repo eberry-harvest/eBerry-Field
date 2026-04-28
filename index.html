@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_63';
+window.APP_VERSION = 'V20_65';
 (function(){
   // Toast persistente de "versión antigua detectada" — NO se puede cerrar, obliga a actualizar
   function showVersionMismatch(remoteV){
@@ -4901,10 +4901,21 @@ function _persistState(vals, wSave){
 window._autoSaveActive = false;
 
 function _autoSaveConditionMet(){
+  // V20_64 EMERGENCIA: surqueros en producción no estaban guardando porque la condición
+  // exigía hEnt+worker simultáneos. Ahora basta con 1 worker real (en cualquier rancho)
+  // — un worker capturado YA es señal de uso legítimo, no demo. hEnt puede llegar después.
+  // Sigue bloqueando demos vacíos (sin workers, sin nada) → no re-introduce contaminación.
   try {
     var hasWorker = (typeof workers !== 'undefined' && workers && workers.length > 0);
-    var hasHEnt = !!(typeof gVal === 'function' && gVal('hEnt'));
-    return hasWorker && hasHEnt;
+    if(hasWorker) return true;
+    // También revisar otros ranchos (admin multi-rancho que cambia de pill antes de capturar hEnt)
+    if(typeof _ranchos !== 'undefined' && _ranchos && _ranchos.length){
+      for(var i=0;i<_ranchos.length;i++){
+        var r=_ranchos[i];
+        if(r && r.workers && r.workers.length>0) return true;
+      }
+    }
+    return false;
   } catch(e){ return false; }
 }
 // Devuelve true si se debe permitir el autoSave; actualiza la pill visual.
@@ -5243,7 +5254,21 @@ function updNav(){
   if(pg===1){ nn.textContent='💾 Guardar'; nn.onclick=save; }
   else if(pg===5){ nn.textContent='💾 Guardar'; nn.onclick=save; }
   else if(pg===7){ nn.textContent='💾 Guardar'; nn.onclick=save; }
+  // V20_65: pg=2 (Trabajadores) y pg=3 (Grupales) son donde el surquero pasa la mayor parte del tiempo.
+  // Antes solo decía "Siguiente →" → no había forma manual de guardar sin navegar.
+  // Ahora "💾 + Siguiente →" recuerda visualmente que el botón también guarda (vía nextSave).
+  else if(pg===2 || pg===3){ nn.textContent='💾 + Siguiente →'; nn.onclick=nextSave; }
   else { nn.textContent='Siguiente →'; nn.onclick=next; }
+}
+// V20_65: navega Y guarda — para pestañas ② Trabajadores y ③ Grupales.
+// Si no se puede guardar (modo lectura), navega igual sin error.
+function nextSave(){
+  try {
+    if(typeof _readOnlyMode==='undefined' || !_readOnlyMode){
+      if(typeof save==='function') save();
+    }
+  } catch(e){ console.warn('nextSave save error:', e); }
+  next();
 }
 function toast(msg){ var t=gEl('toast'); t.textContent=msg; t.classList.add('on'); setTimeout(function(){ t.classList.remove('on'); },2500); }
 // V12-FIX2: esc() eliminada — usar esc() global (más completa: escapa & < > ")
@@ -5267,9 +5292,54 @@ function toastWithPhoto(msg, thumbB64){
 }
 
 var _asTimer=null, _asTimer2=null;
+
+// V20_65: banner ROJO de alerta persistente cuando hay datos sin guardar.
+// Se muestra si autoSave intenta correr pero el guard lo bloquea Y hay workers en memoria.
+// Tras V20_64 esto NO debería pasar (basta 1 worker para activar), pero como defensa por si futuras versiones rompen el flag.
+function _showSaveAlertBanner(){
+  if(typeof _readOnlyMode!=='undefined' && _readOnlyMode) return; // no spam en lectura
+  if(gEl('saveAlertBanner')) return; // ya está mostrado
+  var b = document.createElement('div');
+  b.id = 'saveAlertBanner';
+  b.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:99999;background:#c0392b;color:#fff;padding:12px 16px;display:flex;align-items:center;gap:12px;justify-content:space-between;box-shadow:0 4px 12px rgba(0,0,0,.4);font-size:14px;font-weight:700;animation:pulse 1.5s infinite';
+  b.innerHTML = '<div style="flex:1">⚠️ <b>TUS DATOS NO SE ESTÁN GUARDANDO</b><br><span style="font-size:11px;font-weight:400">Presiona el botón "💾 GUARDAR AHORA" para asegurar tu captura.</span></div>'
+              + '<button onclick="try{save();_hideSaveAlertBanner();}catch(e){}" style="background:#fff;color:#c0392b;border:none;padding:10px 18px;border-radius:6px;font-weight:900;cursor:pointer;font-size:13px;white-space:nowrap">💾 GUARDAR AHORA</button>';
+  // V20_65: guardar paddingTop original ANTES de modificar para poder restaurarlo limpio
+  document.body.appendChild(b);
+  try {
+    if(!document.body.dataset.prevPadTop){
+      document.body.dataset.prevPadTop = document.body.style.paddingTop || '';
+    }
+    document.body.style.paddingTop = (parseFloat(getComputedStyle(document.body).paddingTop)||0) + b.offsetHeight + 'px';
+  } catch(e){}
+}
+function _hideSaveAlertBanner(){
+  var b = gEl('saveAlertBanner');
+  if(b && b.parentNode) b.parentNode.removeChild(b);
+  // V20_65: restaurar paddingTop original para evitar espacio huérfano arriba del body
+  try {
+    if(document.body.dataset.prevPadTop !== undefined){
+      document.body.style.paddingTop = document.body.dataset.prevPadTop;
+      delete document.body.dataset.prevPadTop;
+    }
+  } catch(e){}
+}
+
 function autoSave(){
   // V20_61: respeta el guard — si no está activo (modo enseñanza/demo), no programar guardado
-  if(!_autoSaveReady()) return;
+  if(!_autoSaveReady()){
+    // V20_65: si hay workers en memoria pero el guard sigue bloqueando, alertar al usuario
+    try {
+      var hasW = (typeof workers !== 'undefined' && workers && workers.length > 0);
+      if(!hasW && typeof _ranchos !== 'undefined' && _ranchos){
+        for(var ri=0;ri<_ranchos.length;ri++) if(_ranchos[ri] && _ranchos[ri].workers && _ranchos[ri].workers.length>0){ hasW=true; break; }
+      }
+      if(hasW && !window._autoSaveActive) _showSaveAlertBanner();
+    } catch(e){}
+    return;
+  }
+  // Si llegamos aquí, autoSave está activo → ocultar banner si estaba visible
+  _hideSaveAlertBanner();
   if(_asTimer)clearTimeout(_asTimer);
   _asTimer=setTimeout(function(){ saveQuiet(); },800);
 }
@@ -5297,8 +5367,15 @@ window.addEventListener('DOMContentLoaded',function(){
   if(htop){
     var pill=document.createElement('div');
     pill.id='savepill';
-    pill.style.cssText='background:rgba(255,255,255,.12);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;color:rgba(255,255,255,.5);margin-left:5px;white-space:nowrap';
+    // V20_65: pill ahora es CLICKEABLE — funciona como botón "Guardar" visible en TODAS las pestañas.
+    // Defensa contra el incidente V20_61-V20_63 donde surqueros perdían datos por no tener forma manual de guardar en pg=2/pg=3.
+    pill.style.cssText='background:rgba(255,255,255,.12);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;color:rgba(255,255,255,.5);margin-left:5px;white-space:nowrap;cursor:pointer;user-select:none';
+    pill.title='Click para guardar manualmente';
     pill.textContent='⏸️ Pausa';
+    pill.addEventListener('click', function(){
+      // Si está en modo lectura, no hacer nada (save() ya maneja esto y muestra toast)
+      try { save(); } catch(e){ console.warn('Pill click save error:', e); }
+    });
     var dpill=htop.querySelector('.dpill');
     if(dpill&&dpill.parentNode){ dpill.parentNode.insertBefore(pill,dpill.nextSibling); }
     else { htop.appendChild(pill); }
