@@ -24,7 +24,7 @@
 </script>
 <script>
 // V50 (port V20_23): estandarización de colores PDF
-window.APP_VERSION = 'V80';
+window.APP_VERSION = 'V81';
 (function(){
   function showVersionMismatch(remoteV){
     if(document.getElementById('ver-mismatch')) return;
@@ -651,6 +651,7 @@ html.login-locked{overflow:hidden!important;height:100%!important}
     <button class="tab" onclick="go(5)">⑥ Ausencias</button>
     <button class="tab" onclick="go(6)">⑦ Invoice</button>
     <button class="tab" onclick="go(7)">⑧ Semanal</button>
+    <button class="tab" onclick="go(8)">⑨ Archivos</button>
   </div>
 </header>
 
@@ -1068,6 +1069,40 @@ body { padding-bottom: 90px; }
   body { max-width: 900px; margin: 0 auto; }
   body.readOnly header { width: 100%; max-width: 900px; left: 50%; transform: translateX(-50%); }
 }
+
+/* V81 (port V20_62): responsive Nivel 2 — 3 breakpoints */
+.resp-grid { display: block; }
+.resp-grid > * { margin-bottom: 12px; }
+
+@media (min-width: 768px) {
+  body { padding: 20px; }
+  .tabs { flex-wrap: nowrap; gap: 8px; }
+  .tab { font-size: 13px; min-height: 44px; }
+  .resp-grid { display: grid; gap: 12px; }
+  .resp-grid > * { margin-bottom: 0; }
+  .resp-grid-workers { grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); }
+  .resp-grid-grupales { grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); }
+  .resp-grid-ausencias { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+  .resp-grid-arch { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+  .card { padding: 18px; }
+  .login-card { max-width: 420px; }
+}
+
+@media (min-width: 1200px) {
+  body { max-width: 1400px; margin: 0 auto; padding: 0 32px 140px; }
+  header { margin: 0 -32px; }
+  .tabs { justify-content: center; }
+  .resp-grid-workers { grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); }
+  .resp-grid-grupales { grid-template-columns: repeat(auto-fit, minmax(480px, 1fr)); }
+  .resp-grid-ausencias { grid-template-columns: repeat(3, 1fr); }
+  .btm { left: 50%; right: auto; transform: translateX(-50%); max-width: 1400px; width: 100%; }
+}
+
+@media (min-width: 1600px) {
+  .resp-grid-workers { grid-template-columns: repeat(3, 1fr); }
+  .resp-grid-grupales { grid-template-columns: repeat(2, 1fr); }
+  .resp-grid-arch { grid-template-columns: repeat(3, 1fr); }
+}
 </style>
 
 <!-- NUEVO DIA MODAL -->
@@ -1343,14 +1378,14 @@ body { padding-bottom: 90px; }
   </div>
   <div style="font-size:13px;color:var(--gr);margin-bottom:11px">Usa la barra de abajo para agregar 👇</div>
   <div class="banner" id="banner"></div>
-  <div id="wlist"></div>
+  <div id="wlist" class="resp-grid resp-grid-workers"></div>
 </div>
 
 <!-- PAGE 2 -->
 <div class="pg" id="p2">
   <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px;margin-bottom:3px">Actividades Grupales</div>
   <div style="font-size:13px;color:var(--gr);margin-bottom:14px">Actividades compartidas entre varios trabajadores</div>
-  <div id="grpActList"></div>
+  <div id="grpActList" class="resp-grid resp-grid-grupales"></div>
   <div id="grpEmpty" style="text-align:center;padding:50px 20px;color:var(--gr)">
     <div style="font-size:40px;margin-bottom:12px">👥</div>
     <div style="font-size:15px;font-weight:600;margin-bottom:6px">Sin actividades grupales</div>
@@ -1413,7 +1448,7 @@ body { padding-bottom: 90px; }
 <div class="pg" id="p4">
   <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px;margin-bottom:3px">Ausencias del Día</div>
   <div id="ausHdr" style="font-size:13px;color:var(--gr);margin-bottom:14px">Personas de tu equipo que no trabajaron hoy</div>
-  <div id="ausenciasList"></div>
+  <div id="ausenciasList" class="resp-grid resp-grid-ausencias"></div>
   <div id="ausenciasEmpty" style="text-align:center;padding:40px 20px;color:var(--gr)">
     <div style="font-size:40px;margin-bottom:12px">✅</div>
     <div style="font-size:15px;font-weight:600;margin-bottom:6px">Sin ausencias registradas</div>
@@ -1517,6 +1552,26 @@ body { padding-bottom: 90px; }
       <button class="btn" style="background:var(--g);color:#fff;flex:1" onclick="generateSemPDF()">📄 Generar PDF Semanal</button>
       <button class="btn" style="background:#1a3a5c;color:#fff;flex:1" onclick="sendSemToSheets()">📊 Enviar a Sheets</button>
     </div>
+  </div>
+</div>
+
+<!-- V81 (port V20_59): Pestaña ⑨ Archivos — gestión de historial por año/rancho -->
+<div class="pg" id="p8">
+  <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px;margin-bottom:3px">📂 Archivos</div>
+  <div style="font-size:13px;color:var(--gr);margin-bottom:11px">Tu historial guardado en este dispositivo — exporta a JSON antes de liberar espacio</div>
+
+  <!-- Indicador de espacio + alertas -->
+  <div id="archStorageIndicator" style="margin-bottom:14px"></div>
+
+  <!-- Lista dinámica de años -->
+  <div id="archYearList" class="resp-grid resp-grid-arch"></div>
+
+  <!-- Importar archivo -->
+  <div class="card" style="margin-top:14px">
+    <div class="ct">📤 IMPORTAR ARCHIVO JSON</div>
+    <p style="font-size:12px;color:var(--gr);margin:4px 0 10px">Carga un archivo de un año/rancho previamente exportado para consultarlo.</p>
+    <input type="file" id="archImportFile" accept=".json" style="display:none" onchange="archImportSelected(this.files[0])">
+    <button class="btn" style="background:#8e44ad;color:#fff;width:100%" onclick="document.getElementById('archImportFile').click()">📂 Seleccionar archivo JSON…</button>
   </div>
 </div>
 
@@ -3256,7 +3311,12 @@ function findInStrArr(arr,name){
 }
 
 // V12: smartNum movido a scope global (antes estaba dentro de buildPDFWindow)
-function smartNum(n){ var v=parseFloat(n)||0; return v%1===0?String(Math.round(v)):v.toFixed(2); }
+// V81 (port V20_60): tolerancia 0.0001 para evitar 1276.6 → "1276.60" cuando viene de IEEE 754
+function smartNum(n){
+  var v=parseFloat(n)||0;
+  if(Math.abs(v - Math.round(v)) < 0.0001) return String(Math.round(v));
+  return v.toFixed(2);
+}
 
 // V8: helper unificado — resuelve actividad por nombre+tipo (antes repetido 6 veces)
 function resolveAct(a, assign){
@@ -3406,7 +3466,8 @@ function computeQty(actRow,userInputs,np){
     den*=r2.val;
   }
   if(!hasAny) return 0;
-  return num/den;
+  // V81 (port V20_58): redondear a 3 decimales para eliminar imprecisión binaria IEEE 754
+  return Math.round((num/den)*1000)/1000;
 }
 function computePay(actRow,userInputs,np,rate,hours){
   var pt=String((actRow&&actRow.tipo)||(actRow&&actRow.payType)||'').toLowerCase();
@@ -3666,10 +3727,28 @@ function _enterReadOnly(payload){
       }
       return match ? match.id : null;
     }).filter(function(x){ return x!=null; });
+    // V81 (port V20_57): mapear qtyTotal según tipo de actividad grupal
+    var _qtyT = parseFloat(pg.qtyTotal || pg.qty || 0) || 0;
+    var _vars = { ini: pg.hEnt||'', fin: pg.hSal||'', finca: pg.finca||'', qtyTotal: _qtyT };
+    var _grpAct = (gaiIdx>=0) ? GRUPAL_ACTS[gaiIdx] : null;
+    var _ct = _grpAct ? grpCalcType(_grpAct) : '';
+    if(_ct==='cajas'){
+      _vars.totalC  = Math.round(_qtyT);  // V81 (port V20_60): cajas son discretas
+      _vars.precioC = parseFloat(pg.unitPrice||0) || 0;
+    } else if(_ct==='piezas'){
+      _vars.totalP = Math.round(_qtyT);   // V81 (port V20_60)
+    } else if(_ct==='puertas'){
+      if(_grpAct && isPennrose5Act(_grpAct) && PENNROSE_ANCHO){
+        _vars.pennAcres = _qtyT / PENNROSE_ANCHO;
+      } else {
+        _vars.surcos = [{ largo: _qtyT * 100, num: 1 }];
+        _vars.anchoCama = 1;
+      }
+    }
     grpActs.push({
       gai: gaiIdx, esName: pg.actEs||'',
       participantes: partIds,
-      vars: { ini: pg.hEnt||'', fin: pg.hSal||'', finca: pg.finca||'', qtyTotal: pg.qty||0 },
+      vars: _vars,
       _frozen: true
     });
     if(pg.hEnt) _iniAll.push(pg.hEnt);
@@ -3683,7 +3762,8 @@ function _enterReadOnly(payload){
   var topFields = {
     rancho: payload.rancho, fecha: payload.fecha, numBus: payload.numBus,
     hEnt: _iniAll.length ? _iniAll.sort()[0] : '',
-    hSal: _finAll.length ? _finAll.sort().reverse()[0] : ''
+    hSal: _finAll.length ? _finAll.sort().reverse()[0] : '',
+    notas: payload.note || '' // V81 (port V20_63): mostrar notas en modo lectura
   };
   Object.keys(topFields).forEach(function(id){
     var el = gEl(id); if(el && topFields[id]!=null && topFields[id]!=='') el.value = topFields[id];
@@ -4675,7 +4755,7 @@ function updBadge(wi,ai){
     var shTxt=_shiftTxt(a);
     var opLine='';
     if(qty>0){
-      opLine=qty+' '+tipoLbl+' × $'+act.p.toFixed(2)+' = $'+pay.toFixed(2);
+      opLine=smartNum(qty)+' '+tipoLbl+' × $'+act.p.toFixed(2)+' = $'+pay.toFixed(2); // V81 (port V20_58)
     }
     var totalH2=totalShiftHours(a);
     if(qty>0 || totalH2>0){
@@ -4713,7 +4793,7 @@ function updPreview(wi){
     } else if(act.tipo==='$'){
       label='Bono $'+(a.qty||0); cls='wpill pay';
     } else {
-      label=act.es.split(' ').slice(0,2).join(' ')+(a.qty?' '+a.qty+' '+act.tipo:'');
+      label=act.es.split(' ').slice(0,2).join(' ')+(a.qty?' '+smartNum(a.qty)+' '+act.tipo:''); // V81 (port V20_58)
       if(a.pay>0) label+=' $'+a.pay.toFixed(0);
     }
     // Show labor badge if different from day's finca
@@ -4927,7 +5007,7 @@ function buildSum(){
       var a=w.acts[j];
       var act=resolveAct(a, true); // V8
       if(!act){ dets.push((a.esName||'Act.#'+a.ai)+'($'+(a.pay||0).toFixed(2)+')'); continue; }
-      var u=act.hr?(a.ini&&a.fin?to12h(a.ini)+'→'+to12h(a.fin)+'('+nh(a.ini,a.fin)+'h)':'sin horario'):act.tipo==='$'?'$'+a.qty:a.qty+' '+act.tipo;
+      var u=act.hr?(a.ini&&a.fin?to12h(a.ini)+'→'+to12h(a.fin)+'('+nh(a.ini,a.fin)+'h)':'sin horario'):act.tipo==='$'?'$'+smartNum(a.qty):smartNum(a.qty)+' '+act.tipo; // V81 (port V20_58)
       dets.push(esc(act.es.split(' ').slice(0,2).join(' '))+'('+u+')'); // V9
     }
     var exD=grpPayDetail(w.id); var ex=exD.pay;
@@ -5026,19 +5106,19 @@ function buildAnalisis(){
           +'<div style="font-weight:700;font-size:13px;margin-bottom:4px">'+esc(act.es)+' — $'+piecePrice.toFixed(2)+'/'+tipoLbl+'</div>'
           +'<div class="an-step">① $<b>'+hourlyRate.toFixed(2)+'</b>/h ÷ $<b>'+piecePrice.toFixed(2)+'</b>/'+tipoLbl+' = <b>'+pzasHora.toFixed(2)+'</b> '+tipoLbl+'/h</div>'
           +'<div class="an-step">② '+pzasHora.toFixed(2)+' × <b>'+horas.toFixed(1)+'</b> hrs = <b>'+pzasEsperadas.toFixed(1)+'</b> '+tipoLbl+' mínimo</div>'
-          +'<div class="an-step">③ Real: <b>'+pzasReales+'</b> '+tipoLbl+' × $'+piecePrice.toFixed(2)+' = <b>$'+real.toFixed(2)+'</b></div>'
+          +'<div class="an-step">③ Real: <b>'+smartNum(pzasReales)+'</b> '+tipoLbl+' × $'+piecePrice.toFixed(2)+' = <b>$'+real.toFixed(2)+'</b></div>' // V81 (port V20_58)
           +'<div class="an-step">④ Mínimo: '+pzasEsperadas.toFixed(1)+' '+tipoLbl+' × $'+piecePrice.toFixed(2)+' = <b>$'+esperado.toFixed(2)+'</b></div>'
           +'<div class="an-bar"><div class="an-bar-fill red" style="width:'+Math.min(pct,100)+'%"></div></div>'
           +'<div class="an-result loss">'
             +'🔻 PÉRDIDA: -$'+Math.abs(diff).toFixed(2)
-            +' (hizo '+pzasReales+' de '+pzasEsperadas.toFixed(0)+' '+tipoLbl+')'
+            +' (hizo '+smartNum(pzasReales)+' de '+pzasEsperadas.toFixed(0)+' '+tipoLbl+')' // V81 (port V20_58)
           +'</div>'
         +'</div>';
       } else {
         // Sin pérdida — el trabajador cumplió o superó el mínimo
         wDetails+='<div class="an-act gain">'
           +'<div style="font-weight:700;font-size:13px;margin-bottom:4px">'+esc(act.es)+' — $'+piecePrice.toFixed(2)+'/'+tipoLbl+'</div>'
-          +'<div class="an-result gain">✅ OK — '+pzasReales+' de '+pzasEsperadas.toFixed(0)+' '+tipoLbl+' mínimo</div>'
+          +'<div class="an-result gain">✅ OK — '+smartNum(pzasReales)+' de '+pzasEsperadas.toFixed(0)+' '+tipoLbl+' mínimo</div>' // V81 (port V20_58)
         +'</div>';
       }
     }
@@ -5103,7 +5183,7 @@ function mkReport(){
       var a=w.acts[j],pay=a.pay||0; tot+=pay;
       var act=resolveAct(a, true); // V8
       if(!act){ acts.push((a.esName||'Act.#'+a.ai)+'(=$'+pay.toFixed(2)+')'); continue; }
-      var u=act.hr?(a.ini&&a.fin?to12h(a.ini)+'→'+to12h(a.fin)+'('+nh(a.ini,a.fin)+'h)':'sin horario')+'=$'+pay.toFixed(2):act.tipo==='$'?'$'+a.qty:a.qty+' '+act.tipo+'=$'+pay.toFixed(2);
+      var u=act.hr?(a.ini&&a.fin?to12h(a.ini)+'→'+to12h(a.fin)+'('+nh(a.ini,a.fin)+'h)':'sin horario')+'=$'+pay.toFixed(2):act.tipo==='$'?'$'+smartNum(a.qty):smartNum(a.qty)+' '+act.tipo+'=$'+pay.toFixed(2); // V81 (port V20_58)
       acts.push(act.es+'('+u+')');
     }
     var ex=grpPay(w.id); tot+=ex; grand+=tot;
@@ -5208,13 +5288,45 @@ function _persistState(vals, wSave){
   } catch(e){ console.warn('[eBerry] localStorage lleno — historial no guardado:', e.message); }
 }
 
+// V81 (port V20_61): autoSave guard — solo activa cuando usuario empieza a capturar (worker + horario)
+window._autoSaveActive = false;
+function _autoSaveConditionMet(){
+  try {
+    var hasWorker = (typeof workers !== 'undefined' && workers && workers.length > 0);
+    var hasHEnt = !!(typeof gVal === 'function' && gVal('hEnt'));
+    return hasWorker && hasHEnt;
+  } catch(e){ return false; }
+}
+function _autoSaveReady(){
+  if(typeof _readOnlyMode!=='undefined' && _readOnlyMode){ _updateSavePill('readonly'); return false; }
+  if(window._autoSaveActive){ return true; }
+  if(_autoSaveConditionMet()){
+    window._autoSaveActive = true;
+    _updateSavePill('auto');
+    return true;
+  }
+  _updateSavePill('paused');
+  return false;
+}
+function _updateSavePill(state){
+  var p = (typeof gEl==='function') ? gEl('savepill') : null;
+  if(!p) return;
+  if(state==='readonly'){ p.textContent='🔒 Lectura'; p.style.background='rgba(33,150,243,.95)'; p.style.color='#fff'; return; }
+  if(state==='paused'){ p.textContent='⏸️ Pausa'; p.style.background='#f5c518'; p.style.color='#3a2c00'; return; }
+  if(state==='saved'){ p.textContent='✓ Guardado'; p.style.background='#27ae60'; p.style.color='#fff'; return; }
+  if(state==='error'){ p.textContent='⚠️ ERROR'; p.style.background='#c0392b'; p.style.color='#fff'; return; }
+  p.textContent='● Auto'; p.style.background='#1f8a4a'; p.style.color='#fff';
+}
+
 function save(){
   // V63 (port V20_38 FIX): bloquear guardado manual en modo lectura
   if(_readOnlyMode){ toast('🔒 Modo lectura — no se puede guardar'); return; }
   try {
     var s=_serializeState();
     _persistState(s.vals, s.wSave);
-    toast('💾 Guardado');
+    window._autoSaveActive = true; // V81 (port V20_61): activar auto-save tras Guardar manual
+    _updateSavePill('saved');
+    toast('💾 Guardado — auto-guardado activado');
   }catch(e){ toast('Error al guardar: '+e.message); }
 }
 
@@ -5466,6 +5578,7 @@ function go(n){
   }
   if(n===6) refreshInvoiceAuto();
   if(n===7) initSemTab();
+  if(n===8){ try { renderArchives(); } catch(e){ console.warn('V81 (port V20_59) renderArchives fallo:', e); } } // V81 (port V20_59) pestaña Archivos
   // V75: usar add/remove explícito (toggle alterna aunque el estado sea el mismo — bug: p0 desaparecía al go(0))
   var pgs=document.querySelectorAll('.pg'); for(var i=0;i<pgs.length;i++){ if(i===n) pgs[i].classList.add('on'); else pgs[i].classList.remove('on'); }
   // V67: marcar tab global activa (tabs en el header, no sub-tabs de rancho)
@@ -5477,7 +5590,7 @@ function go(n){
   pg=n; updNav();
   window.scrollTo(0,0);
 }
-function next(){ if(pg<7)go(pg+1); }
+function next(){ if(pg<8)go(pg+1); } // V81 (port V20_59): extender al ⑨ Archivos
 // V27-FIXA: prev no debe llegar a go(0) si hay bloque expandido — pg=1 es el mínimo dentro de un rancho
 // V66 FIX: si pg>1 retrocede normal. Si pg===1 dentro de rancho, colapsa rancho y vuelve a Parámetros globales.
 function prev(){
@@ -5522,23 +5635,23 @@ function toastWithPhoto(msg, thumbB64){
 
 var _asTimer=null, _asTimer2=null;
 function autoSave(){
+  if(!_autoSaveReady()) return; // V81 (port V20_61)
   if(_asTimer)clearTimeout(_asTimer);
   _asTimer=setTimeout(function(){ saveQuiet(); },800);
 }
 function saveQuiet(){
   if(!currentUser) return;
+  if(!_autoSaveReady()) return; // V81 (port V20_61)
   try{
     var s=_serializeState();
     _persistState(s.vals, s.wSave);
-    var p=gEl('savepill'); if(!p)return;
-    p.textContent='✓ Guardado'; p.style.color='rgba(255,255,255,.95)';
+    _updateSavePill('saved'); // V81 (port V20_61)
     if(_asTimer2)clearTimeout(_asTimer2);
-    _asTimer2=setTimeout(function(){ p.textContent='● Auto'; p.style.color='rgba(255,255,255,.45)'; },2000);
+    _asTimer2=setTimeout(function(){ _updateSavePill('auto'); },2000);
   }catch(e){
     console.warn('[eBerry] saveQuiet error:', e.message);
     // V17-FIX6: error VISIBLE — el surquero debe saber que no se guardó
-    var p=gEl('savepill');
-    if(p){ p.textContent='⚠️ ERROR'; p.style.color='#ff4444'; }
+    _updateSavePill('error'); // V81 (port V20_61)
     try{ toast('⚠️ Error al guardar — revisa espacio del teléfono'); }catch(e2){}
   }
 }
@@ -6198,6 +6311,24 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
         }
         trTotal+='<td style="text-align:center;border:1px solid #000;border-top:3px solid #1a2b8c;color:#1a2b8c;font-weight:700">'+smartNum(_subTot)+' h</td>';
       }
+    } else if(col4.payType==='Daywork' && _NS>1){
+      // V81 (port V20_55): TOTAL Daywork — pago FIJO del día. Sumar qty UNA vez por worker, 1 celda colspan=N.
+      var _totQUni=0;
+      var _anyQtyUni=false;
+      for(var wtsD=0;wtsD<wks.length;wtsD++){
+        var _cND=col4.esName||(ACTS[col4.ai]?ACTS[col4.ai].es:'');
+        var _cFD=(col4.finca||'').trim();
+        for(var kaD=0;kaD<wks[wtsD].acts.length;kaD++){
+          var _wActD=wks[wtsD].acts[kaD];
+          var _wND=_wActD.esName||(ACTS[_wActD.ai]?ACTS[_wActD.ai].es:'');
+          var _wTD=_wActD.tipo||(ACTS[_wActD.ai]?ACTS[_wActD.ai].tipo:'')||'';
+          var _wFD=(_wActD.finca||'').trim();
+          if(_wND!==_cND||_wTD!==(col4.tipo||'')||_wFD!==_cFD) continue;
+          if(parseFloat(_wActD.qty)){ _totQUni+=parseFloat(_wActD.qty); _anyQtyUni=true; }
+        }
+      }
+      var _totLblD=_anyQtyUni?smartNum(_totQUni):'';
+      trTotal+='<td colspan="'+_NS+'" style="text-align:center;border:1px solid #000;border-top:3px solid #1a2b8c;color:#1a2b8c;font-weight:700">'+_totLblD+'</td>';
     } else if(!col4.hr && _NS>1){
       // V53 (port V20_26): TOTAL no-Hora por sub-columna. Suma qty de workers presentes en cada sub.
       // anyQty=false → fallback a horas referenciales por sub-col.
@@ -6330,6 +6461,15 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
         var wActTipo2=wAct2.tipo||(ACTS[wAct2.ai]?ACTS[wAct2.ai].tipo:'')||'';
         var wActFinca2=(wAct2.finca||'').trim();
         if(wActName2===col2Name && wActTipo2===col2Tipo && wActFinca2===col2Finca){found2=wAct2;break;}
+      }
+      // V81 (port V20_55): Daywork = pago FIJO del día — NO subdividir por shift. 1 celda colspan=N con qty UNA vez.
+      if(found2 && col2.payType==='Daywork' && parseFloat(found2.qty)){
+        if(_NW<=1){
+          td+='<td style="text-align:center">'+smartNum(found2.qty)+'</td>';
+        } else {
+          td+='<td colspan="'+_NW+'" style="text-align:center">'+smartNum(found2.qty)+'</td>';
+        }
+        continue;
       }
       // V53 (port V20_26): Daywork/qty SE DISTRIBUYE por sub-shift igual que Hora.
       // Si worker tiene shifts, qty va en la sub-col donde trabajó (colspan si contiguos).
@@ -6489,8 +6629,12 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     +'<tbody>'+metaRows+rows+'</tbody>'
     +'</table>'
     // V12-FIX: Ausencias removidas del PDF (solo van a Google Sheets)
-    // ── V5: Bloque de Análisis de Rendimiento en el PDF ──
+    // ── V81 (port V20_63): Notas + Análisis en HOJA SEPARADA con page-break-before:always ──
+    // Si hay nota O análisis → ambos van en hoja nueva. Si hay ambos, nota como encabezado.
+    // Si solo hay nota (sin pérdidas) → hoja con solo la nota.
+    // Si no hay ninguno → no se agrega hoja extra.
     +(function(){
+      // ── 1) Calcular HTML del Análisis (si aplica) ──
       var globalH = nh(vals.hEnt||'',vals.hSal||'');
       var anRows='', totalLoss=0, wLoss=0;
       for(var wi=0;wi<wks.length;wi++){
@@ -6523,7 +6667,7 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
           wHasAn=true;
           if(diff<0){
             wLossAmt+=Math.abs(diff);
-            wDetails+='<div style="font-size:9px;color:#c00;margin-left:12px">'+esc(act.es)+': hizo '+pzReal+' de '+pzExp.toFixed(0)+' min &rarr; <b>-$'+Math.abs(diff).toFixed(2)+'</b></div>';
+            wDetails+='<div style="font-size:9px;color:#c00;margin-left:12px">'+esc(act.es)+': hizo '+smartNum(pzReal)+' de '+pzExp.toFixed(0)+' min &rarr; <b>-$'+Math.abs(diff).toFixed(2)+'</b></div>';
           }
         }
         if(!wHasAn) continue;
@@ -6535,17 +6679,37 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
             +'<tr style="background:#fff5f5"><td colspan="3" style="border:1px solid #ecc;padding:2px 8px">'+wDetails+'</td></tr>';
         }
       }
-      if(!anRows) return '';
-      // V14-FIX: Quitado overflow:hidden + page-break-inside:avoid — causaban salto de página innecesario
-      return '<div style="margin-top:14px;border:2px solid #c00;border-radius:8px">'
-        +'<div style="background:#c00;color:#fff;padding:7px 12px;font-weight:700;font-size:11px;display:flex;justify-content:space-between;border-radius:6px 6px 0 0">'
-        +'<span>&#x1F4C9; AN&Aacute;LISIS DE RENDIMIENTO &mdash; P&Eacute;RDIDAS</span>'
-        +'<span>'+wLoss+' trabajador(es) &bull; Total: -$'+totalLoss.toFixed(2)+'</span></div>'
-        +'<table style="width:100%;border-collapse:collapse">'
-        +'<tr style="background:#ffe5e5"><th style="padding:4px 8px;font-size:9px;text-align:left;border:1px solid #ecc">Trabajador</th><th style="padding:4px 8px;font-size:9px;text-align:center;border:1px solid #ecc">Tarifa/h</th><th style="padding:4px 8px;font-size:9px;text-align:right;border:1px solid #ecc">P&eacute;rdida</th></tr>'
-        +anRows
-        +'<tr style="background:#8b0000;color:#fff;font-weight:700"><td colspan="2" style="padding:5px 8px;font-size:10px;border:1px solid #c00">TOTAL P&Eacute;RDIDA EMPRESA</td><td style="padding:5px 8px;font-size:12px;text-align:right;border:1px solid #c00">-$'+totalLoss.toFixed(2)+'</td></tr>'
-        +'</table></div>';
+      var analisisHTML = '';
+      if(anRows){
+        analisisHTML = '<div style="margin-top:14px;border:2px solid #c00;border-radius:8px">'
+          +'<div style="background:#c00;color:#fff;padding:7px 12px;font-weight:700;font-size:11px;display:flex;justify-content:space-between;border-radius:6px 6px 0 0">'
+          +'<span>&#x1F4C9; AN&Aacute;LISIS DE RENDIMIENTO &mdash; P&Eacute;RDIDAS</span>'
+          +'<span>'+wLoss+' trabajador(es) &bull; Total: -$'+totalLoss.toFixed(2)+'</span></div>'
+          +'<table style="width:100%;border-collapse:collapse">'
+          +'<tr style="background:#ffe5e5"><th style="padding:4px 8px;font-size:9px;text-align:left;border:1px solid #ecc">Trabajador</th><th style="padding:4px 8px;font-size:9px;text-align:center;border:1px solid #ecc">Tarifa/h</th><th style="padding:4px 8px;font-size:9px;text-align:right;border:1px solid #ecc">P&eacute;rdida</th></tr>'
+          +anRows
+          +'<tr style="background:#8b0000;color:#fff;font-weight:700"><td colspan="2" style="padding:5px 8px;font-size:10px;border:1px solid #c00">TOTAL P&Eacute;RDIDA EMPRESA</td><td style="padding:5px 8px;font-size:12px;text-align:right;border:1px solid #c00">-$'+totalLoss.toFixed(2)+'</td></tr>'
+          +'</table></div>';
+      }
+      // ── 2) Calcular HTML de la Nota (si existe) ──
+      var noteText = (vals.note || (typeof gVal==='function' && gVal('notas')) || '').trim();
+      var notaHTML = '';
+      if(noteText){
+        notaHTML = '<div style="border:2px solid #f5c518;border-radius:8px;background:#fffdf0">'
+          +'<div style="background:#f5c518;color:#3a2c00;padding:7px 12px;font-weight:700;font-size:11px;border-radius:6px 6px 0 0">'
+          +'&#x1F4DD; NOTAS DEL D&Iacute;A &mdash; OBSERVACIONES'
+          +'</div>'
+          +'<div style="padding:10px 14px;font-size:11px;color:#3a2c00;white-space:pre-wrap;line-height:1.5">'+esc(noteText)+'</div>'
+          +'</div>';
+      }
+      // ── 3) Si no hay ni nota ni análisis → no agregar hoja extra ──
+      if(!notaHTML && !analisisHTML) return '';
+      // ── 4) Combinar en hoja separada con page-break-before:always ──
+      // Nota arriba (encabezado), análisis abajo. Si solo hay nota, va sola.
+      return '<div style="page-break-before:always;padding-top:8px">'
+        +(notaHTML ? notaHTML + (analisisHTML ? '<div style="height:14px"></div>' : '') : '')
+        +(analisisHTML || '')
+        +'</div>';
     })()
     +'<div class="ft">'+esc(vals.rancho||'')+' &nbsp;|&nbsp; '+esc(vals.fecha||'')+' &nbsp;|&nbsp; '+wks.length+' trabajadores &nbsp;|&nbsp; Bus: #'+esc(String(vals.numBus||''))+' &nbsp;|&nbsp; Surquero: '+(currentUser&&currentUser.isAdmin?'ADM':esc(vals.surquero||''))+' &nbsp;|&nbsp; Generado: '+new Date().toLocaleString()+' &nbsp;|&nbsp; App: '+(window.APP_VERSION||'?')+(_readOnlyMode?' &nbsp;|&nbsp; 📖 REGENERADO DESDE SHEETS':'')+'</div>'
     +'<div class="nopr" style="text-align:center;margin-top:16px"><button onclick="window.print()" style="background:#1a7a4a;color:#fff;border:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;margin-right:10px">🖨️ Imprimir / Guardar PDF</button><button onclick="window.close()" style="background:#eee;color:#555;border:none;padding:12px 20px;border-radius:8px;font-size:14px;cursor:pointer">Cerrar</button></div>'
@@ -6998,6 +7162,7 @@ function sendToSheets(customFrameId) {
     numBus:   gVal('numBus'),
     surquero: gVal('surquero'),
     finca:    gVal('finca'),
+    note:     gVal('notas')||'', // V81 (port V20_63): notas del día → pestaña "Note" en MASTER
     workers:  []
   };
 
@@ -7120,7 +7285,8 @@ function sendToSheets(customFrameId) {
         hEnt:       g.vars.ini || '',   // V12-BUG2: horarios grupales (antes no se enviaban)
         hSal:       g.vars.fin || '',
         hLIni:      gVal('lIni') || '',
-        hLFin:      gVal('lFin') || ''
+        hLFin:      gVal('lFin') || '',
+        isGrupal:   true                // V81 (port V20_56): flag para FieldSync col 20 Is_grupal
       });
       grpSent++;
     }
@@ -8356,12 +8522,13 @@ window.addEventListener('DOMContentLoaded', function(){
   migrateActsToNames();
 
   // Save pill
+  // V81 (port V20_61): pill arranca en estado "Pausa" hasta que se cumplan las condiciones
   var htop=document.querySelector('.htop');
   if(htop){
     var pill=document.createElement('div');
     pill.id='savepill';
-    pill.style.cssText='background:rgba(255,255,255,.12);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;color:rgba(255,255,255,.45);margin-left:5px;white-space:nowrap';
-    pill.textContent='● Auto';
+    pill.style.cssText='background:rgba(255,255,255,.12);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;color:rgba(255,255,255,.5);margin-left:5px;white-space:nowrap';
+    pill.textContent='⏸️ Pausa';
     var dpill=htop.querySelector('.dpill');
     if(dpill&&dpill.parentNode){ dpill.parentNode.insertBefore(pill,dpill.nextSibling); }
     else { htop.appendChild(pill); }
@@ -8375,7 +8542,13 @@ window.addEventListener('DOMContentLoaded', function(){
       el.addEventListener('input',autoSave);
     })(ids[i]);
   }
-  window.addEventListener('visibilitychange',function(){ if(document.visibilityState==='hidden'&&currentUser) saveQuiet(); });
+  window.addEventListener('visibilitychange',function(){ if(document.visibilityState==='hidden'&&currentUser&&_autoSaveReady()) saveQuiet(); }); // V81 (port V20_61)
+
+  // V81 (port V20_61): inicializar pill según condiciones después de carga
+  setTimeout(function(){
+    if(_autoSaveConditionMet()){ window._autoSaveActive = true; _updateSavePill('auto'); }
+    else { _updateSavePill('paused'); }
+  }, 500);
 
   // Try cache first for instant login display
   var cache = loadCache();
@@ -8447,20 +8620,19 @@ function refreshDataBackground(){
 }
 
 // V7: heartbeat autosave con referencia para cleanup
-var _autoSaveTimer = setInterval(function(){ if(currentUser) saveQuiet(); }, 30000);
-window.addEventListener('pagehide', function(){ if(currentUser) saveQuiet(); });
+// V81 (port V20_61): solo guarda si auto-save está listo
+var _autoSaveTimer = setInterval(function(){ if(currentUser && _autoSaveReady()) saveQuiet(); }, 30000);
+window.addEventListener('pagehide', function(){ if(currentUser && _autoSaveReady()) saveQuiet(); });
 
-// V17-FIX8: limpieza automática de historial >14 días para no llenar localStorage
+// V81 (port V20_59): limpieza automática 14d ELIMINADA — los días se acumulan hasta que el admin/surquero
+// los exporte y elimine manualmente desde la pestaña ⑨ Archivos.
+// Solo se mantiene la limpieza de semanales >30d (poco peso, no afecta historial diario).
 (function(){
   try{
-    var now=new Date(); var cutoff=new Date(now); cutoff.setDate(cutoff.getDate()-14);
-    var cutStr=cutoff.toISOString().split('T')[0];
+    var now=new Date();
     var keys=Object.keys(localStorage);
     for(var i=0;i<keys.length;i++){
       var k=keys[i];
-      // Keys de historial diario: pr9_*_hist_YYYY-MM-DD
-      var m=k.match(/_hist_(\d{4}-\d{2}-\d{2})$/);
-      if(m && m[1]<cutStr){ localStorage.removeItem(k); }
       // Keys semanales viejas: eb_semanal_v1_*_YYYY-MM-DD (>30 días)
       var ms=k.match(/^eb_semanal_v1_.*_(\d{4}-\d{2}-\d{2})$/);
       if(ms){
@@ -8468,8 +8640,312 @@ window.addEventListener('pagehide', function(){ if(currentUser) saveQuiet(); });
         if(ms[1]<cutSem.toISOString().split('T')[0]){ localStorage.removeItem(k); }
       }
     }
-  }catch(e){ console.warn('[eBerry] Limpieza historial:', e.message); }
+  }catch(e){ console.warn('[eBerry] Limpieza semanales:', e.message); }
 })();
+
+// ════════════════════════════════════════════════════════════
+// V81 (port V20_59): PESTAÑA ⑨ ARCHIVOS — gestión de historial por año/rancho
+// ════════════════════════════════════════════════════════════
+// Concepto: cada surquero tiene sus días en `pr9_u_<surquero>_hist_<YYYY-MM-DD>`.
+// Esta pestaña los agrupa por AÑO y por RANCHO (extraído del payload del día),
+// permite Exportar/Importar JSON, y Eliminar manualmente para liberar espacio.
+// El usuario decide siempre — nada se borra automáticamente.
+
+// Helper: estimar bytes usados en localStorage
+function _archStorageBytes(){
+  var total=0;
+  try{
+    for(var i=0;i<localStorage.length;i++){
+      var k=localStorage.key(i); var v=localStorage.getItem(k)||'';
+      total += (k.length + v.length) * 2; // UTF-16 ~ 2 bytes/char
+    }
+  }catch(e){}
+  return total;
+}
+function _archFmtBytes(b){
+  if(b<1024) return b+' B';
+  if(b<1024*1024) return (b/1024).toFixed(1)+' KB';
+  return (b/1024/1024).toFixed(2)+' MB';
+}
+
+// Helper: decidir cuáles surqueros mostrar
+//  - Surquero normal: solo SUS días
+//  - Admin: TODOS los surqueros del dispositivo
+function _archGetVisibleUserKeys(){
+  var keys=Object.keys(localStorage);
+  var users={}; // userKey → true
+  var isAdm = currentUser && currentUser.isAdmin;
+  for(var i=0;i<keys.length;i++){
+    var k=keys[i];
+    // V81 (port V20_59): greedy desde el final — captura todo el userKey aunque tenga underscores en el nombre
+    var m = k.match(/^(pr9_u_.+)_hist_(\d{4}-\d{2}-\d{2})$/);
+    if(!m) continue;
+    var userKey = m[1];
+    if(!isAdm){
+      // Solo el surquero actual
+      var myKey = (typeof getUserKey==='function')?getUserKey():'';
+      if(userKey !== myKey) continue;
+    }
+    users[userKey]=true;
+  }
+  return Object.keys(users);
+}
+
+// Agrupa los días por surquero → año → rancho. Devuelve estructura para render.
+function _archGroupAll(){
+  var byUser = {};
+  var visibleUsers = _archGetVisibleUserKeys();
+  for(var u=0;u<visibleUsers.length;u++){
+    var userKey = visibleUsers[u];
+    byUser[userKey] = { totalDays:0, bytes:0, years:{} }; // years[YYYY]={ranchos:{}, totalDays, bytes}
+    var prefix = userKey + '_hist_';
+    for(var i=0;i<localStorage.length;i++){
+      var k=localStorage.key(i);
+      if(!k || k.indexOf(prefix)!==0) continue;
+      var fecha = k.substring(prefix.length); // YYYY-MM-DD
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(fecha)) continue;
+      var year = fecha.substring(0,4);
+      var raw = localStorage.getItem(k)||'';
+      var bytes = (k.length + raw.length) * 2;
+      // Detectar rancho del payload — leer JSON guardado
+      var ranchoName = '(sin rancho)';
+      try {
+        var parsed = JSON.parse(raw);
+        if(parsed){
+          // Soportar 2 estructuras: {v:{...}} y plana
+          var vals = parsed.v || parsed.vals || parsed;
+          if(vals && vals.rancho) ranchoName = vals.rancho;
+          // Multi-rancho: si hay _ranchos[], puede haber varios
+          if(parsed._ranchos && parsed._ranchos.length){
+            var rs=[];
+            for(var rr=0; rr<parsed._ranchos.length; rr++){
+              var rN = (parsed._ranchos[rr] && parsed._ranchos[rr].vals && parsed._ranchos[rr].vals.rancho) || '';
+              if(rN && rs.indexOf(rN)<0) rs.push(rN);
+            }
+            if(rs.length) ranchoName = rs.join(' + ');
+          }
+        }
+      } catch(e){ /* JSON corrupto, ignorar nombre */ }
+      if(!byUser[userKey].years[year]){
+        byUser[userKey].years[year] = { ranchos:{}, totalDays:0, bytes:0 };
+      }
+      var Y = byUser[userKey].years[year];
+      if(!Y.ranchos[ranchoName]) Y.ranchos[ranchoName] = { days:[], bytes:0 };
+      Y.ranchos[ranchoName].days.push({ fecha:fecha, key:k, bytes:bytes });
+      Y.ranchos[ranchoName].bytes += bytes;
+      Y.totalDays++;
+      Y.bytes += bytes;
+      byUser[userKey].totalDays++;
+      byUser[userKey].bytes += bytes;
+    }
+  }
+  return byUser;
+}
+
+// Render principal de la pestaña
+function renderArchives(){
+  var slot = gEl('archYearList');
+  var ind  = gEl('archStorageIndicator');
+  if(!slot || !ind) return;
+  var grouped = _archGroupAll();
+  var totalBytes = _archStorageBytes();
+  var pct = Math.min(Math.round((totalBytes/(5*1024*1024))*100), 999);
+  var color = pct<60?'#27ae60':pct<80?'#e67e22':'#c0392b';
+  var alertMsg = '';
+  if(pct>=80){
+    alertMsg = '<div style="background:#fff5f5;border-left:4px solid #c0392b;padding:8px 10px;margin-top:8px;border-radius:6px;font-size:12px;color:#8b0000"><b>⚠️ Espacio crítico:</b> exporta y elimina años viejos para liberar.</div>';
+  } else if(pct>=60){
+    alertMsg = '<div style="background:#fff8e1;border-left:4px solid #e67e22;padding:8px 10px;margin-top:8px;border-radius:6px;font-size:12px;color:#7c4400">💡 Considera exportar años viejos.</div>';
+  }
+  ind.innerHTML = '<div class="card" style="padding:10px 14px"><div style="display:flex;justify-content:space-between;align-items:center"><div><b style="font-size:13px">💾 Espacio usado</b></div><div style="font-size:13px;color:'+color+';font-weight:700">'+_archFmtBytes(totalBytes)+' / ~5 MB ('+pct+'%)</div></div><div style="background:#eee;border-radius:8px;height:8px;margin-top:8px;overflow:hidden"><div style="background:'+color+';height:100%;width:'+Math.min(pct,100)+'%;transition:width .3s"></div></div>'+alertMsg+'</div>';
+
+  var users = Object.keys(grouped);
+  if(!users.length){
+    slot.innerHTML = '<div class="card" style="text-align:center;padding:30px 14px;color:var(--gr)"><div style="font-size:36px;margin-bottom:8px">📭</div><b>No hay días guardados</b><p style="font-size:12px;margin-top:6px">Trabaja un día y se guardará automáticamente aquí.</p></div>';
+    return;
+  }
+  var html = '';
+  var nowYear = new Date().getFullYear().toString();
+  for(var u=0;u<users.length;u++){
+    var userKey = users[u];
+    var info = grouped[userKey];
+    var displayName = userKey.replace(/^pr9_u_/,'').replace(/_/g,' ');
+    if(currentUser && currentUser.isAdmin){
+      html += '<div style="font-size:11px;font-weight:700;color:var(--g2);margin:14px 0 6px;letter-spacing:1px;text-transform:uppercase">👤 '+esc(displayName)+'</div>';
+    }
+    var years = Object.keys(info.years).sort().reverse();
+    for(var y=0;y<years.length;y++){
+      var year = years[y];
+      var Y = info.years[year];
+      var isCurrent = (year===nowYear);
+      var hdrColor = isCurrent?'#27ae60':'#1a3a5c';
+      var hdrLbl = isCurrent?'AÑO ACTUAL':'AÑO ARCHIVADO';
+      html += '<div class="card" style="border-left:4px solid '+hdrColor+';margin-bottom:10px">'
+            + '<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:8px">'
+            + '<div><div style="font-size:10px;font-weight:700;color:'+hdrColor+';letter-spacing:1px">'+hdrLbl+'</div>'
+            + '<div style="font-family:Bebas Neue;font-size:24px;letter-spacing:1px">📅 '+year+'</div>'
+            + '<div style="font-size:11px;color:var(--gr)">📊 '+Y.totalDays+' día(s) | 💾 '+_archFmtBytes(Y.bytes)+'</div></div>'
+            + '</div>'
+            + '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:10px">';
+      var ranchos = Object.keys(Y.ranchos);
+      for(var r=0;r<ranchos.length;r++){
+        var rName = ranchos[r];
+        var R = Y.ranchos[rName];
+        html += '<button class="btn" style="background:#1a3a5c;color:#fff;font-size:12px;padding:8px 12px" onclick="archExportRanchoYear(\''+esc(userKey)+'\',\''+esc(year)+'\',\''+esc(rName).replace(/\\/g,"\\\\").replace(/\x27/g,"\\\x27")+'\')">📥 Exportar '+esc(rName)+' ('+R.days.length+'d)</button>';
+      }
+      // Botón eliminar año (solo si NO es año actual O si es año actual con confirmación más fuerte)
+      var delLabel = isCurrent ? '🗑️ Eliminar año actual del dispositivo' : '🗑️ Eliminar '+year+' del dispositivo';
+      var delBg = isCurrent ? '#c0392b' : '#8e44ad';
+      html += '<button class="btn" style="background:'+delBg+';color:#fff;font-size:12px;padding:8px 12px;flex-basis:100%" onclick="archDeleteYear(\''+esc(userKey)+'\',\''+esc(year)+'\','+isCurrent+')">'+delLabel+'</button>';
+      html += '</div></div>';
+    }
+  }
+  slot.innerHTML = html;
+}
+
+// Exportar año/rancho específico como JSON descargable
+function archExportRanchoYear(userKey, year, ranchoName){
+  try{
+    var grouped = _archGroupAll();
+    if(!grouped[userKey] || !grouped[userKey].years[year] || !grouped[userKey].years[year].ranchos[ranchoName]){
+      toast('⚠️ No se encontraron datos'); return;
+    }
+    var R = grouped[userKey].years[year].ranchos[ranchoName];
+    var bundle = {
+      exportedAt: new Date().toISOString(),
+      appVersion: window.APP_VERSION || '',
+      userKey: userKey,
+      year: year,
+      rancho: ranchoName,
+      totalDays: R.days.length,
+      days: {}
+    };
+    for(var d=0;d<R.days.length;d++){
+      var dd = R.days[d];
+      try { bundle.days[dd.fecha] = JSON.parse(localStorage.getItem(dd.key)||'null'); }
+      catch(e){ bundle.days[dd.fecha] = { _corrupt: localStorage.getItem(dd.key) }; }
+    }
+    var safeRancho = String(ranchoName).replace(/[^a-z0-9_-]+/gi,'_').toLowerCase();
+    var safeUser   = userKey.replace(/^pr9_u_/,'').replace(/[^a-z0-9_-]+/gi,'_').toLowerCase();
+    var fname = safeRancho + '_' + year + '_' + safeUser + '.json';
+    var blob = new Blob([JSON.stringify(bundle,null,2)], {type:'application/json'});
+    var url  = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href=url; a.download=fname;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 500);
+    toast('✅ Exportado: '+fname);
+  }catch(e){ toast('⚠️ Error al exportar: '+e.message); console.warn(e); }
+}
+
+// Eliminar todo un año del dispositivo (con doble confirmación)
+function archDeleteYear(userKey, year, isCurrent){
+  var msg1 = isCurrent
+    ? '⚠️ Vas a borrar el AÑO ACTUAL — esto borra TODOS los días que has registrado este año.\n\n¿Ya exportaste tus archivos JSON de cada rancho?'
+    : '¿Ya exportaste todos los ranchos del año '+year+'?';
+  if(!confirm(msg1)) return;
+  var msg2 = '⚠️ ÚLTIMO AVISO: esta acción NO se puede deshacer.\n\nSe borrarán todos los días del año '+year+' del dispositivo. Si no exportaste, perderás la información.\n\n¿Continuar?';
+  if(!confirm(msg2)) return;
+  try{
+    var prefix = userKey + '_hist_' + year;
+    var keysToDel = [];
+    for(var i=0;i<localStorage.length;i++){
+      var k=localStorage.key(i);
+      if(k && k.indexOf(prefix)===0) keysToDel.push(k);
+    }
+    for(var j=0;j<keysToDel.length;j++) localStorage.removeItem(keysToDel[j]);
+    toast('✅ Eliminados '+keysToDel.length+' día(s) del año '+year);
+    renderArchives();
+  }catch(e){ toast('⚠️ Error al eliminar: '+e.message); }
+}
+
+// Importar archivo JSON (reverso del export)
+function archImportSelected(file){
+  if(!file) return;
+  var reader = new FileReader();
+  reader.onload = function(ev){
+    try{
+      var data = JSON.parse(ev.target.result);
+      if(!data || !data.userKey || !data.days){
+        alert('⚠️ Archivo no válido — falta userKey o days.\n\nAsegúrate que sea un JSON exportado por esta app.');
+        return;
+      }
+      var dayKeys = Object.keys(data.days);
+      if(!dayKeys.length){ alert('⚠️ Archivo sin días registrados.'); return; }
+      // Verificar conflictos
+      var conflicts = 0;
+      for(var i=0;i<dayKeys.length;i++){
+        var k = data.userKey + '_hist_' + dayKeys[i];
+        if(localStorage.getItem(k)) conflicts++;
+      }
+      var msg = '📂 Archivo: '+(data.rancho||'?')+' '+(data.year||'?')+'\n👤 Surquero: '+(data.userKey||'').replace(/^pr9_u_/,'')+'\n📊 '+dayKeys.length+' día(s)';
+      if(conflicts>0) msg += '\n\n⚠️ '+conflicts+' día(s) ya existen en el dispositivo y serán SOBRESCRITOS.';
+      msg += '\n\n¿Continuar con la importación?';
+      if(!confirm(msg)) return;
+      var imported = 0;
+      for(var j=0;j<dayKeys.length;j++){
+        var fecha = dayKeys[j];
+        var k = data.userKey + '_hist_' + fecha;
+        try{ localStorage.setItem(k, JSON.stringify(data.days[fecha])); imported++; }
+        catch(err){ console.warn('Import: fallo guardar '+fecha+' — '+err.message); }
+      }
+      toast('✅ Importados '+imported+' día(s)');
+      renderArchives();
+    }catch(e){
+      alert('⚠️ Error al leer archivo: '+e.message);
+    }
+  };
+  reader.readAsText(file);
+}
+
+// Toast persistente cambio de año — al cargar app, si hay datos del año pasado
+function archCheckYearChange(){
+  try{
+    if(!currentUser) return;
+    var nowYear = new Date().getFullYear().toString();
+    var grouped = _archGroupAll();
+    var hasOldYear = false;
+    var users = Object.keys(grouped);
+    for(var u=0;u<users.length;u++){
+      var ys = Object.keys(grouped[users[u]].years);
+      for(var y=0;y<ys.length;y++){
+        if(ys[y]<nowYear){ hasOldYear=true; break; }
+      }
+      if(hasOldYear) break;
+    }
+    var bannerId = 'archYearChangeBanner';
+    var existing = gEl(bannerId);
+    var ackedKey = 'eb_archAcked_'+nowYear;
+    var acked = localStorage.getItem(ackedKey);
+    if(hasOldYear && !acked){
+      if(!existing){
+        var b = document.createElement('div');
+        b.id = bannerId;
+        b.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:9999;background:#c0392b;color:#fff;padding:10px 14px;display:flex;align-items:center;gap:10px;justify-content:space-between;flex-wrap:wrap;box-shadow:0 2px 6px rgba(0,0,0,.3);font-size:13px';
+        b.innerHTML = '<div style="flex:1;min-width:200px"><b>🚂 Cambio de año detectado</b><br><span style="font-size:11px">Tienes datos de años pasados. Exporta tus archivos JSON antes de liberar espacio.</span></div>'
+                    + '<div style="display:flex;gap:6px;flex-wrap:wrap">'
+                    + '<button onclick="go(8)" style="background:#fff;color:#c0392b;border:none;padding:8px 12px;border-radius:6px;font-weight:700;cursor:pointer;font-size:12px">📂 Ir a Archivos</button>'
+                    + '<button onclick="archDismissYearBanner()" style="background:transparent;color:#fff;border:1.5px solid #fff;padding:8px 12px;border-radius:6px;font-size:12px;cursor:pointer">Recordar luego</button>'
+                    + '</div>';
+        document.body.appendChild(b);
+        // Ajustar padding-top del body para que no tape el header
+        document.body.style.paddingTop = (parseFloat(getComputedStyle(document.body).paddingTop)||0) + b.offsetHeight + 'px';
+      }
+    }
+  }catch(e){ console.warn('archCheckYearChange:', e); }
+}
+function archDismissYearBanner(){
+  var nowYear = new Date().getFullYear().toString();
+  try { localStorage.setItem('eb_archAcked_'+nowYear,'1'); } catch(e){}
+  var b = gEl('archYearChangeBanner');
+  if(b && b.parentNode) b.parentNode.removeChild(b);
+}
+
+// Llamar el check después de login exitoso
+window.addEventListener('DOMContentLoaded', function(){
+  // Esperar 2.5s a que termine la inicialización
+  setTimeout(function(){ try { archCheckYearChange(); } catch(e){} }, 2500);
+});
 
 // ════════════════════════════════════════════════════════════
 // 🧪 TEST FILL — datos ficticios para probar flujo completo
