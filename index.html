@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_56';
+window.APP_VERSION = 'V20_57';
 (function(){
   // Toast persistente de "versión antigua detectada" — NO se puede cerrar, obliga a actualizar
   function showVersionMismatch(remoteV){
@@ -3181,6 +3181,10 @@ function _enterReadOnly(payload){
   });
 
   // 4) Grupales: cada entrada del payload trae workers[] (participantes) con qty/unitPrice del grupo
+  // V20_57: mapear qtyTotal (devuelto por FieldSync v5.16+) al campo correcto según el tipo del grupal:
+  //   cajas → totalC + precioC | piezas → totalP | puertas → pennAcres (Pennrose) o surcos[1] sintético
+  //   hora  → no necesita qty (solo ini/fin)
+  // Sin esto, la UI de Act. Grupales muestra TOTAL CAJAS=0 / TOTAL PIEZAS=0 aunque los datos lleguen.
   grpActs = [];
   (payload.grpActs||[]).forEach(function(pg){
     var gaiIdx=-1;
@@ -3194,10 +3198,31 @@ function _enterReadOnly(payload){
       }
       return match ? match.id : null;
     }).filter(function(x){ return x!=null; });
+    // V20_57: detectar tipo y mapear qty al campo correcto
+    var _qtyT = parseFloat(pg.qtyTotal || pg.qty || 0) || 0;  // backend v5.16+ manda qtyTotal sumado; fallback a qty (v5.15)
+    var _vars = { ini: pg.hEnt||'', fin: pg.hSal||'', finca: pg.finca||'', qtyTotal: _qtyT };
+    var _grpAct = (gaiIdx>=0) ? GRUPAL_ACTS[gaiIdx] : null;
+    var _ct = _grpAct ? grpCalcType(_grpAct) : '';
+    if(_ct==='cajas'){
+      _vars.totalC  = _qtyT;
+      _vars.precioC = parseFloat(pg.unitPrice||0) || 0;
+    } else if(_ct==='piezas'){
+      _vars.totalP = _qtyT;
+    } else if(_ct==='puertas'){
+      // Pennrose5Act calcula desde acres (qty=acres×87.2/np). Reconstruir acres totales si aplica.
+      if(_grpAct && isPennrose5Act(_grpAct) && PENNROSE_ANCHO){
+        _vars.pennAcres = _qtyT / PENNROSE_ANCHO;
+      } else {
+        // No-Pennrose: sintético 1 surco con largo equivalente a 100*qty (qty=metros/100)
+        _vars.surcos = [{ largo: _qtyT * 100, num: 1 }];
+        _vars.anchoCama = 1;
+      }
+    }
+    // 'hora' no necesita qty mapping — el cálculo es por ini/fin solamente
     grpActs.push({
       gai: gaiIdx, esName: pg.actEs||'',
       participantes: partIds,
-      vars: { ini: pg.hEnt||'', fin: pg.hSal||'', finca: pg.finca||'', qtyTotal: pg.qty||0 },
+      vars: _vars,
       _frozen: true
     });
     if(pg.hEnt) _iniAll.push(pg.hEnt);
