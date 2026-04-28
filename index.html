@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_52';
+window.APP_VERSION = 'V20_53';
 (function(){
   // Toast persistente de "versión antigua detectada" — NO se puede cerrar, obliga a actualizar
   function showVersionMismatch(remoteV){
@@ -4984,7 +4984,17 @@ function go(n){
     }
   }
   if(n===6) refreshInvoiceAuto();
-  if(n===7) initSemTab();
+  if(n===7){
+    // V20_53: si está en modo lectura, NO llamar initSemTab (que invoca loadSemData →
+    // sobrescribe semActivity/semWeekStart con datos viejos del localStorage). En su lugar,
+    // re-correr _setupSemReadOnly para garantizar que los valores correctos se mantengan
+    // y la tabla se popule con los datos del payload cargado desde Sheets.
+    if(_readOnlyMode && _readOnlyPayload){
+      try { _setupSemReadOnly(_readOnlyPayload); } catch(e){ console.warn('V20_53 setupSem en go(7) fallo:', e); }
+    } else {
+      initSemTab();
+    }
+  }
   var pgs=document.querySelectorAll('.pg'); for(var i=0;i<pgs.length;i++) pgs[i].classList.toggle('on',i===n);
   var tabs=document.querySelectorAll('.tab'); for(var i=0;i<tabs.length;i++){ tabs[i].classList.remove('act','done'); if(i===n)tabs[i].classList.add('act'); else if(i<n)tabs[i].classList.add('done'); }
   gEl('addbar').classList.toggle('on',n===2);
