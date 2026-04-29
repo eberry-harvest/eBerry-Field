@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_72';
+window.APP_VERSION = 'V20_73';
 (function(){
   // Toast persistente de "versión antigua detectada" — NO se puede cerrar, obliga a actualizar
   function showVersionMismatch(remoteV){
@@ -3350,8 +3350,8 @@ function _enterReadOnly(payload){
       _vars.totalP = Math.round(_qtyT);
     } else if(_ct==='puertas'){
       // Pennrose5Act calcula desde acres (qty=acres×ancho/np). Reconstruir acres totales si aplica.
-      // V20_71 Fase B: ancho leído del MASTER (col I) con fallback 87.2.
-      var _ancRO = _grpAct ? getActAncho(_grpAct) : PENNROSE_ANCHO;
+      // V20_73 Fase C: ancho leído del MASTER (col I), sin fallback hardcoded. Guard _ancRO truthy protege división.
+      var _ancRO = _grpAct ? getActAncho(_grpAct) : null;
       if(_grpAct && isPennrose5Act(_grpAct) && _ancRO){
         _vars.pennAcres = _qtyT / _ancRO;
       } else {
@@ -6898,10 +6898,11 @@ function sendToSheets() {
       var surcos = g.vars.surcos || [];
       for (var si = 0; si < surcos.length; si++) metros += (parseFloat(surcos[si].largo) || 0) * (parseFloat(surcos[si].num) || 0);
       // V20_13: Pennrose5Act → usa g.vars.pennAcres × ancho / personas (sin surcos)
-      // V20_71 Fase B: ancho leído del MASTER (col I) con fallback 87.2
+      // V20_73 Fase C: ancho desde MASTER col I sin hardcoded; si null cae a 0 (col I debe llenarse en Sheet)
       if(isPennrose5Act(act)){
         var _acP=parseFloat(g.vars.pennAcres)||0;
-        qtyPerPerson = (_acP*getActAncho(act))/np;
+        var _ancCalc=getActAncho(act);
+        qtyPerPerson = _ancCalc ? (_acP*_ancCalc)/np : 0;
       } else {
         qtyPerPerson = (metros / 100) / np;
       }
@@ -6998,11 +6999,9 @@ function sendToSheets() {
 // grpActs = [{gai: índice en GRUPAL_ACTS, participantes:[wid,...], vars:{}}]
 // ✅ grpActs declarada en línea 1077 junto con workers/wid — NO redeclarar aquí
 
-// V20_72 Fase C: limpieza definitiva del hardcoded Pennrose.
-// PENNROSE_ACTS_87_2 (lista hardcoded de 5 actividades) ELIMINADA — ahora 100% data-driven desde MASTER col I.
-// PENNROSE_ANCHO se mantiene como ÚNICO fallback offline (1 sola línea, 1 solo punto de uso) dentro de getActAncho.
-// Sistema reconectado al Google Sheet col I (multiplicador) — Serafín lo controla desde Sheets.
-var PENNROSE_ANCHO = 87.2; // ÚLTIMO fallback offline — se usa SOLO si act.I es undefined/inválido.
+// V20_73 Fase C limpieza total: PENNROSE_ANCHO eliminada. 100% data-driven desde MASTER col I.
+// Si MASTER no tiene col I, getActAncho retorna null y los flujos que lo necesitan deben manejarlo.
+// Validación visual de col I vacía vive en Google Sheet (formato condicional), no en app.
 
 // _resolveActByName: busca un act por nombre en ALL_ACTS o devuelve el objeto si ya lo es.
 function _resolveActByName(actOrName){
@@ -7016,14 +7015,14 @@ function _resolveActByName(actOrName){
   return null;
 }
 
-// getActAncho: retorna el multiplicador del MASTER col I, o fallback 87.2 si no está disponible.
-// Soporta coma decimal locale (ej: "87,2" → 87.2).
+// getActAncho: retorna el multiplicador del MASTER col I, o null si no está disponible.
+// V20_73 Fase C: sin fallback hardcoded — 100% data-driven. Soporta coma decimal locale (ej: "87,2" → 87.2).
 function getActAncho(actOrName){
   var act = _resolveActByName(actOrName);
-  if(!act) return PENNROSE_ANCHO; // fallback offline si act no encontrado
+  if(!act) return null;
   var multI = parseFloat(String(act.I||'').replace(',','.'));
   if(!isNaN(multI) && multI > 0) return multI;
-  return PENNROSE_ANCHO; // fallback offline si col I vacía
+  return null; // sin col I en MASTER → falta configuración (validación vive en Sheet)
 }
 
 // V20_72 Fase C: isPennrose5Act 100% data-driven — chequea farm===pennrose + col I > 0.
@@ -7056,8 +7055,11 @@ function isPennrose5Act(actOrName){
 // V20_22: Ancho de cama default para convertir piezas → acres en el invoice.
 // Pennrose (5 actividades específicas) usa 87.2; otros ranchos usan 5.67 (default genérico).
 function getAnchoCamaDefault(act){
-  // V20_71 Fase B: ancho leído del MASTER (col I) con fallback 87.2
-  if(isPennrose5Act(act)) return getActAncho(act);
+  // V20_73 Fase C: ancho leído del MASTER (col I) sin hardcoded; si col I vacía cae a default genérico 5.67.
+  if(isPennrose5Act(act)){
+    var ancho = getActAncho(act);
+    return ancho || 5.67;
+  }
   return 5.67;
 }
 
@@ -7171,11 +7173,11 @@ function renderGrpActs(){
     var varsHtml = '';
     // V20_13: grupal Pennrose5Act → UI simplificada (solo TOTAL ACRES + ancho fijo)
     if(ct === 'puertas' && isPennrose5Act(act)){
-      // V20_71 Fase B: ancho leído del MASTER (col I) con fallback 87.2
+      // V20_73 Fase C: ancho desde MASTER col I sin hardcoded; si null → 0 puertas (col I debe llenarse).
       var _ancRen = getActAncho(act);
       var _pA = g.vars.pennAcres || '';
       var _pAN = parseFloat(_pA) || 0;
-      var _pPue = _pAN * _ancRen;
+      var _pPue = _ancRen ? _pAN * _ancRen : 0;
       varsHtml = '<div style="margin-bottom:10px">'
         + '<label style="font-size:10px;font-weight:700;color:var(--gr)">TOTAL ACRES</label>'
         + '<input type="text" inputmode="decimal" value="'+_pA+'" placeholder="Ej: 5.26"'
@@ -7654,10 +7656,10 @@ function calcGrpAct(gi){
     var puertas=0;
     var formulaStr='';
     if(isPennrose5Act(act) && grandAcres>0){
-      // V20_71 Fase B: ancho leído del MASTER (col I) con fallback 87.2
+      // V20_73 Fase C: ancho desde MASTER col I sin hardcoded; si null → puertas=0 (col I debe llenarse)
       var _ancCG = getActAncho(act);
-      puertas=grandAcres*_ancCG;
-      formulaStr=grandAcres.toFixed(3)+' acres × '+_ancCG+' = <strong>'+puertas.toFixed(2)+' puertas</strong>';
+      puertas = _ancCG ? grandAcres*_ancCG : 0;
+      formulaStr=grandAcres.toFixed(3)+' acres × '+(_ancCG||'?')+' = <strong>'+puertas.toFixed(2)+' puertas</strong>';
     } else if(grandAcres>0 && anchoCama>0){
       puertas=grandAcres*anchoCama;
       formulaStr=grandAcres.toFixed(3)+' acres × '+anchoCama+' = <strong>'+puertas.toFixed(2)+' puertas</strong>';
