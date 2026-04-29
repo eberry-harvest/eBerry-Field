@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_80';
+window.APP_VERSION = 'V20_81';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -6212,9 +6212,31 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     }
     if(!unitPr&&ACTS[col4.ai]&&ACTS[col4.ai].p) unitPr='$'+parseFloat(ACTS[col4.ai].p).toFixed(2);
     var _csp=_NS>1?' colspan="'+_NS+'"':'';
+    // V20_81: detectar VarDoor con factor (col P) → emitir TOTAL como "X.XXXX acres / X puertas"
+    // Paridad con grupales puertas (L6324-6331). Aplica a single-shift (totLbl) y multi-shift (rama nueva).
+    var _actC81 = null;
+    if(col4.ai>=0 && col4.ai<ACTS.length) _actC81 = ACTS[col4.ai];
+    if(!_actC81 && col4.esName){
+      for(var _i81=0;_i81<ACTS.length;_i81++){ if(ACTS[_i81].es===col4.esName){ _actC81=ACTS[_i81]; break; } }
+    }
+    var _isVD81 = !!(_actC81 && (_actC81.variable||'').toLowerCase()==='vardoor');
+    var _factVD81 = _isVD81 ? getActFactorAcres(_actC81) : null;
+    if(_isVD81 && _factVD81 && tot>0){
+      var _ac81 = tot/_factVD81;
+      totLbl = '<span style="font-size:9px;color:#0f6e56;display:block">'+_ac81.toFixed(4)+' acres</span>'
+             + '<span style="font-size:11px">'+smartNum(tot)+' puertas</span>';
+    }
     // V20_08: si es Hora y multi-shift, emitir total por sub-columna (2h/5h).
     // V20_26: si es no-Hora (Daywork/Ficha/Caja/$) y multi-shift, también emitir total qty por sub-col.
-    if(col4.hr && _NS>1){
+    if(_isVD81 && _factVD81 && _NS>1){
+      // V20_81: VarDoor multi-shift → 1 celda colspan=N (qty es por bloque, no por shift)
+      var _vdAcRow = (tot>0 ? (tot/_factVD81).toFixed(4)+' acres' : '');
+      var _vdPzRow = (tot>0 ? smartNum(tot)+' puertas' : '');
+      trTotal+='<td colspan="'+_NS+'" style="text-align:center;border:1px solid #000;border-top:3px solid #1a2b8c;color:#1a2b8c;font-weight:700;line-height:1.5">'
+        + (_vdAcRow?'<span style="font-size:9px;color:#0f6e56;display:block">'+_vdAcRow+'</span>':'')
+        + (_vdPzRow?'<span style="font-size:11px">'+_vdPzRow+'</span>':'')
+        + '</td>';
+    } else if(col4.hr && _NS>1){
       for(var sst_=0;sst_<_NS;sst_++){
         var _tarK=col4.shifts[sst_].key;
         var _subTot=0;
@@ -7293,6 +7315,9 @@ function getAnchoCamaDefault(act){
 // Aplica a: Amarre de hilo, Colocación de estaca, Colocación de plástico (y variantes en inglés)
 function isActPuertas(act){
   if(!act) return false;
+  // V20_81: si la variable del MASTER es VarDoor → automáticamente puertas (acres).
+  // Cubre actividades VarDoor que no contienen keywords ("hilo", "estaca", etc.) en el nombre.
+  if((act.variable||'').toLowerCase()==='vardoor') return true;
   if(act.calc==='puertas') return true;
   var es = (act.es||'').toLowerCase();
   var en = (act.en||'').toLowerCase();
