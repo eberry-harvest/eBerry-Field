@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_81';
+window.APP_VERSION = 'V20_82';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -4934,7 +4934,103 @@ function buildAnalisis(){
       }
     }
 
-    if(!hasAnalysis) continue; // worker sin actividades individuales de pieza
+    // V20_82: análisis de actividades GRUPALES donde el worker es participante.
+    // Mismo cálculo que individual pero con qty/np por persona. Excluye Hora y Daywork.
+    for(var gi82=0; gi82<grpActs.length; gi82++){
+      var ga82 = grpActs[gi82];
+      if(!ga82 || !ga82.participantes || !ga82.participantes.length) continue;
+      var _isPart82 = false;
+      for(var pi82=0; pi82<ga82.participantes.length; pi82++){
+        if(ga82.participantes[pi82] === w.id){ _isPart82 = true; break; }
+      }
+      if(!_isPart82) continue;
+      var gact82 = GRUPAL_ACTS[ga82.gai]; if(!gact82) continue;
+      var ct82 = grpCalcType(gact82);
+      if(ct82 === 'hora') continue;
+      if(gact82.payType === 'Daywork') continue;
+      var price82 = gact82.p;
+      var np82 = ga82.participantes.length;
+      var qtyPP82 = 0;
+      if(ct82 === 'puertas'){
+        var metros82 = 0;
+        var surcos82 = (ga82.vars && ga82.vars.surcos) || [];
+        for(var si82=0; si82<surcos82.length; si82++){
+          metros82 += (parseFloat(surcos82[si82].largo)||0) * (parseFloat(surcos82[si82].num)||0);
+        }
+        if(isPennrose5Act(gact82)){
+          var _acP82 = parseFloat(ga82.vars && ga82.vars.pennAcres)||0;
+          var _ancCalc82 = getActAncho(gact82);
+          qtyPP82 = _ancCalc82 ? (_acP82*_ancCalc82)/np82 : 0;
+        } else {
+          qtyPP82 = (metros82/100)/np82;
+        }
+      } else if(ct82 === 'cajas'){
+        var totalC82 = parseFloat(ga82.vars && ga82.vars.totalC)||0;
+        qtyPP82 = totalC82/np82;
+        price82 = parseFloat(ga82.vars && ga82.vars.precioC) || gact82.p || 0.80;
+      } else {
+        var totalP82 = parseFloat(ga82.vars && ga82.vars.totalP)||0;
+        qtyPP82 = totalP82/np82;
+      }
+      if(!price82 || price82<=0) continue;
+      if(!qtyPP82) continue;
+      var hRate82 = baseRate;
+      if(!hRate82 || hRate82<=0){
+        for(var rk82=0; rk82<w.acts.length; rk82++){
+          var rAct82=null;
+          if(w.acts[rk82].esName){
+            for(var rk282=0; rk282<ACTS.length; rk282++){
+              if(ACTS[rk282].es===w.acts[rk82].esName){ rAct82=ACTS[rk282]; break; }
+            }
+          }
+          if(!rAct82 && w.acts[rk82].ai>=0 && w.acts[rk82].ai<ACTS.length) rAct82=ACTS[w.acts[rk82].ai];
+          if(rAct82 && rAct82.hr){ hRate82 = rAct82.p; break; }
+        }
+      }
+      if(!hRate82 || hRate82<=0) continue;
+      var horas82 = nh((ga82.vars && ga82.vars.ini)||'', (ga82.vars && ga82.vars.fin)||'') || 0;
+      if(!horas82 || horas82<=0) horas82 = getGlobalHours();
+      if(!horas82 || horas82<=0) continue;
+      var pzasHora82 = hRate82/price82;
+      var pzasEsperadas82 = pzasHora82*horas82;
+      var pzasReales82 = qtyPP82;
+      var esperado82 = pzasEsperadas82*price82;
+      var real82 = pzasReales82*price82;
+      var diff82 = real82-esperado82;
+      wEsperado += esperado82;
+      wReal += real82;
+      hasAnalysis = true;
+      var actKey82 = '[GRUPAL] '+gact82.es+'|'+price82;
+      if(!actSummary[actKey82]) actSummary[actKey82] = {name:'[GRUPAL] '+gact82.es, tipo:(gact82.tipo||ct82), price:price82, esperado:0, real:0, workers:0, horas:0};
+      actSummary[actKey82].esperado += esperado82;
+      actSummary[actKey82].real += real82;
+      actSummary[actKey82].workers++;
+      actSummary[actKey82].horas += horas82;
+      var pct82 = pzasEsperadas82>0 ? Math.min((pzasReales82/pzasEsperadas82)*100,150) : 0;
+      var isLoss82 = diff82<0;
+      var tipoLbl82 = ct82==='cajas'?'cajas':(ct82==='puertas'?'puertas':'pzas');
+      if(isLoss82){
+        wDetails+='<div class="an-act loss">'
+          +'<div style="font-weight:700;font-size:13px;margin-bottom:4px">[GRUPAL] '+esc(gact82.es)+' — $'+price82.toFixed(2)+'/'+tipoLbl82+'</div>'
+          +'<div class="an-step">① $<b>'+hRate82.toFixed(2)+'</b>/h ÷ $<b>'+price82.toFixed(2)+'</b>/'+tipoLbl82+' = <b>'+pzasHora82.toFixed(2)+'</b> '+tipoLbl82+'/h</div>'
+          +'<div class="an-step">② '+pzasHora82.toFixed(2)+' × <b>'+horas82.toFixed(1)+'</b> hrs = <b>'+pzasEsperadas82.toFixed(1)+'</b> '+tipoLbl82+' mínimo (su porción)</div>'
+          +'<div class="an-step">③ Su porción real: <b>'+smartNum(pzasReales82)+'</b> '+tipoLbl82+' × $'+price82.toFixed(2)+' = <b>$'+real82.toFixed(2)+'</b> (de '+np82+' personas)</div>'
+          +'<div class="an-step">④ Su porción mínima: '+pzasEsperadas82.toFixed(1)+' '+tipoLbl82+' × $'+price82.toFixed(2)+' = <b>$'+esperado82.toFixed(2)+'</b></div>'
+          +'<div class="an-bar"><div class="an-bar-fill red" style="width:'+Math.min(pct82,100)+'%"></div></div>'
+          +'<div class="an-result loss">'
+            +'🔻 PÉRDIDA: -$'+Math.abs(diff82).toFixed(2)
+            +' (su porción: '+smartNum(pzasReales82)+' de '+pzasEsperadas82.toFixed(0)+' '+tipoLbl82+')'
+          +'</div>'
+        +'</div>';
+      } else {
+        wDetails+='<div class="an-act gain">'
+          +'<div style="font-weight:700;font-size:13px;margin-bottom:4px">[GRUPAL] '+esc(gact82.es)+' — $'+price82.toFixed(2)+'/'+tipoLbl82+'</div>'
+          +'<div class="an-result gain">✅ OK — '+smartNum(pzasReales82)+' de '+pzasEsperadas82.toFixed(0)+' '+tipoLbl82+' mínimo (porción)</div>'
+        +'</div>';
+      }
+    }
+
+    if(!hasAnalysis) continue; // worker sin actividades de pieza (individuales o grupales)
 
     totalEsperado+=wEsperado;
     totalReal+=wReal;
