@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>eBerry Field App</title>
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -24,8 +24,17 @@
 </script>
 <script>
 // V50 (port V20_23): estandarización de colores PDF
-window.APP_VERSION = 'V81';
+window.APP_VERSION = 'V92';
 (function(){
+  // V86 (port V20_77): AUTO-LIMPIEZA de _ackedVersion envenenado.
+  // Si _ackedVersion === APP_VERSION cargado, ese ack ya cumplió → limpiar para que próximas updates lleguen.
+  try {
+    var _ack0 = localStorage.getItem('_ackedVersion') || '';
+    if(_ack0 && _ack0 === window.APP_VERSION){
+      localStorage.removeItem('_ackedVersion');
+      console.log('[eBerry] V86: Ack stale limpiado — ya estamos en '+_ack0);
+    }
+  } catch(e){}
   function showVersionMismatch(remoteV){
     if(document.getElementById('ver-mismatch')) return;
     var t = document.createElement('div');
@@ -1000,8 +1009,25 @@ body { padding-bottom: 90px; }
 /* Toast/savepill no se desbordan en pantallas chicas */
 .toast { max-width: calc(100vw - 32px); box-sizing: border-box; }
 
+/* V92 (port V20_61): tabs flex-wrap en mobile — evitar scroll horizontal en celular.
+   Tabs hacen wrap a 2-3 líneas, header se acomoda. Pill savepill visible siempre. */
+@media (max-width: 768px) {
+  .tabs { flex-wrap: wrap; overflow-x: visible; padding-bottom: 6px; }
+  .tab { font-size: 11px; padding: 7px 10px; min-height: 38px; flex: 0 1 auto; }
+  .htop { flex-wrap: wrap; gap: 6px; }
+  #savepill { order: 99; flex-basis: auto; }
+}
+
 /* MÓVILES — 480px y abajo (la mayoría de surqueros) */
 @media (max-width: 480px) {
+  /* V92 (port V20_61): tabs/badges aún más compactos en pantallas chicas */
+  .tab { font-size: 10px; padding: 6px 8px; min-height: 36px; }
+  .dpill { font-size: 11px; padding: 3px 8px; }
+  .htop { gap: 4px; margin-bottom: 4px; }
+  .htop button { font-size: 11px !important; padding: 4px 8px !important; }
+  /* Esconder labels largos en pantallas chicas — solo iconos */
+  .conn-badge .conn-dot + span { display: none; }
+  .queue-badge span:not(#queueCount) { display: none; }
   /* Modales: padding ajustado y respetar viewport */
   .md { padding: 14px 12px 24px; max-width: calc(100vw - 16px); margin: 0 8px; }
   .qrOv { padding: 12px; }
@@ -1566,6 +1592,17 @@ body { padding-bottom: 90px; }
   <!-- Lista dinámica de años -->
   <div id="archYearList" class="resp-grid resp-grid-arch"></div>
 
+  <!-- V84 (port V20_74): Diagnóstico Recovery -->
+  <div class="card" style="margin-top:14px;border:2px solid #c0392b;background:#fff5f5">
+    <div class="ct" style="color:#c0392b">🔍 DIAGNÓSTICO RECOVERY</div>
+    <p style="font-size:12px;color:#3a2c00;margin:4px 0 10px;line-height:1.5">
+      <b>¿Crees que perdiste días?</b> Toca este botón para revisar TODA tu memoria
+      y encontrar archivos escondidos que la app no esté mostrando. Después podrás
+      mandarle el archivo a Serafín por WhatsApp para que él los recupere.
+    </p>
+    <button class="btn" style="background:#c0392b;color:#fff;width:100%;font-weight:700;font-size:14px;padding:14px" onclick="runRecoveryDiagnostic()">🔍 Buscar archivos escondidos</button>
+  </div>
+
   <!-- Importar archivo -->
   <div class="card" style="margin-top:14px">
     <div class="ct">📤 IMPORTAR ARCHIVO JSON</div>
@@ -1577,6 +1614,18 @@ body { padding-bottom: 90px; }
 
 <!-- V25: cierre del pagesSlot (las páginas se teletransportan al rancho activo) -->
 </div><!-- /pagesSlot -->
+
+<!-- V84 (port V20_74): Modal Recovery -->
+<div id="recoveryOv" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:100000;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto">
+  <div style="background:#fff;border-radius:12px;max-width:500px;width:100%;max-height:90vh;overflow-y:auto;padding:18px;box-shadow:0 20px 60px rgba(0,0,0,.5)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <h2 style="margin:0;color:#c0392b;font-size:20px">🔍 Resultado del escaneo</h2>
+      <button onclick="document.getElementById('recoveryOv').style.display='none'" style="background:#eee;border:none;border-radius:50%;width:32px;height:32px;font-size:18px;cursor:pointer">✕</button>
+    </div>
+    <div id="recoveryResult"></div>
+    <div id="recoveryActions" style="display:flex;flex-direction:column;gap:8px;margin-top:14px"></div>
+  </div>
+</div>
 
 <!-- V32-FIX: QR OVERLAY movido FUERA del pagesSlot — es global (position:fixed), no debe viajar con el rancho -->
 <div class="qrOv" id="qrOv">
@@ -1946,10 +1995,14 @@ function loginSuccess(user){
   if(!user.isAdmin){
     filterDataForCrew(user.crew);
   } else {
-    ACTS       = ALL_ACTS.filter(function(a){ return (a.modo||'Individual').toLowerCase()!=='grupal'; });
-    GRUPAL_ACTS= ALL_ACTS.filter(function(a){ return (a.modo||'Individual').toLowerCase()==='grupal'; });
-    if(!ACTS.length)        ACTS        = FALLBACK_ACTS;
-    if(!GRUPAL_ACTS.length) GRUPAL_ACTS = FALLBACK_GRUPAL_ACTS;
+    // V87 (port V20_78): NO cargar TODAS las grupales del MASTER al login admin.
+    // Antes: GRUPAL_ACTS = todas → admin veía actividades de otros ranchos.
+    // Ahora: dejar vacío y onRanchoChange (llamado tras populateRanchoDropdown) las llenará filtradas.
+    ACTS = []; GRUPAL_ACTS = [];
+    if(!ALL_ACTS || !ALL_ACTS.length){
+      ACTS = FALLBACK_ACTS;
+      GRUPAL_ACTS = FALLBACK_GRUPAL_ACTS;
+    }
   }
 
   // Alpha2: Llenar dropdown de ranchos basado en contrato IOE del surquero
@@ -2231,8 +2284,9 @@ function onAdminSurqueroChange(name){
   if(inp) inp.value = name;
   if(!name){
     NAMES=ALL_WORKERS.map(function(w){return w.name;});
-    ACTS=ALL_ACTS.filter(function(a){return (a.modo||'Individual').toLowerCase()!=='grupal';});
-    GRUPAL_ACTS=ALL_ACTS.filter(function(a){return (a.modo||'Individual').toLowerCase()==='grupal';});
+    // V87 (port V20_78): vaciar y dejar que onRanchoChange filtre. Antes: cargaba todas las grupales sin filtrar.
+    ACTS = []; GRUPAL_ACTS = [];
+    try { onRanchoChange(); } catch(e){}
     adminCheckSession(''); // Upsilon2: hide session panel
     return;
   }
@@ -2246,10 +2300,10 @@ function onAdminSurqueroChange(name){
     populateRanchoDropdown(liderIOE, crewBase, false);
   } else {
     NAMES=ALL_WORKERS.map(function(w){return w.name;});
-    // V8-C6: filtrar grupales correctamente (antes copiaba ALL_ACTS sin filtrar)
-    ACTS=ALL_ACTS.filter(function(a){return (a.modo||'Individual').toLowerCase()!=='grupal';});
-    GRUPAL_ACTS=ALL_ACTS.filter(function(a){return (a.modo||'Individual').toLowerCase()==='grupal';});
+    // V87 (port V20_78): vaciar y delegar el filtrado a onRanchoChange.
+    ACTS = []; GRUPAL_ACTS = [];
     populateRanchoDropdown('', '', true); // sin lider: mostrar todos los ranchos
+    try { onRanchoChange(); } catch(e){}
   }
   // ✅ Cargar datos guardados del surquero seleccionado
   // getUserKey() ya apunta a la key correcta porque inp.value fue actualizado arriba
@@ -2510,7 +2564,9 @@ function loadSheetsData(){
           tipo:tipoNorm, payType:t.tipo||'', p:t.rate||16.23, hr:tipoNorm==='Hora',
           modo: modo,
           // V56 (port V20_29): columnas G-M del motor data-driven
-          variable: t.variable||'', H: t.H, I: t.I, J: t.J, K: t.K, L: t.L, M: t.M
+          variable: t.variable||'', H: t.H, I: t.I, J: t.J, K: t.K, L: t.L, M: t.M,
+          // V84 (port V20_71/V20_75): columnas N, O, P (fórmulas extendidas / metadata)
+          N: t.N, O: t.O, P: t.P
         });
       }
       // V10: Diagnóstico — cuántas actividades cargaron por rancho
@@ -3698,12 +3754,28 @@ function _enterReadOnly(payload){
           if(ALL_ACTS[_aai].es === pa.actEs){ _payTypeForAct = ALL_ACTS[_aai].payType || ''; break; }
         }
       }
+      // V85 (port V20_76): si VarDoor (puertas) con qty del Sheet, reconstruir bloques para UI lectura
+      var _bloquesRO = null;
+      var _isVarDoorRO = false;
+      if(aiIdx>=0 && ACTS[aiIdx] && (ACTS[aiIdx].variable||'').toLowerCase()==='vardoor') _isVarDoorRO = true;
+      if(!_isVarDoorRO){
+        for(var _aaiV=0; _aaiV<ALL_ACTS.length; _aaiV++){
+          if(ALL_ACTS[_aaiV].es === pa.actEs && (ALL_ACTS[_aaiV].variable||'').toLowerCase()==='vardoor'){ _isVarDoorRO=true; break; }
+        }
+      }
+      if(_isVarDoorRO && qty>0){
+        _bloquesRO = [{pies: String(Math.round(qty*100)), surcos: '1'}];
+      }
       w.acts.push({
         ai: aiIdx, esName: pa.actEs||'', tipo: pa.tipo||'',
         qty: qty, ini: pa.hEnt||'', fin: pa.hSal||'',
-        showTime: !!(pa.hEnt||pa.hSal),
+        // V82 (port V20_66): siempre expandir horario al cargar día → muestra inputs INICIO/FIN inmediatamente.
+        // Antes: solo expandía si hEnt/hSal venían poblados → palomita marcada pero inputs ocultos para acts sin horario.
+        // Usuario tenía que destildar/re-tildar para verlos. Ahora se ven al toque, listo para editar/visualizar.
+        showTime: true,
         finca: pa.finca||'',
         shifts: (pa.hEnt||pa.hSal) ? [{ini:pa.hEnt||'', fin:pa.hSal||''}] : [],
+        bloques: _bloquesRO, // V85 (port V20_76): bloques reconstruidos para VarDoor
         pay: payEst,
         _frozen: true, _unitPrice: price, _payType: _payTypeForAct
       });
@@ -3738,8 +3810,9 @@ function _enterReadOnly(payload){
     } else if(_ct==='piezas'){
       _vars.totalP = Math.round(_qtyT);   // V81 (port V20_60)
     } else if(_ct==='puertas'){
-      if(_grpAct && isPennrose5Act(_grpAct) && PENNROSE_ANCHO){
-        _vars.pennAcres = _qtyT / PENNROSE_ANCHO;
+      var _pAncho_er = _grpAct ? getActAncho(_grpAct) : null; // V84 (port V20_73)
+      if(_grpAct && isPennrose5Act(_grpAct) && _pAncho_er){
+        _vars.pennAcres = _pAncho_er ? _qtyT / _pAncho_er : 0;
       } else {
         _vars.surcos = [{ largo: _qtyT * 100, num: 1 }];
         _vars.anchoCama = 1;
@@ -3794,6 +3867,21 @@ function _enterReadOnly(payload){
 
   var list = gEl('wlist'); if(list) list.innerHTML = '';
   workers.forEach(function(w,i){ if(list) list.appendChild(mkCard(w,i)); });
+
+  // V83 (port V20_68): defensa adicional — forzar clases 'on' en pill toggle/inputs después del render
+  // para garantizar que el horario se vea expandido aunque a.showTime venga undefined del payload.
+  // Sin esto: palomita ✓ visible pero inputs INICIO/FIN ocultos al cargar día desde Sheets.
+  try {
+    workers.forEach(function(w){
+      (w.acts||[]).forEach(function(a, ai){
+        var tg = gEl('tg'+w.id+'_'+ai);
+        var tf = gEl('tf'+w.id+'_'+ai);
+        if(tg) tg.classList.add('on');
+        if(tf) tf.classList.add('on');
+      });
+    });
+  } catch(e){ console.warn('V83 (V20_68) force expand fallo:', e); }
+
   try { updParam && updParam(); } catch(e){}
   try { updParts && updParts(); } catch(e){}
   try { renderGrpActs && renderGrpActs(); } catch(e){}
@@ -4578,22 +4666,29 @@ function mkActRow(wid_,ai,_cont){
   bdg.id='bd'+wid_+'_'+ai; bdg.className=act.hr?'shift-total':'tbadge rf'; bdg.style.display='none';
   div.appendChild(bdg);
   if(!act.hr){
-    // V55 (port V20_28): motor activo si act tiene label'X' en H-M
-    var _motorActive=false;
-    try { _motorActive = getRequiredInputs(act).length > 0; } catch(e){ _motorActive=false; }
-    if(_motorActive){
-      renderActInputs(div, act, wid_, ai);
+    // V85 (port V20_76): VarDoor individual usa sistema de bloques (PIES + SURCOS) — prioridad sobre motor.
+    var _isVarDoor = (act && (act.variable||'').toLowerCase() === 'vardoor');
+    var _isGrupal = (act && (act.modo||'Individual').toLowerCase() === 'grupal');
+    if(_isVarDoor && !_isGrupal){
+      renderIndBloques(div, act, wid_, ai);
     } else {
-      var qr=document.createElement('div'); qr.className='qr'; qr.id='qr'+wid_+'_'+ai;
-      var lbl2=act.tipo==='Caja'?'Cajas':act.tipo==='$'?'Monto $':'Piezas';
-      qr.style.gridTemplateColumns='1fr';
-      qr.innerHTML='<div><label style="margin:0;font-size:10px">'+lbl2+'</label><input type="number" id="qty'+wid_+'_'+ai+'" min="0" step="'+(act.tipo==='$'?'0.5':'1')+'" value="'+(a.qty||'')+'" placeholder="0"></div>';
-      div.appendChild(qr);
-      var _wi=wid_,_ai=ai;
-      setTimeout(function(){
-        var q=gEl('qty'+_wi+'_'+_ai);
-        if(q) q.addEventListener('input',function(){ onQty(_wi,_ai,this.value); });
-      },0);
+      // V55 (port V20_28): motor activo si act tiene label'X' en H-M
+      var _motorActive=false;
+      try { _motorActive = getRequiredInputs(act).length > 0; } catch(e){ _motorActive=false; }
+      if(_motorActive){
+        renderActInputs(div, act, wid_, ai);
+      } else {
+        var qr=document.createElement('div'); qr.className='qr'; qr.id='qr'+wid_+'_'+ai;
+        var lbl2=act.tipo==='Caja'?'Cajas':act.tipo==='$'?'Monto $':'Piezas';
+        qr.style.gridTemplateColumns='1fr';
+        qr.innerHTML='<div><label style="margin:0;font-size:10px">'+lbl2+'</label><input type="number" id="qty'+wid_+'_'+ai+'" min="0" step="'+(act.tipo==='$'?'0.5':'1')+'" value="'+(a.qty||'')+'" placeholder="0"></div>';
+        div.appendChild(qr);
+        var _wi=wid_,_ai=ai;
+        setTimeout(function(){
+          var q=gEl('qty'+_wi+'_'+_ai);
+          if(q) q.addEventListener('input',function(){ onQty(_wi,_ai,this.value); });
+        },0);
+      }
     }
   }
   var sb=document.createElement('div'); sb.className='sub'; sb.id='sb'+wid_+'_'+ai; sb.style.display='none';
@@ -4668,6 +4763,117 @@ function onIndField(inp){
 // V7: sanitizar qty como número antes de guardar
 // V19-FIX2: guardar número, no string
 function onQty(wi,ai,v){ var w=getW(wi); if(!w||!w.acts[ai])return; var n=parseFloat(v); w.acts[ai].qty=isFinite(n)?n:0; recalc(wi,ai); autoSave(); }
+
+// V85 (port V20_76): sistema de bloques para individuales VarDoor (PIES + SURCOS por bloque).
+// qty (puertas) = Σ(pies×surcos) / 100. acres = qty / getActFactorAcres(act).
+function renderIndBloques(div, act, wid_, ai){
+  var w = getW(wid_); if(!w || !w.acts[ai]) return;
+  var a = w.acts[ai];
+  if(!a.bloques || !a.bloques.length) a.bloques = [{pies:'', surcos:''}];
+  var wrap = document.createElement('div');
+  wrap.className = 'indBloquesWrap'; wrap.id = 'ibw'+wid_+'_'+ai;
+  wrap.style.cssText = 'margin-top:8px';
+  for(var bi=0; bi<a.bloques.length; bi++){
+    var b = a.bloques[bi];
+    var card = document.createElement('div');
+    card.style.cssText = 'background:var(--lt);border:1.5px solid var(--bd);border-radius:8px;padding:10px;margin-bottom:8px';
+    card.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px">'
+      + '<div style="display:flex;align-items:center;gap:6px;flex:1">'
+      + '<span style="font-size:14px">📏</span>'
+      + '<input type="text" maxlength="20" value="'+esc(b.lbl||'')+'" placeholder="Bloque '+(bi+1)+'"'
+      + ' data-wid="'+wid_+'" data-ai="'+ai+'" data-bi="'+bi+'" data-bf="lbl" oninput="onIndBloqueField(this)"'
+      + ' style="flex:1;font-size:13px;font-weight:700;padding:5px 8px;border:1.5px solid var(--bd);border-radius:6px;background:#fff;color:var(--g);font-family:\'DM Sans\',sans-serif">'
+      + '</div>'
+      + (a.bloques.length>1 ? '<button class="shift-del" onclick="delIndBloque('+wid_+','+ai+','+bi+')">✕</button>' : '<span></span>')
+      + '</div>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+      + '<div><label style="font-size:10px;font-weight:600">PIES</label>'
+      + '<input type="number" inputmode="decimal" value="'+(b.pies||'')+'" placeholder="0" data-wid="'+wid_+'" data-ai="'+ai+'" data-bi="'+bi+'" data-bf="pies" oninput="onIndBloqueField(this)" style="width:100%;padding:8px;border:1.5px solid var(--bd);border-radius:6px;font-size:14px"></div>'
+      + '<div><label style="font-size:10px;font-weight:600">SURCOS</label>'
+      + '<input type="number" inputmode="decimal" value="'+(b.surcos||'')+'" placeholder="0" data-wid="'+wid_+'" data-ai="'+ai+'" data-bi="'+bi+'" data-bf="surcos" oninput="onIndBloqueField(this)" style="width:100%;padding:8px;border:1.5px solid var(--bd);border-radius:6px;font-size:14px"></div>'
+      + '</div>';
+    wrap.appendChild(card);
+  }
+  var pies_total=0;
+  for(var _bi=0; _bi<a.bloques.length; _bi++){
+    var _bp = parseFloat(a.bloques[_bi].pies)||0;
+    var _bs = parseFloat(a.bloques[_bi].surcos)||0;
+    pies_total += _bp * _bs;
+  }
+  var puertas = pies_total/100;
+  var fact = getActFactorAcres(act);
+  var acres = (fact && puertas>0) ? puertas/fact : 0;
+  if(pies_total>0){
+    var sum = document.createElement('div');
+    sum.style.cssText = 'background:var(--dk);border-radius:8px;padding:10px 12px;margin-bottom:6px;display:flex;justify-content:space-between;color:#fff;font-size:13px';
+    sum.innerHTML = '<span>🚪 Puertas (pies÷100)</span><b style="font-family:Bebas Neue,sans-serif;font-size:20px">'+puertas.toFixed(2)+'</b>';
+    wrap.appendChild(sum);
+    if(acres>0){
+      var sumA = document.createElement('div');
+      sumA.style.cssText = 'background:var(--bp);border-radius:8px;padding:10px 12px;margin-bottom:6px;display:flex;justify-content:space-between;color:var(--b);font-size:13px';
+      sumA.innerHTML = '<span>🌿 Acres (puertas÷'+fact+')</span><b style="font-family:Bebas Neue,sans-serif;font-size:18px">'+acres.toFixed(4)+'</b>';
+      wrap.appendChild(sumA);
+    }
+  }
+  var btnAdd = document.createElement('button');
+  btnAdd.className = 'shift-add';
+  btnAdd.textContent = '＋ Agregar bloque';
+  (function(_w,_a){ btnAdd.onclick = function(){ addIndBloque(_w, _a); }; })(wid_, ai);
+  wrap.appendChild(btnAdd);
+  div.appendChild(wrap);
+}
+
+function addIndBloque(wi, ai){
+  var w = getW(wi); if(!w || !w.acts[ai]) return;
+  var a = w.acts[ai];
+  if(!a.bloques) a.bloques = [];
+  a.bloques.push({pies:'', surcos:''});
+  var cont = gEl('ac'+wi); if(!cont) return;
+  cont.innerHTML = '';
+  for(var i=0; i<w.acts.length; i++) mkActRow(wi, i);
+  recalc(wi, ai); autoSave();
+}
+
+function delIndBloque(wi, ai, bi){
+  var w = getW(wi); if(!w || !w.acts[ai]) return;
+  var a = w.acts[ai];
+  if(!a.bloques || a.bloques.length<=1) return;
+  // V85 (port V20_76): confirm antes de borrar
+  if(!confirm('¿Borrar bloque '+(bi+1)+'?')) return;
+  a.bloques.splice(bi, 1);
+  var pies_total = 0;
+  for(var _b=0; _b<a.bloques.length; _b++){
+    var _p = parseFloat(a.bloques[_b].pies)||0;
+    var _s = parseFloat(a.bloques[_b].surcos)||0;
+    pies_total += _p * _s;
+  }
+  a.qty = pies_total / 100;
+  a.indPies = pies_total;
+  var cont = gEl('ac'+wi); if(!cont) return;
+  cont.innerHTML = '';
+  for(var i=0; i<w.acts.length; i++) mkActRow(wi, i);
+  recalc(wi, ai); autoSave();
+}
+
+function onIndBloqueField(inp){
+  var wi = parseInt(inp.dataset.wid); var ai = parseInt(inp.dataset.ai);
+  var bi = parseInt(inp.dataset.bi); var bf = inp.dataset.bf;
+  var w = getW(wi); if(!w || !w.acts[ai]) return;
+  var a = w.acts[ai];
+  if(!a.bloques) a.bloques = [{pies:'', surcos:''}];
+  if(!a.bloques[bi]) a.bloques[bi] = {pies:'', surcos:''};
+  a.bloques[bi][bf] = inp.value.trim();
+  var pies_total = 0;
+  for(var _b=0; _b<a.bloques.length; _b++){
+    var _p = parseFloat(a.bloques[_b].pies)||0;
+    var _s = parseFloat(a.bloques[_b].surcos)||0;
+    pies_total += _p * _s;
+  }
+  a.qty = pies_total / 100;
+  a.indPies = pies_total;
+  recalc(wi, ai); autoSave();
+}
+
 function onIni(wi,ai,v){ var w=getW(wi); if(!w||!w.acts[ai])return; w.acts[ai].ini=v; w.acts[ai].showTime=true; recalc(wi,ai); autoSave(); checkOverlapsForWorker(wi); /* V58 */ }
 function onFin(wi,ai,v){ var w=getW(wi); if(!w||!w.acts[ai])return; w.acts[ai].fin=v; w.acts[ai].showTime=true; recalc(wi,ai); autoSave(); checkOverlapsForWorker(wi); /* V58 */ }
 
@@ -4689,6 +4895,23 @@ function recalc(wi,ai){
   if(isHourAct(act)){ pay=totalShiftHours(a)*getHRate(w,act); }
   else if(act.tipo==='$'){ pay=parseFloat(a.qty)||0; }
   else {
+    // V85 (port V20_76): VarDoor individual usa qty (sumatoria de bloques) × precio. Bypass motor.
+    var _isVarDoorR = (act && (act.variable||'').toLowerCase() === 'vardoor');
+    var _isGrpR = (act && (act.modo||'Individual').toLowerCase() === 'grupal');
+    if(_isVarDoorR && !_isGrpR){
+      if((!a.qty || a.qty===0) && a.indPies){
+        a.qty = (parseFloat(a.indPies)||0) / 100;
+      }
+      pay = (parseFloat(a.qty)||0) * (act.p||0);
+      pay = Math.round(pay*100)/100;
+      a.pay=pay;
+      var sb_v=gEl('sb'+wi+'_'+ai);
+      if(sb_v){ if(pay>0){sb_v.textContent='Subtotal: $'+pay.toFixed(2);sb_v.style.display='block';}else sb_v.style.display='none'; }
+      var row_v=gEl('ar'+wi+'_'+ai);
+      if(row_v) row_v.className='ar'+(pay>0?(act.hr?' cb':' ca'):'');
+      updTot(wi); updBadge(wi,ai);
+      return;
+    }
     // V55 (port V20_28): motor data-driven con fallback legacy
     var _motorActive=false;
     try { _motorActive = getRequiredInputs(act).length > 0; } catch(e){ _motorActive=false; }
@@ -4826,7 +5049,8 @@ function chAct(wi,ai,nai){
   var actTipo=nai>=0&&nai<ACTS.length?ACTS[nai].tipo:'';
   var prevFinca = w.acts[ai].finca || '';
   // V55 (port V20_28): limpiar a.inputs al cambiar actividad
-  w.acts[ai]={ai:nai,esName:actName,tipo:actTipo,qty:'',ini:'',fin:'',showTime:false,pay:0,finca:prevFinca,inputs:{}};
+  // V85 (port V20_76): limpia bloques también al cambiar actividad
+  w.acts[ai]={ai:nai,esName:actName,tipo:actTipo,qty:'',ini:'',fin:'',showTime:false,pay:0,finca:prevFinca,inputs:{},bloques:[{pies:'',surcos:''}]};
   var old=gEl('ar'+wi+'_'+ai); if(old)old.parentNode.removeChild(old);
   var cont=gEl('ac'+wi); if(!cont)return;
   cont.innerHTML='';
@@ -5123,7 +5347,103 @@ function buildAnalisis(){
       }
     }
 
-    if(!hasAnalysis) continue; // worker sin actividades individuales de pieza
+    // V91 (port V20_82): análisis de actividades GRUPALES donde el worker es participante.
+    // Mismo cálculo que individual pero con qty/np por persona. Excluye Hora y Daywork.
+    for(var gi82=0; gi82<grpActs.length; gi82++){
+      var ga82 = grpActs[gi82];
+      if(!ga82 || !ga82.participantes || !ga82.participantes.length) continue;
+      var _isPart82 = false;
+      for(var pi82=0; pi82<ga82.participantes.length; pi82++){
+        if(ga82.participantes[pi82] === w.id){ _isPart82 = true; break; }
+      }
+      if(!_isPart82) continue;
+      var gact82 = GRUPAL_ACTS[ga82.gai]; if(!gact82) continue;
+      var ct82 = grpCalcType(gact82);
+      if(ct82 === 'hora') continue;
+      if(gact82.payType === 'Daywork') continue;
+      var price82 = gact82.p;
+      var np82 = ga82.participantes.length;
+      var qtyPP82 = 0;
+      if(ct82 === 'puertas'){
+        var metros82 = 0;
+        var surcos82 = (ga82.vars && ga82.vars.surcos) || [];
+        for(var si82=0; si82<surcos82.length; si82++){
+          metros82 += (parseFloat(surcos82[si82].largo)||0) * (parseFloat(surcos82[si82].num)||0);
+        }
+        if(isPennrose5Act(gact82)){
+          var _acP82 = parseFloat(ga82.vars && ga82.vars.pennAcres)||0;
+          var _ancCalc82 = getActAncho(gact82);
+          qtyPP82 = _ancCalc82 ? (_acP82*_ancCalc82)/np82 : 0;
+        } else {
+          qtyPP82 = (metros82/100)/np82;
+        }
+      } else if(ct82 === 'cajas'){
+        var totalC82 = parseFloat(ga82.vars && ga82.vars.totalC)||0;
+        qtyPP82 = totalC82/np82;
+        price82 = parseFloat(ga82.vars && ga82.vars.precioC) || gact82.p || 0.80;
+      } else {
+        var totalP82 = parseFloat(ga82.vars && ga82.vars.totalP)||0;
+        qtyPP82 = totalP82/np82;
+      }
+      if(!price82 || price82<=0) continue;
+      if(!qtyPP82) continue;
+      var hRate82 = baseRate;
+      if(!hRate82 || hRate82<=0){
+        for(var rk82=0; rk82<w.acts.length; rk82++){
+          var rAct82=null;
+          if(w.acts[rk82].esName){
+            for(var rk282=0; rk282<ACTS.length; rk282++){
+              if(ACTS[rk282].es===w.acts[rk82].esName){ rAct82=ACTS[rk282]; break; }
+            }
+          }
+          if(!rAct82 && w.acts[rk82].ai>=0 && w.acts[rk82].ai<ACTS.length) rAct82=ACTS[w.acts[rk82].ai];
+          if(rAct82 && rAct82.hr){ hRate82 = rAct82.p; break; }
+        }
+      }
+      if(!hRate82 || hRate82<=0) continue;
+      var horas82 = nh((ga82.vars && ga82.vars.ini)||'', (ga82.vars && ga82.vars.fin)||'') || 0;
+      if(!horas82 || horas82<=0) horas82 = getGlobalHours();
+      if(!horas82 || horas82<=0) continue;
+      var pzasHora82 = hRate82/price82;
+      var pzasEsperadas82 = pzasHora82*horas82;
+      var pzasReales82 = qtyPP82;
+      var esperado82 = pzasEsperadas82*price82;
+      var real82 = pzasReales82*price82;
+      var diff82 = real82-esperado82;
+      wEsperado += esperado82;
+      wReal += real82;
+      hasAnalysis = true;
+      var actKey82 = '[GRUPAL] '+gact82.es+'|'+price82;
+      if(!actSummary[actKey82]) actSummary[actKey82] = {name:'[GRUPAL] '+gact82.es, tipo:(gact82.tipo||ct82), price:price82, esperado:0, real:0, workers:0, horas:0};
+      actSummary[actKey82].esperado += esperado82;
+      actSummary[actKey82].real += real82;
+      actSummary[actKey82].workers++;
+      actSummary[actKey82].horas += horas82;
+      var pct82 = pzasEsperadas82>0 ? Math.min((pzasReales82/pzasEsperadas82)*100,150) : 0;
+      var isLoss82 = diff82<0;
+      var tipoLbl82 = ct82==='cajas'?'cajas':(ct82==='puertas'?'puertas':'pzas');
+      if(isLoss82){
+        wDetails+='<div class="an-act loss">'
+          +'<div style="font-weight:700;font-size:13px;margin-bottom:4px">[GRUPAL] '+esc(gact82.es)+' — $'+price82.toFixed(2)+'/'+tipoLbl82+'</div>'
+          +'<div class="an-step">① $<b>'+hRate82.toFixed(2)+'</b>/h ÷ $<b>'+price82.toFixed(2)+'</b>/'+tipoLbl82+' = <b>'+pzasHora82.toFixed(2)+'</b> '+tipoLbl82+'/h</div>'
+          +'<div class="an-step">② '+pzasHora82.toFixed(2)+' × <b>'+horas82.toFixed(1)+'</b> hrs = <b>'+pzasEsperadas82.toFixed(1)+'</b> '+tipoLbl82+' mínimo (su porción)</div>'
+          +'<div class="an-step">③ Su porción real: <b>'+smartNum(pzasReales82)+'</b> '+tipoLbl82+' × $'+price82.toFixed(2)+' = <b>$'+real82.toFixed(2)+'</b> (de '+np82+' personas)</div>'
+          +'<div class="an-step">④ Su porción mínima: '+pzasEsperadas82.toFixed(1)+' '+tipoLbl82+' × $'+price82.toFixed(2)+' = <b>$'+esperado82.toFixed(2)+'</b></div>'
+          +'<div class="an-bar"><div class="an-bar-fill red" style="width:'+Math.min(pct82,100)+'%"></div></div>'
+          +'<div class="an-result loss">'
+            +'🔻 PÉRDIDA: -$'+Math.abs(diff82).toFixed(2)
+            +' (su porción: '+smartNum(pzasReales82)+' de '+pzasEsperadas82.toFixed(0)+' '+tipoLbl82+')'
+          +'</div>'
+        +'</div>';
+      } else {
+        wDetails+='<div class="an-act gain">'
+          +'<div style="font-weight:700;font-size:13px;margin-bottom:4px">[GRUPAL] '+esc(gact82.es)+' — $'+price82.toFixed(2)+'/'+tipoLbl82+'</div>'
+          +'<div class="an-result gain">✅ OK — '+smartNum(pzasReales82)+' de '+pzasEsperadas82.toFixed(0)+' '+tipoLbl82+' mínimo (porción)</div>'
+        +'</div>';
+      }
+    }
+
+    if(!hasAnalysis) continue; // worker sin actividades de pieza (individuales o grupales)
 
     totalEsperado+=wEsperado;
     totalReal+=wReal;
@@ -5268,6 +5588,7 @@ function _serializeState(){
       if(sa.indPies) actSv.indPies=sa.indPies;
       if(sa.indAncho) actSv.indAncho=sa.indAncho;
       if(sa.indAcres) actSv.indAcres=sa.indAcres;
+      if(sa.bloques && sa.bloques.length) actSv.bloques=sa.bloques; // V85 (port V20_76): persistir bloques VarDoor
       ws.acts.push(actSv);
     }
     wSave.push(ws);
@@ -5290,11 +5611,22 @@ function _persistState(vals, wSave){
 
 // V81 (port V20_61): autoSave guard — solo activa cuando usuario empieza a capturar (worker + horario)
 window._autoSaveActive = false;
+// V82 (port V20_64): EMERGENCIA — surqueros perdían datos porque V20_61 exigía workers + hEnt simultáneos.
+// Surqueros llenaban trabajadores SIN tocar hEnt → pill quedaba en ⏸️ Pausa silenciosa y nada se guardaba.
+// Ahora basta con 1 worker real (en cualquier rancho) — un worker capturado YA es señal de uso legítimo.
+// Sigue bloqueando demos vacíos (sin workers, sin nada) → no re-introduce contaminación.
 function _autoSaveConditionMet(){
   try {
     var hasWorker = (typeof workers !== 'undefined' && workers && workers.length > 0);
-    var hasHEnt = !!(typeof gVal === 'function' && gVal('hEnt'));
-    return hasWorker && hasHEnt;
+    if(hasWorker) return true;
+    // Multi-rancho: revisar otros ranchos (admin que cambia de pill antes de capturar hEnt)
+    if(typeof _ranchos !== 'undefined' && _ranchos && _ranchos.length){
+      for(var i=0;i<_ranchos.length;i++){
+        var r=_ranchos[i];
+        if(r && r.workers && r.workers.length>0) return true;
+      }
+    }
+    return false;
   } catch(e){ return false; }
 }
 function _autoSaveReady(){
@@ -5415,6 +5747,15 @@ function load(){
       if(!workers[ei].empNum || !workers[ei].contractRate){
         var _w10=findInArr(ALL_WORKERS,workers[ei].name); // V12-FIX1
         if(_w10){ if(!workers[ei].empNum) workers[ei].empNum=_w10.empNum||''; if(!workers[ei].contractRate) workers[ei].contractRate=_w10.contractRate||0; }
+      }
+      // V85 (port V20_76): migración días viejos individual VarDoor → bloques
+      if(workers[ei].acts && workers[ei].acts.length){
+        for(var _ami=0; _ami<workers[ei].acts.length; _ami++){
+          var _aMig = workers[ei].acts[_ami];
+          if(!_aMig.bloques && _aMig.indPies){
+            _aMig.bloques = [{pies: String(_aMig.indPies), surcos: '1'}];
+          }
+        }
       }
     }
     updParam(); updParts();
@@ -5634,8 +5975,50 @@ function toastWithPhoto(msg, thumbB64){
 }
 
 var _asTimer=null, _asTimer2=null;
+
+// V82 (port V20_65): banner ROJO de alerta persistente cuando hay datos sin guardar.
+// Se muestra si autoSave intenta correr pero el guard lo bloquea Y hay workers en memoria.
+// Tras V20_64 esto NO debería pasar (basta 1 worker para activar), pero como defensa por si futuras versiones rompen el flag.
+function _showSaveAlertBanner(){
+  if(typeof _readOnlyMode!=='undefined' && _readOnlyMode) return; // no spam en lectura
+  if(gEl('saveAlertBanner')) return; // ya está mostrado
+  var b = document.createElement('div');
+  b.id = 'saveAlertBanner';
+  b.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:99999;background:#c0392b;color:#fff;padding:12px 16px;display:flex;align-items:center;gap:12px;justify-content:space-between;box-shadow:0 4px 12px rgba(0,0,0,.4);font-size:14px;font-weight:700;animation:pulse 1.5s infinite';
+  b.innerHTML = '<div style="flex:1">⚠️ <b>TUS DATOS NO SE ESTÁN GUARDANDO</b><br><span style="font-size:11px;font-weight:400">Presiona el botón "💾 GUARDAR AHORA" para asegurar tu captura.</span></div>'
+              + '<button onclick="try{save();_hideSaveAlertBanner();}catch(e){}" style="background:#fff;color:#c0392b;border:none;padding:10px 18px;border-radius:6px;font-weight:900;cursor:pointer;font-size:13px;white-space:nowrap">💾 GUARDAR AHORA</button>';
+  document.body.appendChild(b);
+  try {
+    if(!document.body.dataset.prevPadTop){
+      document.body.dataset.prevPadTop = document.body.style.paddingTop || '';
+    }
+    document.body.style.paddingTop = (parseFloat(getComputedStyle(document.body).paddingTop)||0) + b.offsetHeight + 'px';
+  } catch(e){}
+}
+function _hideSaveAlertBanner(){
+  var b = gEl('saveAlertBanner');
+  if(b && b.parentNode) b.parentNode.removeChild(b);
+  try {
+    if(document.body.dataset.prevPadTop !== undefined){
+      document.body.style.paddingTop = document.body.dataset.prevPadTop;
+      delete document.body.dataset.prevPadTop;
+    }
+  } catch(e){}
+}
+
 function autoSave(){
-  if(!_autoSaveReady()) return; // V81 (port V20_61)
+  // V82 (port V20_65): si guard bloquea Y hay workers en memoria → mostrar banner rojo
+  if(!_autoSaveReady()){
+    try {
+      var hasW = (typeof workers !== 'undefined' && workers && workers.length > 0);
+      if(!hasW && typeof _ranchos !== 'undefined' && _ranchos){
+        for(var ri=0;ri<_ranchos.length;ri++) if(_ranchos[ri] && _ranchos[ri].workers && _ranchos[ri].workers.length>0){ hasW=true; break; }
+      }
+      if(hasW && !window._autoSaveActive) _showSaveAlertBanner();
+    } catch(e){}
+    return;
+  }
+  _hideSaveAlertBanner();
   if(_asTimer)clearTimeout(_asTimer);
   _asTimer=setTimeout(function(){ saveQuiet(); },800);
 }
@@ -6097,8 +6480,10 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
           grandAcres_+=parseFloat(surcos_[si_].totalAcres)||0;
         }
       }
-      var anchoCama_=parseFloat(g_.vars.anchoCama)||0;
-      var _ancEff=isPennrose5Act(gact_)?PENNROSE_ANCHO:anchoCama_;
+      // V85 (port V20_76): factor de col P primero, fallback a g.vars.anchoCama
+      var _factorPdf = getActFactorAcres(gact_);
+      var anchoCama_ = _factorPdf || parseFloat(g_.vars.anchoCama) || 0;
+      var _ancEff=isPennrose5Act(gact_)?(getActAncho(gact_)||0):anchoCama_; // V84 (port V20_73)
       var puertas_=(grandAcres_>0&&_ancEff>0)?grandAcres_*_ancEff:grandPies_/100;
       if(!puertas_) continue;
       var ppx_=puertas_/np_;
@@ -6283,9 +6668,30 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     }
     if(!unitPr&&ACTS[col4.ai]&&ACTS[col4.ai].p) unitPr='$'+parseFloat(ACTS[col4.ai].p).toFixed(2);
     var _csp=_NS>1?' colspan="'+_NS+'"':'';
+    // V90 (port V20_81): detectar VarDoor con factor (col P) → emitir TOTAL como "X.XXXX acres / X puertas"
+    var _actC81 = null;
+    if(col4.ai>=0 && col4.ai<ACTS.length) _actC81 = ACTS[col4.ai];
+    if(!_actC81 && col4.esName){
+      for(var _i81=0;_i81<ACTS.length;_i81++){ if(ACTS[_i81].es===col4.esName){ _actC81=ACTS[_i81]; break; } }
+    }
+    var _isVD81 = !!(_actC81 && (_actC81.variable||'').toLowerCase()==='vardoor');
+    var _factVD81 = _isVD81 ? getActFactorAcres(_actC81) : null;
+    if(_isVD81 && _factVD81 && tot>0){
+      var _ac81 = tot/_factVD81;
+      totLbl = '<span style="font-size:9px;color:#0f6e56;display:block">'+_ac81.toFixed(4)+' acres</span>'
+             + '<span style="font-size:11px">'+smartNum(tot)+' puertas</span>';
+    }
     // V20_08: TOTAL por sub-columna si es Hora multi-shift.
     // V53 (port V20_26): TOTAL no-Hora también por sub-columna.
-    if(col4.hr && _NS>1){
+    if(_isVD81 && _factVD81 && _NS>1){
+      // V90 (port V20_81): VarDoor multi-shift → 1 celda colspan=N
+      var _vdAcRow = (tot>0 ? (tot/_factVD81).toFixed(4)+' acres' : '');
+      var _vdPzRow = (tot>0 ? smartNum(tot)+' puertas' : '');
+      trTotal+='<td colspan="'+_NS+'" style="text-align:center;border:1px solid #000;border-top:3px solid #1a2b8c;color:#1a2b8c;font-weight:700;line-height:1.5">'
+        + (_vdAcRow?'<span style="font-size:9px;color:#0f6e56;display:block">'+_vdAcRow+'</span>':'')
+        + (_vdPzRow?'<span style="font-size:11px">'+_vdPzRow+'</span>':'')
+        + '</td>';
+    } else if(col4.hr && _NS>1){
       for(var sst_=0;sst_<_NS;sst_++){
         var _tarK=col4.shifts[sst_].key;
         var _subTot=0;
@@ -7241,7 +7647,8 @@ function sendToSheets(customFrameId) {
       // V40 (port V20_13): Pennrose5Act → pennAcres directo
       if(isPennrose5Act(act)){
         var _acP=parseFloat(g.vars.pennAcres)||0;
-        qtyPerPerson = (_acP*PENNROSE_ANCHO)/np;
+        var _ancCalc=getActAncho(act); // V84 (port V20_73)
+        qtyPerPerson = (_ancCalc && np) ? (_acP*_ancCalc)/np : 0;
       } else {
         qtyPerPerson = (metros / 100) / np;
       }
@@ -7338,31 +7745,70 @@ function sendToSheets(customFrameId) {
 // grpActs = [{gai: índice en GRUPAL_ACTS, participantes:[wid,...], vars:{}}]
 // ✅ grpActs declarada en línea 1077 junto con workers/wid — NO redeclarar aquí
 
-// V37 (port V20_10): constante especial 87.2 para 5 actividades exactas solo en rancho Pennrose.
-// TODO: migrar a columna `constante` del Google Sheet (ver memoria project_mejora_constante_sheet.md).
-var PENNROSE_ACTS_87_2 = [
-  "Sacar plastico",
-  "Levantar Plastico",
-  "Levantar y sacar plastico",
-  "Quitar y levantar estaca",
-  "Quitar hilo"
-];
-var PENNROSE_ANCHO = 87.2;
-function isPennrose5Act(actOrName){
-  var rancho = (typeof gVal==='function'?(gVal('rancho')||''):'').trim();
-  var rNorm = rancho.split(/\s+/)[0].toLowerCase();
-  if(rNorm!=='pennrose') return false;
-  var esName='';
-  if(typeof actOrName==='string') esName=actOrName;
-  else if(actOrName) esName = actOrName.es || actOrName.esName || '';
-  esName=(esName||'').trim().toLowerCase();
-  for(var _ci=0;_ci<PENNROSE_ACTS_87_2.length;_ci++){
-    if(PENNROSE_ACTS_87_2[_ci].toLowerCase()===esName) return true;
+var PENNROSE_ANCHO = 87.2; // V84 (port V20_73): fallback offline cuando act.I no disponible
+
+// V84 (port V20_71 Fase B): helpers para refactor data-driven Pennrose.
+function _resolveActByName(actOrName){
+  if(!actOrName) return null;
+  if(typeof actOrName === 'object') return actOrName;
+  var n = String(actOrName).toLowerCase().trim();
+  var pool = (typeof ALL_ACTS!=='undefined' && ALL_ACTS) ? ALL_ACTS : (typeof ACTS!=='undefined'?ACTS:[]);
+  for(var _ri=0;_ri<pool.length;_ri++){
+    if((pool[_ri].es||'').toLowerCase().trim()===n) return pool[_ri];
   }
-  return false;
+  return null;
 }
-// V39 (port V20_12): Pennrose5Act usa acres × PENNROSE_ANCHO. Legacy retorna 100.
-function getActConstante(actOrName){ return 100; }
+function getActAncho(actOrName){
+  var act = _resolveActByName(actOrName);
+  if(!act) return null; // V84 (port V20_73): retorna null en vez de hardcoded
+  var multI = parseFloat(String(act.I||'').replace(',','.'));
+  if(!isNaN(multI) && multI > 0) return multI;
+  return null;
+}
+
+// V85 (port V20_76): helper data-driven para FactorAcres (col P del MASTER).
+// Lee multiplicador para convertir puertas→acres dinámicamente. Sin fallback hardcoded.
+// null si MASTER no tiene col P para esa actividad.
+function getActFactorAcres(actOrName){
+  var act = _resolveActByName(actOrName);
+  if(!act) return null;
+  var p = parseFloat(String(act.P||'').replace(',','.'));
+  return (!isNaN(p) && p>0) ? p : null;
+}
+
+// V84 (port V20_72/73 Fase C): isPennrose5Act 100% data-driven sin lista hardcoded.
+function isPennrose5Act(actOrName){
+  var act = _resolveActByName(actOrName);
+  var farm = '';
+  if(act){
+    farm = (act.farm||act.rancho||'').toLowerCase().trim();
+  }
+  if(!farm){
+    var rancho = (typeof gVal==='function'?(gVal('rancho')||''):'').trim();
+    farm = rancho.toLowerCase();
+  }
+  farm = farm.split(/\s+/)[0]; // "Pennrose Farms" → "pennrose"
+  if(farm !== 'pennrose') return false;
+  if(!act) return false;
+  var multI = parseFloat(String(act.I||'').replace(',','.'));
+  return !isNaN(multI) && multI > 0;
+}
+
+// V84 (port V20_70 Fase A): getActConstante() ELIMINADA (era función muerta — return 100, sin callers reales).
+// V84 (port V20_72 Fase C): PENNROSE_ACTS_87_2 ELIMINADA (lista hardcoded reemplazada por col I del MASTER).
+
+// V84 (port V20_22/V20_73): Ancho de cama default para convertir piezas → acres en el invoice.
+// Pennrose (data-driven via col I) usa el valor del MASTER; otros ranchos usan 5.67 (default genérico).
+function getAnchoCamaDefault(act){
+  // V85 (port V20_76): priorizar col P (FactorAcres) si existe.
+  var fact = getActFactorAcres(act);
+  if(fact) return fact;
+  if(isPennrose5Act(act)){
+    var ancho = getActAncho(act);
+    return ancho || 5.67; // fallback genérico si col I vacía
+  }
+  return 5.67;
+}
 
 // Detecta el tipo de cálculo de una actividad grupal
 // 'puertas' = acres × ancho × precio ÷ personas
@@ -7371,6 +7817,9 @@ function getActConstante(actOrName){ return 100; }
 // Aplica a: Amarre de hilo, Colocación de estaca, Colocación de plástico (y variantes en inglés)
 function isActPuertas(act){
   if(!act) return false;
+  // V90 (port V20_81): si la variable del MASTER es VarDoor → automáticamente puertas (acres).
+  // Cubre actividades VarDoor que no contienen keywords ("hilo", "estaca", etc.) en el nombre.
+  if((act.variable||'').toLowerCase()==='vardoor') return true;
   if(act.calc==='puertas') return true;
   var es = (act.es||'').toLowerCase();
   var en = (act.en||'').toLowerCase();
@@ -7405,13 +7854,23 @@ function grpCalcType(act){
 function showGrpPicker(){
   var list = gEl('grpPickList'); if(!list) return;
   list.innerHTML = '';
-  if(!GRUPAL_ACTS.length){
+  // V87 (port V20_78): defensa adicional — filtrar SIEMPRE por rancho activo
+  var _ranchoActivo = (typeof gVal==='function' ? (gVal('rancho')||'') : '').toLowerCase();
+  var _gListVisible = GRUPAL_ACTS;
+  if(_ranchoActivo){
+    _gListVisible = GRUPAL_ACTS.filter(function(a){
+      return !a.farm || (a.farm||'').toLowerCase() === _ranchoActivo;
+    });
+  }
+  if(!_gListVisible.length){
     list.innerHTML = '<div style="color:var(--gr);font-size:13px;text-align:center;padding:10px">No hay actividades grupales para este rancho</div>';
     gEl('grpPickOv').classList.add('on'); return;
   }
   var icons = {puertas:'🪝', cajas:'📦', hora:'⏰', pieza:'🔢'};
-  for(var i=0;i<GRUPAL_ACTS.length;i++){
-    var act = GRUPAL_ACTS[i];
+  for(var i=0;i<_gListVisible.length;i++){
+    var act = _gListVisible[i];
+    var origIdx = GRUPAL_ACTS.indexOf(act);
+    if(origIdx < 0) continue;
     var ct  = grpCalcType(act);
     var desc = ct==='puertas' ? 'Acres × ancho ÷ personas × $'+act.p
              : ct==='cajas'   ? 'Total ÷ personas × $'+act.p+'/'+act.tipo
@@ -7421,7 +7880,7 @@ function showGrpPicker(){
     btn.style.cssText='background:var(--ap);border:1.5px solid var(--a);border-radius:10px;padding:14px;text-align:left;cursor:pointer;font-family:\'DM Sans\',sans-serif;width:100%';
     btn.innerHTML='<div style="font-size:15px;font-weight:700;color:var(--dk)">'+(icons[ct]||'🌿')+' '+esc(act.es)+'</div>'
       +'<div style="font-size:11px;color:var(--gr);margin-top:3px">'+esc(desc)+'</div>'; // V9
-    (function(idx){ btn.addEventListener('click',function(){ addGrpAct(idx); }); })(i);
+    (function(idx){ btn.addEventListener('click',function(){ addGrpAct(idx); }); })(origIdx);
     list.appendChild(btn);
   }
   gEl('grpPickOv').classList.add('on');
@@ -7536,7 +7995,8 @@ function renderGrpActs(){
     if(ct === 'puertas' && isPennrose5Act(act)){
       var _pA = g.vars.pennAcres || '';
       var _pAN = parseFloat(_pA) || 0;
-      var _pPue = _pAN * PENNROSE_ANCHO;
+      var _pAnchoUI = getActAncho(act) || PENNROSE_ANCHO; // V84 (port V20_73)
+      var _pPue = _pAN * _pAnchoUI;
       varsHtml = '<div style="margin-bottom:10px">'
         + '<label style="font-size:10px;font-weight:700;color:var(--gr)">TOTAL ACRES</label>'
         + '<input type="text" inputmode="decimal" value="'+_pA+'" placeholder="Ej: 5.26"'
@@ -7544,9 +8004,9 @@ function renderGrpActs(){
         + ' style="font-size:18px;font-weight:700;padding:10px;width:100%;margin-top:3px;border:2px solid var(--b);border-radius:8px;color:var(--b);font-family:\'DM Sans\',sans-serif">'
         + '</div>'
         + '<div style="background:#eef;border-radius:6px;padding:6px 10px;margin-bottom:6px;font-size:11px;color:#334;display:flex;justify-content:space-between">'
-        + '<span>Ancho de cama (Pennrose)</span><b>'+PENNROSE_ANCHO+' (fijo)</b></div>'
+        + '<span>Ancho de cama (Pennrose)</span><b>'+_pAnchoUI+' (col I)</b></div>'
         + (_pAN>0?'<div style="background:var(--dk);border-radius:7px;padding:9px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'
-          + '<span style="font-size:12px;font-weight:600;color:rgba(255,255,255,.7)">🚪 Puertas totales (acres×'+PENNROSE_ANCHO+')</span>'
+          + '<span style="font-size:12px;font-weight:600;color:rgba(255,255,255,.7)">🚪 Puertas totales (acres×'+_pAnchoUI+')</span>'
           + '<b style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:var(--a)">'+_pPue.toFixed(2)+'</b></div>':'')
         + '<div class="r2" style="margin-bottom:8px">'
         + '<div><label style="font-size:10px">🟢 Entrada</label>'
@@ -7580,9 +8040,9 @@ function renderGrpActs(){
           +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:7px">'
           +'<div style="display:flex;align-items:center;gap:6px">'
           +'<span style="font-size:10px;font-weight:700;color:var(--gr);text-transform:uppercase">Bloque</span>'
-          +'<input type="text" maxlength="5" value="'+lbl+'" placeholder="A1"'
+          +'<input type="text" maxlength="20" value="'+esc(lbl)+'" placeholder="Bloque '+(fi+1)+'"'
           +' data-gi="'+gi+'" data-fi="'+fi+'" data-sv="lbl" oninput="setSurcoVar(this)"'
-          +' style="width:52px;font-size:13px;font-weight:700;padding:4px 7px;text-transform:uppercase;text-align:center;border:1.5px solid var(--bd);border-radius:6px;background:#fff;font-family:\'DM Sans\',sans-serif">'
+          +' style="flex:1;min-width:90px;font-size:13px;font-weight:700;padding:4px 7px;text-align:left;border:1.5px solid var(--bd);border-radius:6px;background:#fff;font-family:\'DM Sans\',sans-serif">'
           +'</div>'
           +(g.vars.surcos.length>1
             ?'<button data-gi="'+gi+'" data-fi="'+fi+'" onclick="askDelSurcoFila(parseInt(this.dataset.gi),parseInt(this.dataset.fi))"'
@@ -7623,7 +8083,7 @@ function renderGrpActs(){
       }
       // Omega: puertas = acres × anchoCama cuando hay ambos, fallback pies/100
       var anchoCamaTot=parseFloat(g.vars.anchoCama)||0;
-      var _ancTot=isPennrose5Act(act)?PENNROSE_ANCHO:anchoCamaTot;
+      var _ancTot=isPennrose5Act(act)?(getActAncho(act)||0):anchoCamaTot; // V84 (port V20_73)
       var puertasTot=(grandAcres>0&&_ancTot>0)?grandAcres*_ancTot:grandPies/100;
       var puertasFormula=(grandAcres>0&&anchoCamaTot>0)?'(acres×ancho)':'(÷100)';
 
@@ -7652,10 +8112,17 @@ function renderGrpActs(){
         +' data-gi="'+gi+'" data-v="fin" onchange="setGrpVar(this)"'
         +' style="font-size:16px;padding:9px 10px;width:100%"></div>'
         +'</div>'
-        +'<div style="margin-bottom:6px"><label style="font-size:10px">🌱 Ancho de cama (para pago — ej: 5.67 DeWitt, 83 Mecca)</label>'
-        +'<input type="text" inputmode="decimal" value="'+anchoCama+'" placeholder="ej: 5.67"'
-        +' data-gi="'+gi+'" data-v="anchoCama" oninput="setGrpVar(this)"'
-        +' style="font-size:16px;padding:9px 10px;width:100%"></div>'
+        // V85 (port V20_76): si col P del MASTER tiene FactorAcres → ocultar input + mostrar readonly
+        + (function(){
+            var _fact = getActFactorAcres(act);
+            if(_fact){
+              return '<div style="background:#eef;border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:11px;color:#334;display:flex;justify-content:space-between"><span>🌱 Factor de acres</span><b>'+_fact+' (de MASTER)</b></div>';
+            }
+            return '<div style="margin-bottom:6px"><label style="font-size:10px">🌱 Ancho de cama (para pago — ej: 5.67 DeWitt, 83 Mecca)</label>'
+              +'<input type="text" inputmode="decimal" value="'+anchoCama+'" placeholder="ej: 5.67"'
+              +' data-gi="'+gi+'" data-v="anchoCama" oninput="setGrpVar(this)"'
+              +' style="font-size:16px;padding:9px 10px;width:100%"></div>';
+          })()
         +'<div style="margin-bottom:6px"><label style="font-size:10px">📍 Labor / Finca (aparece en el PDF)</label>'
         +_fincaGrpHtml(gi, g.vars.finca||'', 'ej: El Columpio, Block 3...')
         +'</div>';
@@ -7755,8 +8222,10 @@ function updGrpPreview(gi){
         grandAcres+=parseFloat(surcos[si].totalAcres)||0;
       }
     }
-    var anchoCama=parseFloat(g.vars.anchoCama)||0;
-    var _ancPv=isPennrose5Act(act)?PENNROSE_ANCHO:anchoCama;
+    // V85 (port V20_76): factor de col P primero, fallback a g.vars.anchoCama
+    var _factorPv = getActFactorAcres(act);
+    var anchoCama = _factorPv || parseFloat(g.vars.anchoCama) || 0;
+    var _ancPv=isPennrose5Act(act)?(getActAncho(act)||0):anchoCama; // V84 (port V20_73)
     var puertas=(grandAcres>0&&_ancPv>0)?grandAcres*_ancPv:grandPies/100;
     if(puertas&&np){
       var ppx=puertas/np;
@@ -7823,13 +8292,12 @@ function setGrpVar(inp){
 function isMeccaRanch(){
   return (gVal('rancho')||'').toLowerCase().indexOf('mecca')>=0;
 }
+// V85 (port V20_76): eliminado caso especial Mecca hardcoded — todo data-driven via col P o anchoCama param.
 function piesToAcresWithAC(pies, anchoCama){
-  if(isMeccaRanch()) return (pies*5.26)/43560;
   if(anchoCama && parseFloat(anchoCama)>0) return (pies/100)/parseFloat(anchoCama);
   return 0;
 }
 function acresToPiesWithAC(acres, anchoCama){
-  if(isMeccaRanch()) return (acres*43560)/5.26;
   if(anchoCama && parseFloat(anchoCama)>0) return acres*parseFloat(anchoCama)*100;
   return 0;
 }
@@ -7845,7 +8313,10 @@ function onSurcoSmart(inp){
   if(!row) return;
   var val = inp.value.trim();
   row[sf] = val;
-  var anchoCama = grpActs[gi].vars.anchoCama||'';
+  // V85 (port V20_76): leer factor de col P primero, fallback a g.vars.anchoCama
+  var _gactSm = (typeof GRUPAL_ACTS!=='undefined' && grpActs[gi]) ? GRUPAL_ACTS[grpActs[gi].gai] : null;
+  var _factSm = _gactSm ? getActFactorAcres(_gactSm) : null;
+  var anchoCama = _factSm || grpActs[gi].vars.anchoCama || '';
 
   if(sf==='largo'||sf==='num'){
     // Modo surco: largo×num → auto-fill totalPies y totalAcres
@@ -8000,12 +8471,17 @@ function calcGrpAct(gi){
         grandAcres+=parseFloat(surcos[si].totalAcres)||0;
       }
     }
-    var anchoCama=parseFloat(g.vars.anchoCama)||0;
+    // V85 (port V20_76): leer factor de col P del MASTER primero, fallback a g.vars.anchoCama
+    var _factorMaster = getActFactorAcres(act);
+    var anchoCama = _factorMaster || parseFloat(g.vars.anchoCama) || 0;
     var puertas=0;
     var formulaStr='';
     if(isPennrose5Act(act) && grandAcres>0){
-      puertas=grandAcres*PENNROSE_ANCHO;
-      formulaStr=grandAcres.toFixed(3)+' acres × '+PENNROSE_ANCHO+' = <strong>'+puertas.toFixed(2)+' puertas</strong>';
+      var _ancCG=getActAncho(act); // V84 (port V20_73)
+      if(_ancCG){
+        puertas=grandAcres*_ancCG;
+        formulaStr=grandAcres.toFixed(3)+' acres × '+_ancCG+' = <strong>'+puertas.toFixed(2)+' puertas</strong>';
+      }
     } else if(grandAcres>0 && anchoCama>0){
       puertas=grandAcres*anchoCama;
       formulaStr=grandAcres.toFixed(3)+' acres × '+anchoCama+' = <strong>'+puertas.toFixed(2)+' puertas</strong>';
@@ -8070,8 +8546,10 @@ function grpPayDetail(wid_){
           grandAcres+=parseFloat(surcos[si].totalAcres)||0;
         }
       }
-      var anchoCama=parseFloat(g.vars.anchoCama)||0;
-      var _ancGpd=isPennrose5Act(act)?PENNROSE_ANCHO:anchoCama;
+      // V85 (port V20_76): factor de col P primero, fallback a g.vars.anchoCama
+      var _factorGpd = getActFactorAcres(act);
+      var anchoCama = _factorGpd || parseFloat(g.vars.anchoCama) || 0;
+      var _ancGpd=isPennrose5Act(act)?(getActAncho(act)||0):anchoCama; // V84 (port V20_73)
       var puertas=(grandAcres>0&&_ancGpd>0)?grandAcres*_ancGpd:grandPies/100;
       if(puertas){
         var ppx=puertas/np;
@@ -8527,8 +9005,11 @@ window.addEventListener('DOMContentLoaded', function(){
   if(htop){
     var pill=document.createElement('div');
     pill.id='savepill';
-    pill.style.cssText='background:rgba(255,255,255,.12);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;color:rgba(255,255,255,.5);margin-left:5px;white-space:nowrap';
+    // V82 (port V20_65): pill clickeable como rescate manual si auto-save quedó pausado
+    pill.style.cssText='background:rgba(255,255,255,.12);border-radius:20px;padding:3px 10px;font-size:11px;font-weight:600;color:rgba(255,255,255,.5);margin-left:5px;white-space:nowrap;cursor:pointer;user-select:none';
     pill.textContent='⏸️ Pausa';
+    pill.title='Click para guardar manualmente';
+    pill.addEventListener('click', function(){ try { save(); } catch(e){ console.warn('Pill click save error:', e); } });
     var dpill=htop.querySelector('.dpill');
     if(dpill&&dpill.parentNode){ dpill.parentNode.insertBefore(pill,dpill.nextSibling); }
     else { htop.appendChild(pill); }
@@ -8606,7 +9087,7 @@ function refreshDataBackground(){
       for(var i=0;i<data.tasks.length;i++){
         var t=data.tasks[i]; var tipoNorm=tipoMap[t.tipo]||'Hora';
         var modo=(t.modo||'Individual').trim();
-        ALL_ACTS.push({farm:t.farm,es:t.es,en:t.en||t.es,tipo:tipoNorm,payType:t.tipo||'',p:t.rate||16.23,hr:tipoNorm==='Hora',modo:modo});
+        ALL_ACTS.push({farm:t.farm,es:t.es,en:t.en||t.es,tipo:tipoNorm,payType:t.tipo||'',p:t.rate||16.23,hr:tipoNorm==='Hora',modo:modo,variable:t.variable||'',H:t.H,I:t.I,J:t.J,K:t.K,L:t.L,M:t.M,N:t.N,O:t.O,P:t.P}); // V84 (port V20_71/V20_75)
       }
       saveCache(ALL_WORKERS, ALL_ACTS, LIDERES);
       // Delta2: si estábamos en FALLBACK y recuperamos datos, notificar
@@ -8939,6 +9420,195 @@ function archDismissYearBanner(){
   try { localStorage.setItem('eb_archAcked_'+nowYear,'1'); } catch(e){}
   var b = gEl('archYearChangeBanner');
   if(b && b.parentNode) b.parentNode.removeChild(b);
+}
+
+// V84 (port V20_74/V20_75): DIAGNÓSTICO RECOVERY — escanea localStorage completo para encontrar
+// días huérfanos, formatos viejos, datos escondidos. Genera JSON descargable
+// para que el surquero lo mande a Serafín por WhatsApp. Triple fallback (V20_75).
+function runRecoveryDiagnostic(){
+  var ov = gEl('recoveryOv');
+  var result = gEl('recoveryResult');
+  var actions = gEl('recoveryActions');
+  if(!ov || !result || !actions) return;
+
+  ov.style.display='flex';
+  result.innerHTML = '<div style="text-align:center;padding:20px"><div style="font-size:32px">⏳</div><p>Escaneando memoria del teléfono...</p></div>';
+  actions.innerHTML = '';
+
+  setTimeout(function(){
+    try {
+      var found = []; var totalKB = 0;
+      for(var i=0;i<localStorage.length;i++){
+        var k = localStorage.key(i);
+        if(!k || (!k.startsWith('pr9') && !k.startsWith('eb_'))) continue;
+        var raw = localStorage.getItem(k)||'';
+        var kb = Math.round(raw.length/1024*10)/10;
+        totalKB += kb;
+        var fecha='?', surquero='?', workers=0, tipo='otro';
+        try {
+          var p = JSON.parse(raw);
+          if(p){
+            if(p.v && p.v.fecha) fecha = p.v.fecha;
+            else if(p.fecha) fecha = p.fecha;
+            if(p.v && p.v.surquero) surquero = p.v.surquero;
+            else if(p.surquero) surquero = p.surquero;
+            if(p.w && p.w.length) workers = p.w.length;
+            else if(p.workers && p.workers.length) workers = p.workers.length;
+            else if(p._ranchos && p._ranchos[0] && p._ranchos[0].workers) workers = p._ranchos[0].workers.length;
+          }
+        } catch(e){}
+        var mHist = k.match(/_hist_(\d{4}-\d{2}-\d{2})$/);
+        if(mHist){ fecha = mHist[1]; tipo = k.startsWith('pr9_u_') ? 'historial' : 'historial-legacy'; }
+        else if(/^pr9_u_[^_]+$/.test(k)) tipo='estado-actual';
+        else if(k==='pr9') tipo='estado-legacy';
+        else if(k.indexOf('eb_semanal_v1')===0) tipo='semanal';
+        else if(k==='eb_offline_queue') tipo='cola-envio';
+        else if(k.startsWith('eb_archAcked_')||k==='eb_appdata_v3'||k==='eb_fincas_cache'||k==='eb_facethumbs_v1'||k==='eb_device_id'||k==='eb_last_send_ts') tipo='cache';
+        var huerfano = /pr9_u_.*%20|pr9_u_$|pr9_u__/.test(k);
+        if(huerfano) tipo='huerfano';
+        found.push({key:k, fecha:fecha, surquero:surquero, workers:workers, kb:kb, tipo:tipo, huerfano:huerfano});
+      }
+      // Ordenar por fecha desc
+      found.sort(function(a,b){
+        if(a.fecha==='?' && b.fecha!=='?') return 1;
+        if(b.fecha==='?' && a.fecha!=='?') return -1;
+        return (b.fecha||'').localeCompare(a.fecha||'');
+      });
+
+      // Contar por tipo
+      var byTipo = {};
+      found.forEach(function(f){ byTipo[f.tipo] = (byTipo[f.tipo]||0)+1; });
+      var diasConDatos = found.filter(function(f){ return f.tipo==='historial'||f.tipo==='historial-legacy'; });
+      var huerfanos = found.filter(function(f){ return f.huerfano; });
+
+      // Render resumen
+      var html = '<div style="background:#f0f9f0;border:2px solid #27ae60;border-radius:8px;padding:14px;margin-bottom:12px">'
+              + '<div style="font-size:32px;text-align:center">📦</div>'
+              + '<p style="margin:6px 0;text-align:center;font-size:14px;font-weight:700">'
+              + 'Encontré <b style="color:#c0392b">'+found.length+'</b> archivos en tu teléfono ('+totalKB.toFixed(1)+' KB)</p>'
+              + '<ul style="margin:8px 0;padding-left:20px;font-size:13px;line-height:1.6">'
+              + '<li>📅 Días con datos: <b>'+diasConDatos.length+'</b></li>'
+              + (huerfanos.length ? '<li>⚠️ Datos sospechosos (huérfanos): <b style="color:#c0392b">'+huerfanos.length+'</b></li>' : '')
+              + '<li>💾 Cache de la app: <b>'+(byTipo['cache']||0)+'</b></li>'
+              + '<li>📤 Cola pendiente: <b>'+(byTipo['cola-envio']||0)+'</b></li>'
+              + '</ul></div>';
+
+      if(diasConDatos.length){
+        html += '<div style="background:#fff;border:1px solid #ccc;border-radius:8px;padding:10px;margin-bottom:12px;max-height:300px;overflow-y:auto">'
+              + '<div style="font-weight:700;color:#1a3a5c;margin-bottom:6px;font-size:13px">📋 Días encontrados:</div>';
+        diasConDatos.forEach(function(d){
+          var icon = d.tipo==='historial-legacy' ? '⚠️' : '✅';
+          var color = d.tipo==='historial-legacy' ? '#e67e22' : '#27ae60';
+          html += '<div style="font-size:12px;padding:4px 0;border-bottom:1px solid #eee;color:'+color+'">'
+                + icon+' <b>'+d.fecha+'</b> | '+d.workers+' trabajadores | '+d.kb+' KB</div>';
+        });
+        html += '</div>';
+      } else {
+        html += '<div style="background:#fff5f5;border:2px solid #c0392b;border-radius:8px;padding:14px;text-align:center">'
+              + '<div style="font-size:32px">😔</div>'
+              + '<p style="margin:6px 0;font-weight:700;color:#c0392b">No encontré días con datos en este teléfono.</p>'
+              + '<p style="font-size:11px;color:#3a2c00">Los datos pueden haberse perdido o ser de otro teléfono.</p>'
+              + '</div>';
+      }
+      result.innerHTML = html;
+
+      // Generar JSON con TODO
+      var bundle = {
+        timestamp: new Date().toISOString(),
+        appVersion: window.APP_VERSION||'?',
+        device: navigator.userAgent,
+        currentUser: (window.currentUser && window.currentUser.name) || 'unknown',
+        summary: { totalFiles: found.length, totalKB: totalKB, daysWithData: diasConDatos.length, orphans: huerfanos.length },
+        files: found,
+        fullData: {}
+      };
+      found.forEach(function(f){ bundle.fullData[f.key] = localStorage.getItem(f.key); });
+      var json = JSON.stringify(bundle, null, 2);
+      var blob = new Blob([json], {type:'application/json'});
+      var url = URL.createObjectURL(blob);
+      var fileName = 'eberry_recovery_'+(bundle.currentUser.replace(/[^a-z0-9]/gi,'_').toLowerCase()||'user')+'_'+Date.now()+'.json';
+
+      // Botón descargar (siempre funciona)
+      var btnDownload = document.createElement('a');
+      btnDownload.href = url;
+      btnDownload.download = fileName;
+      btnDownload.textContent = '📥 Descargar archivo';
+      btnDownload.className = 'btn';
+      btnDownload.style.cssText = 'background:#27ae60;color:#fff;width:100%;font-weight:700;font-size:15px;padding:14px;text-align:center;text-decoration:none;border-radius:8px';
+      actions.appendChild(btnDownload);
+
+      // V20_75: Botón compartir con TRIPLE fallback robusto.
+      var btnShare = document.createElement('button');
+      btnShare.textContent = '📤 Compartir / Mandar por WhatsApp';
+      btnShare.className = 'btn';
+      btnShare.style.cssText = 'background:#25d366;color:#fff;width:100%;font-weight:700;font-size:15px;padding:14px';
+      btnShare.onclick = function(){
+        // 1) Descargar archivo PRIMERO (garantizado)
+        try {
+          var dlLink = document.createElement('a');
+          dlLink.href = url;
+          dlLink.download = fileName;
+          document.body.appendChild(dlLink);
+          dlLink.click();
+          document.body.removeChild(dlLink);
+        } catch(eDl){ console.warn('Auto-download fallo:', eDl); }
+
+        // 2) Intentar Web Share API con archivo
+        var fallbackToWaMe = function(){
+          var msgWA = '🔍 Hola Serafín, te mando mi archivo de diagnóstico eBerry.\n\n'
+                    + '📅 Días encontrados: ' + diasConDatos.length + '\n'
+                    + '📦 Archivos totales: ' + found.length + '\n'
+                    + '👤 Usuario: ' + bundle.currentUser + '\n\n'
+                    + '⚠️ El archivo .json ya se descargó a mi teléfono.\n'
+                    + 'Voy a adjuntarlo en el siguiente mensaje.\n\n'
+                    + 'Archivo: ' + fileName;
+          var waUrl = 'https://wa.me/?text=' + encodeURIComponent(msgWA);
+          try { window.open(waUrl, '_blank'); }
+          catch(e){
+            alert('📥 El archivo se descargó.\n\n📤 Abre WhatsApp manualmente, busca el chat de Serafín, toca el clip 📎 y adjunta el archivo descargado:\n\n' + fileName);
+          }
+        };
+
+        if(navigator.share){
+          try {
+            var file = new File([json], fileName, {type:'application/json'});
+            var canShareFile = navigator.canShare && navigator.canShare({files:[file]});
+            if(canShareFile){
+              navigator.share({
+                title: 'Recovery eBerry',
+                text: 'Diagnóstico de mi teléfono — ' + diasConDatos.length + ' días encontrados',
+                files: [file]
+              }).then(function(){
+                console.log('Share con archivo OK');
+              }).catch(function(err){
+                console.warn('Share con archivo falló:', err);
+                fallbackToWaMe();
+              });
+            } else {
+              fallbackToWaMe();
+            }
+          } catch(eShare){
+            console.warn('Share API error:', eShare);
+            fallbackToWaMe();
+          }
+        } else {
+          fallbackToWaMe();
+        }
+      };
+      actions.appendChild(btnShare);
+
+      // Mensaje informativo abajo de los botones
+      var info = document.createElement('p');
+      info.style.cssText = 'margin:10px 0 0;font-size:11px;color:#3a2c00;text-align:center;line-height:1.5';
+      info.innerHTML = '💡 <b>Si WhatsApp no se abre solo:</b> el archivo ya se descargó.<br>'
+                     + 'Abre WhatsApp manualmente, busca el chat con Serafín,<br>'
+                     + 'toca el clip 📎 → "Documento" → busca el archivo:<br>'
+                     + '<code style="background:#fff;padding:2px 6px;border-radius:4px;font-size:10px">'+fileName+'</code>';
+      actions.appendChild(info);
+    } catch(e){
+      result.innerHTML = '<div style="color:#c0392b;padding:14px"><b>Error:</b> '+esc(e.message)+'</div>';
+    }
+  }, 200);
 }
 
 // Llamar el check después de login exitoso
