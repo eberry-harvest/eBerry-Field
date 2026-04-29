@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_75';
+window.APP_VERSION = 'V20_76';
 (function(){
   // Toast persistente de "versión antigua detectada" — NO se puede cerrar, obliga a actualizar
   function showVersionMismatch(remoteV){
@@ -3301,6 +3301,20 @@ function _enterReadOnly(payload){
           if(ALL_ACTS[_aai].es === pa.actEs){ _payTypeForAct = ALL_ACTS[_aai].payType || ''; break; }
         }
       }
+      // V20_76: si la actividad es VarDoor (puertas) y trae qty desde Sheets, reconstruir bloques
+      // para que la UI muestre el bloque en modo lectura sin quedar vacío.
+      var _bloquesRO = null;
+      var _isVarDoorRO = false;
+      if(aiIdx>=0 && ACTS[aiIdx] && (ACTS[aiIdx].variable||'').toLowerCase()==='vardoor') _isVarDoorRO = true;
+      if(!_isVarDoorRO){
+        for(var _aaiV=0; _aaiV<ALL_ACTS.length; _aaiV++){
+          if(ALL_ACTS[_aaiV].es === pa.actEs && (ALL_ACTS[_aaiV].variable||'').toLowerCase()==='vardoor'){ _isVarDoorRO=true; break; }
+        }
+      }
+      if(_isVarDoorRO && qty>0){
+        // qty (puertas) × 100 = pies totales. Reconstruir 1 bloque sintético con surcos=1.
+        _bloquesRO = [{pies: String(Math.round(qty*100)), surcos: '1'}];
+      }
       w.acts.push({
         ai: aiIdx, esName: pa.actEs||'', tipo: pa.tipo||'',
         qty: qty, ini: pa.hEnt||'', fin: pa.hSal||'',
@@ -3310,6 +3324,7 @@ function _enterReadOnly(payload){
         showTime: true,
         finca: pa.finca||'',
         shifts: (pa.hEnt||pa.hSal) ? [{ini:pa.hEnt||'', fin:pa.hSal||''}] : [],
+        bloques: _bloquesRO, // V20_76: bloques reconstruidos para VarDoor (null si no aplica)
         pay: payEst,
         _frozen: true, _unitPrice: price, _payType: _payTypeForAct
       });
@@ -4191,24 +4206,31 @@ function mkActRow(wid_,ai,_cont){
   bdg.id='bd'+wid_+'_'+ai; bdg.className=act.hr?'shift-total':'tbadge rf'; bdg.style.display='none';
   div.appendChild(bdg);
   if(!act.hr){
-    // V20_28: si el act tiene motor activo (H-M con label'X'), renderiza cuadritos dinámicos.
-    // QA R4: try/catch. Frontend BUG3: detectar por getRequiredInputs (no por act.variable).
-    var _motorActive=false;
-    try { _motorActive = getRequiredInputs(act).length > 0; } catch(e){ _motorActive=false; }
-    if(_motorActive){
-      renderActInputs(div, act, wid_, ai);
+    // V20_76: VarDoor individual usa sistema de bloques (PIES + SURCOS) — prioridad sobre motor.
+    var _isVarDoor = (act && (act.variable||'').toLowerCase() === 'vardoor');
+    var _isGrupal = (act && (act.modo||'Individual').toLowerCase() === 'grupal');
+    if(_isVarDoor && !_isGrupal){
+      renderIndBloques(div, act, wid_, ai);
     } else {
-      // LEGACY V20_19: cuadrito único para act sin motor
-      var qr=document.createElement('div'); qr.className='qr'; qr.id='qr'+wid_+'_'+ai;
-      var lbl2=act.tipo==='Caja'?'Cajas':act.tipo==='$'?'Monto $':'Piezas';
-      qr.style.gridTemplateColumns='1fr';
-      qr.innerHTML='<div><label style="margin:0;font-size:10px">'+lbl2+'</label><input type="number" id="qty'+wid_+'_'+ai+'" min="0" step="'+(act.tipo==='$'?'0.5':'1')+'" value="'+(a.qty||'')+'" placeholder="0"></div>';
-      div.appendChild(qr);
-      var _wi=wid_,_ai=ai;
-      setTimeout(function(){
-        var q=gEl('qty'+_wi+'_'+_ai);
-        if(q) q.addEventListener('input',function(){ onQty(_wi,_ai,this.value); });
-      },0);
+      // V20_28: si el act tiene motor activo (H-M con label'X'), renderiza cuadritos dinámicos.
+      // QA R4: try/catch. Frontend BUG3: detectar por getRequiredInputs (no por act.variable).
+      var _motorActive=false;
+      try { _motorActive = getRequiredInputs(act).length > 0; } catch(e){ _motorActive=false; }
+      if(_motorActive){
+        renderActInputs(div, act, wid_, ai);
+      } else {
+        // LEGACY V20_19: cuadrito único para act sin motor
+        var qr=document.createElement('div'); qr.className='qr'; qr.id='qr'+wid_+'_'+ai;
+        var lbl2=act.tipo==='Caja'?'Cajas':act.tipo==='$'?'Monto $':'Piezas';
+        qr.style.gridTemplateColumns='1fr';
+        qr.innerHTML='<div><label style="margin:0;font-size:10px">'+lbl2+'</label><input type="number" id="qty'+wid_+'_'+ai+'" min="0" step="'+(act.tipo==='$'?'0.5':'1')+'" value="'+(a.qty||'')+'" placeholder="0"></div>';
+        div.appendChild(qr);
+        var _wi=wid_,_ai=ai;
+        setTimeout(function(){
+          var q=gEl('qty'+_wi+'_'+_ai);
+          if(q) q.addEventListener('input',function(){ onQty(_wi,_ai,this.value); });
+        },0);
+      }
     }
   }
   var sb=document.createElement('div'); sb.className='sub'; sb.id='sb'+wid_+'_'+ai; sb.style.display='none';
@@ -4283,6 +4305,116 @@ function onIndField(inp){
 // V7: sanitizar qty como número antes de guardar
 // V19-FIX2: guardar número, no string
 function onQty(wi,ai,v){ var w=getW(wi); if(!w||!w.acts[ai])return; var n=parseFloat(v); w.acts[ai].qty=isFinite(n)?n:0; recalc(wi,ai); autoSave(); }
+
+// V20_76: sistema de bloques para individuales VarDoor (PIES + SURCOS por bloque)
+// qty (puertas) = Σ(pies×surcos) / 100. acres = qty / getActFactorAcres(act).
+function renderIndBloques(div, act, wid_, ai){
+  var w = getW(wid_); if(!w || !w.acts[ai]) return;
+  var a = w.acts[ai];
+  if(!a.bloques || !a.bloques.length) a.bloques = [{pies:'', surcos:''}];
+  var wrap = document.createElement('div');
+  wrap.className = 'indBloquesWrap'; wrap.id = 'ibw'+wid_+'_'+ai;
+  wrap.style.cssText = 'margin-top:8px';
+  // Render cada bloque
+  for(var bi=0; bi<a.bloques.length; bi++){
+    var b = a.bloques[bi];
+    var card = document.createElement('div');
+    card.style.cssText = 'background:var(--lt);border:1.5px solid var(--bd);border-radius:8px;padding:10px;margin-bottom:8px';
+    card.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+      + '<span style="font-weight:700;font-size:12px;color:var(--g)">📏 Bloque ' + (bi+1) + '</span>'
+      + (a.bloques.length>1 ? '<button class="shift-del" onclick="delIndBloque('+wid_+','+ai+','+bi+')">✕</button>' : '<span></span>')
+      + '</div>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+      + '<div><label style="font-size:10px;font-weight:600">PIES</label>'
+      + '<input type="number" inputmode="decimal" value="'+(b.pies||'')+'" placeholder="0" data-wid="'+wid_+'" data-ai="'+ai+'" data-bi="'+bi+'" data-bf="pies" oninput="onIndBloqueField(this)" style="width:100%;padding:8px;border:1.5px solid var(--bd);border-radius:6px;font-size:14px"></div>'
+      + '<div><label style="font-size:10px;font-weight:600">SURCOS</label>'
+      + '<input type="number" inputmode="decimal" value="'+(b.surcos||'')+'" placeholder="0" data-wid="'+wid_+'" data-ai="'+ai+'" data-bi="'+bi+'" data-bf="surcos" oninput="onIndBloqueField(this)" style="width:100%;padding:8px;border:1.5px solid var(--bd);border-radius:6px;font-size:14px"></div>'
+      + '</div>';
+    wrap.appendChild(card);
+  }
+  // Resumen totales
+  var pies_total=0;
+  for(var _bi=0; _bi<a.bloques.length; _bi++){
+    var _bp = parseFloat(a.bloques[_bi].pies)||0;
+    var _bs = parseFloat(a.bloques[_bi].surcos)||0;
+    pies_total += _bp * _bs;
+  }
+  var puertas = pies_total/100;
+  var fact = getActFactorAcres(act);
+  var acres = (fact && puertas>0) ? puertas/fact : 0;
+  if(pies_total>0){
+    var sum = document.createElement('div');
+    sum.style.cssText = 'background:var(--dk);border-radius:8px;padding:10px 12px;margin-bottom:6px;display:flex;justify-content:space-between;color:#fff;font-size:13px';
+    sum.innerHTML = '<span>🚪 Puertas (pies÷100)</span><b style="font-family:Bebas Neue,sans-serif;font-size:20px">'+puertas.toFixed(2)+'</b>';
+    wrap.appendChild(sum);
+    if(acres>0){
+      var sumA = document.createElement('div');
+      sumA.style.cssText = 'background:var(--bp);border-radius:8px;padding:10px 12px;margin-bottom:6px;display:flex;justify-content:space-between;color:var(--b);font-size:13px';
+      sumA.innerHTML = '<span>🌿 Acres (puertas÷'+fact+')</span><b style="font-family:Bebas Neue,sans-serif;font-size:18px">'+acres.toFixed(4)+'</b>';
+      wrap.appendChild(sumA);
+    }
+  }
+  // Botón agregar bloque
+  var btnAdd = document.createElement('button');
+  btnAdd.className = 'shift-add';
+  btnAdd.textContent = '＋ Agregar bloque';
+  (function(_w,_a){ btnAdd.onclick = function(){ addIndBloque(_w, _a); }; })(wid_, ai);
+  wrap.appendChild(btnAdd);
+  div.appendChild(wrap);
+}
+
+function addIndBloque(wi, ai){
+  var w = getW(wi); if(!w || !w.acts[ai]) return;
+  var a = w.acts[ai];
+  if(!a.bloques) a.bloques = [];
+  a.bloques.push({pies:'', surcos:''});
+  var cont = gEl('ac'+wi); if(!cont) return;
+  cont.innerHTML = '';
+  for(var i=0; i<w.acts.length; i++) mkActRow(wi, i);
+  recalc(wi, ai); autoSave();
+}
+
+function delIndBloque(wi, ai, bi){
+  var w = getW(wi); if(!w || !w.acts[ai]) return;
+  var a = w.acts[ai];
+  if(!a.bloques || a.bloques.length<=1) return; // mínimo 1 bloque
+  // V20_76: confirm antes de borrar (prevenir borrado accidental por toque erróneo)
+  if(!confirm('¿Borrar bloque '+(bi+1)+'?')) return;
+  a.bloques.splice(bi, 1);
+  // Recalcular sumatoria
+  var pies_total = 0;
+  for(var _b=0; _b<a.bloques.length; _b++){
+    var _p = parseFloat(a.bloques[_b].pies)||0;
+    var _s = parseFloat(a.bloques[_b].surcos)||0;
+    pies_total += _p * _s;
+  }
+  a.qty = pies_total / 100;
+  a.indPies = pies_total;
+  var cont = gEl('ac'+wi); if(!cont) return;
+  cont.innerHTML = '';
+  for(var i=0; i<w.acts.length; i++) mkActRow(wi, i);
+  recalc(wi, ai); autoSave();
+}
+
+function onIndBloqueField(inp){
+  var wi = parseInt(inp.dataset.wid); var ai = parseInt(inp.dataset.ai);
+  var bi = parseInt(inp.dataset.bi); var bf = inp.dataset.bf;
+  var w = getW(wi); if(!w || !w.acts[ai]) return;
+  var a = w.acts[ai];
+  if(!a.bloques) a.bloques = [{pies:'', surcos:''}];
+  if(!a.bloques[bi]) a.bloques[bi] = {pies:'', surcos:''};
+  a.bloques[bi][bf] = inp.value.trim();
+  // Recalcular qty
+  var pies_total = 0;
+  for(var _b=0; _b<a.bloques.length; _b++){
+    var _p = parseFloat(a.bloques[_b].pies)||0;
+    var _s = parseFloat(a.bloques[_b].surcos)||0;
+    pies_total += _p * _s;
+  }
+  a.qty = pies_total / 100;
+  a.indPies = pies_total; // backward compat con _serializeState
+  recalc(wi, ai); autoSave();
+}
 // V20_43: validar overlap ANTES de persistir. Si overlap → revertir + mostrar modal + limpiar DOM.
 function onIni(wi,ai,v){
   var w=getW(wi); if(!w||!w.acts[ai])return;
@@ -4332,6 +4464,25 @@ function recalc(wi,ai){
   if(isHourAct(act)){ pay=totalShiftHours(a)*getHRate(w,act); }
   else if(act.tipo==='$'){ pay=parseFloat(a.qty)||0; }
   else {
+    // V20_76: VarDoor individual usa qty (sumatoria de bloques) × precio. Bypass motor.
+    var _isVarDoorR = (act && (act.variable||'').toLowerCase() === 'vardoor');
+    var _isGrpR = (act && (act.modo||'Individual').toLowerCase() === 'grupal');
+    if(_isVarDoorR && !_isGrpR){
+      // Si hay bloques, a.qty ya está pre-calculada por onIndBloqueField
+      // Backward compat: si hay indPies legacy sin bloques, derivar qty
+      if((!a.qty || a.qty===0) && a.indPies){
+        a.qty = (parseFloat(a.indPies)||0) / 100;
+      }
+      pay = (parseFloat(a.qty)||0) * (act.p||0);
+      pay = Math.round(pay*100)/100;
+      a.pay=pay;
+      var sb_v=gEl('sb'+wi+'_'+ai);
+      if(sb_v){ if(pay>0){sb_v.textContent='Subtotal: $'+pay.toFixed(2);sb_v.style.display='block';}else sb_v.style.display='none'; }
+      var row_v=gEl('ar'+wi+'_'+ai);
+      if(row_v) row_v.className='ar'+(pay>0?(act.hr?' cb':' ca'):'');
+      updTot(wi); updBadge(wi,ai);
+      return;
+    }
     // V20_28: si motor activo (getRequiredInputs>0), usa computePay con fallback a legacy
     var _motorActive=false;
     try { _motorActive = getRequiredInputs(act).length > 0; } catch(e){ _motorActive=false; }
@@ -4470,7 +4621,8 @@ function chAct(wi,ai,nai){
   var actTipo=nai>=0&&nai<ACTS.length?ACTS[nai].tipo:'';
   var prevFinca = w.acts[ai].finca || '';
   // V20_28: al cambiar actividad, limpiar a.inputs (fix frontend/QA — inputs de act viejo no son válidos para nuevo)
-  w.acts[ai]={ai:nai,esName:actName,tipo:actTipo,qty:'',ini:'',fin:'',showTime:false,pay:0,finca:prevFinca,inputs:{}};
+  // V20_76: limpia bloques también al cambiar actividad
+  w.acts[ai]={ai:nai,esName:actName,tipo:actTipo,qty:'',ini:'',fin:'',showTime:false,pay:0,finca:prevFinca,inputs:{},bloques:[{pies:'',surcos:''}]};
   var old=gEl('ar'+wi+'_'+ai); if(old)old.parentNode.removeChild(old);
   var cont=gEl('ac'+wi); if(!cont)return;
   cont.innerHTML='';
@@ -4903,6 +5055,7 @@ function _serializeState(){
       if(sa.indPies) actSv.indPies=sa.indPies;
       if(sa.indAncho) actSv.indAncho=sa.indAncho;
       if(sa.indAcres) actSv.indAcres=sa.indAcres;
+      if(sa.bloques && sa.bloques.length) actSv.bloques=sa.bloques; // V20_76: persistir bloques VarDoor
       if(sa.inputs && Object.keys(sa.inputs).length) actSv.inputs=sa.inputs; // V20_28: persistir motor inputs
       ws.acts.push(actSv);
     }
@@ -5085,6 +5238,15 @@ function load(){
       if(!workers[ei].empNum || !workers[ei].contractRate){
         var _w10=findInArr(ALL_WORKERS,workers[ei].name); // V12-FIX1
         if(_w10){ if(!workers[ei].empNum) workers[ei].empNum=_w10.empNum||''; if(!workers[ei].contractRate) workers[ei].contractRate=_w10.contractRate||0; }
+      }
+      // V20_76: migración días viejos individual VarDoor → bloques (1 bloque con pies totales)
+      if(workers[ei].acts && workers[ei].acts.length){
+        for(var _ami=0; _ami<workers[ei].acts.length; _ami++){
+          var _aMig = workers[ei].acts[_ami];
+          if(!_aMig.bloques && _aMig.indPies){
+            _aMig.bloques = [{pies: String(_aMig.indPies), surcos: '1'}];
+          }
+        }
       }
     }
     updParam(); updParts();
@@ -5828,7 +5990,9 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
           grandAcres_+=parseFloat(surcos_[si_].totalAcres)||0;
         }
       }
-      var anchoCama_=parseFloat(g_.vars.anchoCama)||0;
+      // V20_76: factor de col P primero, fallback a g.vars.anchoCama
+      var _factorPdf = getActFactorAcres(gact_);
+      var anchoCama_ = _factorPdf || parseFloat(g_.vars.anchoCama) || 0;
       // V20_71 Fase B: ancho leído del MASTER (col I) con fallback 87.2
       var _ancEff=isPennrose5Act(gact_)?getActAncho(gact_):anchoCama_;
       var puertas_=(grandAcres_>0&&_ancEff>0)?grandAcres_*_ancEff:grandPies_/100;
@@ -7048,6 +7212,16 @@ function getActAncho(actOrName){
   return null; // sin col I en MASTER → falta configuración (validación vive en Sheet)
 }
 
+// V20_76: helper data-driven para FactorAcres (col P del MASTER).
+// Lee multiplicador para convertir puertas→acres dinámicamente. Sin fallback hardcoded.
+// null si MASTER no tiene col P para esa actividad.
+function getActFactorAcres(actOrName){
+  var act = _resolveActByName(actOrName);
+  if(!act) return null;
+  var p = parseFloat(String(act.P||'').replace(',','.'));
+  return (!isNaN(p) && p>0) ? p : null;
+}
+
 // V20_72 Fase C: isPennrose5Act 100% data-driven — chequea farm===pennrose + col I > 0.
 // Sin lista hardcoded. Si MASTER no tiene col I, retorna false (la actividad NO se trata como Pennrose5Act).
 // Esto significa que TÚ controlas desde Sheets qué actividades Pennrose usan ancho fijo.
@@ -7078,6 +7252,9 @@ function isPennrose5Act(actOrName){
 // V20_22: Ancho de cama default para convertir piezas → acres en el invoice.
 // Pennrose (5 actividades específicas) usa 87.2; otros ranchos usan 5.67 (default genérico).
 function getAnchoCamaDefault(act){
+  // V20_76: priorizar col P (FactorAcres) si existe.
+  var fact = getActFactorAcres(act);
+  if(fact) return fact;
   // V20_73 Fase C: ancho leído del MASTER (col I) sin hardcoded; si col I vacía cae a default genérico 5.67.
   if(isPennrose5Act(act)){
     var ancho = getActAncho(act);
@@ -7319,10 +7496,17 @@ function renderGrpActs(){
         +' data-gi="'+gi+'" data-v="fin" onchange="setGrpVar(this)"'
         +' style="font-size:16px;padding:9px 10px;width:100%"></div>'
         +'</div>'
-        +'<div style="margin-bottom:6px"><label style="font-size:10px">🌱 Ancho de cama (para pago — ej: 5.67 DeWitt, 83 Mecca)</label>'
-        +'<input type="text" inputmode="decimal" value="'+anchoCama+'" placeholder="ej: 5.67"'
-        +' data-gi="'+gi+'" data-v="anchoCama" oninput="setGrpVar(this)"'
-        +' style="font-size:16px;padding:9px 10px;width:100%"></div>'
+        // V20_76: si col P del MASTER tiene FactorAcres → ocultar input + mostrar readonly
+        + (function(){
+            var _fact = getActFactorAcres(act);
+            if(_fact){
+              return '<div style="background:#eef;border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:11px;color:#334;display:flex;justify-content:space-between"><span>🌱 Factor de acres</span><b>'+_fact+' (de MASTER)</b></div>';
+            }
+            return '<div style="margin-bottom:6px"><label style="font-size:10px">🌱 Ancho de cama (para pago — ej: 5.67 DeWitt, 83 Mecca)</label>'
+              +'<input type="text" inputmode="decimal" value="'+anchoCama+'" placeholder="ej: 5.67"'
+              +' data-gi="'+gi+'" data-v="anchoCama" oninput="setGrpVar(this)"'
+              +' style="font-size:16px;padding:9px 10px;width:100%"></div>';
+          })()
         +'<div style="margin-bottom:6px"><label style="font-size:10px">📍 Labor / Finca (aparece en el PDF)</label>'
         +'<input type="text" value="'+(g.vars.finca||'')+'" placeholder="ej: El Columpio, Block 3..."'
         +' data-gi="'+gi+'" data-v="finca" oninput="setGrpVar(this)"'
@@ -7425,7 +7609,9 @@ function updGrpPreview(gi){
         grandAcres+=parseFloat(surcos[si].totalAcres)||0;
       }
     }
-    var anchoCama=parseFloat(g.vars.anchoCama)||0;
+    // V20_76: factor de col P primero, fallback a g.vars.anchoCama
+    var _factorPv = getActFactorAcres(act);
+    var anchoCama = _factorPv || parseFloat(g.vars.anchoCama) || 0;
     // V20_71 Fase B: ancho leído del MASTER (col I) con fallback 87.2
     var _ancPv=isPennrose5Act(act)?getActAncho(act):anchoCama;
     var puertas=(grandAcres>0&&_ancPv>0)?grandAcres*_ancPv:grandPies/100;
@@ -7494,13 +7680,13 @@ function setGrpVar(inp){
 function isMeccaRanch(){
   return (gVal('rancho')||'').toLowerCase().indexOf('mecca')>=0;
 }
+// V20_76: eliminado caso especial Mecca hardcoded — todo data-driven via col P (FactorAcres) o anchoCama param.
+// Si caller no pasa anchoCama (legacy), retorna 0 — caller debe usar getActFactorAcres explícitamente.
 function piesToAcresWithAC(pies, anchoCama){
-  if(isMeccaRanch()) return (pies*5.26)/43560;
   if(anchoCama && parseFloat(anchoCama)>0) return (pies/100)/parseFloat(anchoCama);
   return 0;
 }
 function acresToPiesWithAC(acres, anchoCama){
-  if(isMeccaRanch()) return (acres*43560)/5.26;
   if(anchoCama && parseFloat(anchoCama)>0) return acres*parseFloat(anchoCama)*100;
   return 0;
 }
@@ -7516,7 +7702,10 @@ function onSurcoSmart(inp){
   if(!row) return;
   var val = inp.value.trim();
   row[sf] = val;
-  var anchoCama = grpActs[gi].vars.anchoCama||'';
+  // V20_76: leer factor de col P primero, fallback a g.vars.anchoCama
+  var _gactSm = (typeof GRUPAL_ACTS!=='undefined' && grpActs[gi]) ? GRUPAL_ACTS[grpActs[gi].gai] : null;
+  var _factSm = _gactSm ? getActFactorAcres(_gactSm) : null;
+  var anchoCama = _factSm || grpActs[gi].vars.anchoCama || '';
 
   if(sf==='largo'||sf==='num'){
     // Modo surco: largo×num → auto-fill totalPies y totalAcres
@@ -7675,7 +7864,9 @@ function calcGrpAct(gi){
         grandAcres+=parseFloat(surcos[si].totalAcres)||0;
       }
     }
-    var anchoCama=parseFloat(g.vars.anchoCama)||0;
+    // V20_76: leer factor de col P del MASTER primero, fallback a g.vars.anchoCama
+    var _factorMaster = getActFactorAcres(act);
+    var anchoCama = _factorMaster || parseFloat(g.vars.anchoCama) || 0;
     var puertas=0;
     var formulaStr='';
     if(isPennrose5Act(act) && grandAcres>0){
@@ -7747,7 +7938,9 @@ function grpPayDetail(wid_){
           grandAcres+=parseFloat(surcos[si].totalAcres)||0;
         }
       }
-      var anchoCama=parseFloat(g.vars.anchoCama)||0;
+      // V20_76: factor de col P primero, fallback a g.vars.anchoCama
+      var _factorGpd = getActFactorAcres(act);
+      var anchoCama = _factorGpd || parseFloat(g.vars.anchoCama) || 0;
       // V20_71 Fase B: ancho leído del MASTER (col I) con fallback 87.2
       var _ancGpd=isPennrose5Act(act)?getActAncho(act):anchoCama;
       var puertas=(grandAcres>0&&_ancGpd>0)?grandAcres*_ancGpd:grandPies/100;
