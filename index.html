@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_74';
+window.APP_VERSION = 'V20_75';
 (function(){
   // Toast persistente de "versión antigua detectada" — NO se puede cerrar, obliga a actualizar
   function showVersionMismatch(remoteV){
@@ -8721,7 +8721,7 @@ function runRecoveryDiagnostic(){
       var url = URL.createObjectURL(blob);
       var fileName = 'eberry_recovery_'+(bundle.currentUser.replace(/[^a-z0-9]/gi,'_').toLowerCase()||'user')+'_'+Date.now()+'.json';
 
-      // Botón descargar
+      // Botón descargar (siempre funciona)
       var btnDownload = document.createElement('a');
       btnDownload.href = url;
       btnDownload.download = fileName;
@@ -8730,24 +8730,80 @@ function runRecoveryDiagnostic(){
       btnDownload.style.cssText = 'background:#27ae60;color:#fff;width:100%;font-weight:700;font-size:15px;padding:14px;text-align:center;text-decoration:none;border-radius:8px';
       actions.appendChild(btnDownload);
 
-      // Botón compartir (Web Share API)
-      if(navigator.share && navigator.canShare){
-        var btnShare = document.createElement('button');
-        btnShare.textContent = '📤 Compartir por WhatsApp';
-        btnShare.className = 'btn';
-        btnShare.style.cssText = 'background:#25d366;color:#fff;width:100%;font-weight:700;font-size:15px;padding:14px';
-        btnShare.onclick = function(){
+      // V20_75: Botón compartir con TRIPLE fallback robusto.
+      // Antes: Web Share API caprichosa — no abría WhatsApp en muchos casos.
+      // Ahora: 1) descarga archivo SIEMPRE, 2) intenta share nativo con archivo, 3) fallback a wa.me.
+      var btnShare = document.createElement('button');
+      btnShare.textContent = '📤 Compartir / Mandar por WhatsApp';
+      btnShare.className = 'btn';
+      btnShare.style.cssText = 'background:#25d366;color:#fff;width:100%;font-weight:700;font-size:15px;padding:14px';
+      btnShare.onclick = function(){
+        // 1) Descargar archivo PRIMERO (garantizado, funciona en todos lados)
+        try {
+          var dlLink = document.createElement('a');
+          dlLink.href = url;
+          dlLink.download = fileName;
+          document.body.appendChild(dlLink);
+          dlLink.click();
+          document.body.removeChild(dlLink);
+        } catch(eDl){ console.warn('Auto-download fallo:', eDl); }
+
+        // 2) Intentar Web Share API con archivo (mejor caso)
+        var fallbackToWaMe = function(){
+          // 3) Fallback: abrir WhatsApp con mensaje pre-armado
+          var msgWA = '🔍 Hola Serafín, te mando mi archivo de diagnóstico eBerry.\n\n'
+                    + '📅 Días encontrados: ' + diasConDatos.length + '\n'
+                    + '📦 Archivos totales: ' + found.length + '\n'
+                    + '👤 Usuario: ' + bundle.currentUser + '\n\n'
+                    + '⚠️ El archivo .json ya se descargó a mi teléfono.\n'
+                    + 'Voy a adjuntarlo en el siguiente mensaje.\n\n'
+                    + 'Archivo: ' + fileName;
+          var waUrl = 'https://wa.me/?text=' + encodeURIComponent(msgWA);
+          try { window.open(waUrl, '_blank'); }
+          catch(e){
+            alert('📥 El archivo se descargó.\n\n📤 Abre WhatsApp manualmente, busca el chat de Serafín, toca el clip 📎 y adjunta el archivo descargado:\n\n' + fileName);
+          }
+        };
+
+        if(navigator.share){
           try {
             var file = new File([json], fileName, {type:'application/json'});
-            if(navigator.canShare({files:[file]})){
-              navigator.share({title:'Recovery eBerry', text:'Diagnóstico de mi teléfono — '+diasConDatos.length+' días encontrados', files:[file]});
+            // Verificar canShare con archivo si está disponible
+            var canShareFile = navigator.canShare && navigator.canShare({files:[file]});
+            if(canShareFile){
+              navigator.share({
+                title: 'Recovery eBerry',
+                text: 'Diagnóstico de mi teléfono — ' + diasConDatos.length + ' días encontrados',
+                files: [file]
+              }).then(function(){
+                console.log('Share con archivo OK');
+              }).catch(function(err){
+                console.warn('Share con archivo falló:', err);
+                fallbackToWaMe();
+              });
             } else {
-              navigator.share({title:'Recovery eBerry', text:'Diagnóstico — descarga el archivo y mándalo'});
+              // Sin soporte de archivos en share, ir directo al fallback
+              fallbackToWaMe();
             }
-          } catch(e){ alert('No se pudo compartir directo. Usa "Descargar archivo" y mándalo manual.'); }
-        };
-        actions.appendChild(btnShare);
-      }
+          } catch(eShare){
+            console.warn('Share API error:', eShare);
+            fallbackToWaMe();
+          }
+        } else {
+          // Sin Web Share API
+          fallbackToWaMe();
+        }
+      };
+      actions.appendChild(btnShare);
+
+      // Mensaje informativo abajo de los botones
+      var info = document.createElement('p');
+      info.style.cssText = 'margin:10px 0 0;font-size:11px;color:#3a2c00;text-align:center;line-height:1.5';
+      info.innerHTML = '💡 <b>Si WhatsApp no se abre solo:</b> el archivo ya se descargó.<br>'
+                     + 'Abre WhatsApp manualmente, busca el chat con Serafín,<br>'
+                     + 'toca el clip 📎 → "Documento" → busca el archivo:<br>'
+                     + '<code style="background:#fff;padding:2px 6px;border-radius:4px;font-size:10px">'+fileName+'</code>';
+      actions.appendChild(info);
     } catch(e){
       result.innerHTML = '<div style="color:#c0392b;padding:14px"><b>Error:</b> '+esc(e.message)+'</div>';
     }
