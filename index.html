@@ -24,8 +24,19 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_76';
+window.APP_VERSION = 'V20_78';
 (function(){
+  // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
+  // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
+  // _ackedVersion quedaba "V20_76" pero el cel seguía corriendo V20_75 → siguientes checks NUNCA mostraban toast.
+  // Fix: si _ackedVersion === APP_VERSION cargado, ese ack ya cumplió → limpiar.
+  try {
+    var _ack0 = localStorage.getItem('_ackedVersion') || '';
+    if(_ack0 && _ack0 === window.APP_VERSION){
+      localStorage.removeItem('_ackedVersion');
+      console.log('[eBerry] V20_77: Ack stale limpiado — ya estamos en '+_ack0);
+    }
+  } catch(e){}
   // Toast persistente de "versión antigua detectada" — NO se puede cerrar, obliga a actualizar
   function showVersionMismatch(remoteV){
     if(document.getElementById('ver-mismatch')) return;
@@ -1853,10 +1864,15 @@ function loginSuccess(user){
   if(!user.isAdmin){
     filterDataForCrew(user.crew);
   } else {
-    ACTS       = ALL_ACTS.filter(function(a){ return (a.modo||'Individual').toLowerCase()!=='grupal'; });
-    GRUPAL_ACTS= ALL_ACTS.filter(function(a){ return (a.modo||'Individual').toLowerCase()==='grupal'; });
-    if(!ACTS.length)        ACTS        = FALLBACK_ACTS;
-    if(!GRUPAL_ACTS.length) GRUPAL_ACTS = FALLBACK_GRUPAL_ACTS;
+    // V20_78: NO cargar TODAS las grupales del MASTER al login admin.
+    // Antes: GRUPAL_ACTS = todas las grupales sin filtrar por rancho → admin veía actividades de otros ranchos.
+    // Ahora: dejar vacío y que onRanchoChange (llamado tras populateRanchoDropdown) las llene filtradas.
+    ACTS = []; GRUPAL_ACTS = [];
+    // Fallback solo si NO hay datos del MASTER cargados aún
+    if(!ALL_ACTS || !ALL_ACTS.length){
+      ACTS = FALLBACK_ACTS;
+      GRUPAL_ACTS = FALLBACK_GRUPAL_ACTS;
+    }
   }
 
   // Alpha2: Llenar dropdown de ranchos basado en contrato IOE del surquero
@@ -2131,8 +2147,10 @@ function onAdminSurqueroChange(name){
   if(inp) inp.value = name;
   if(!name){
     NAMES=ALL_WORKERS.map(function(w){return w.name;});
-    ACTS=ALL_ACTS.filter(function(a){return (a.modo||'Individual').toLowerCase()!=='grupal';});
-    GRUPAL_ACTS=ALL_ACTS.filter(function(a){return (a.modo||'Individual').toLowerCase()==='grupal';});
+    // V20_78: vaciar ACTS/GRUPAL_ACTS y dejar que onRanchoChange los rellene filtrado por rancho.
+    // Antes: cargaba todas las grupales del MASTER sin filtrar → admin veía actividades de otros ranchos.
+    ACTS = []; GRUPAL_ACTS = [];
+    try { onRanchoChange(); } catch(e){} // refiltra si hay rancho seleccionado
     adminCheckSession(''); // Upsilon2: hide session panel
     return;
   }
@@ -2146,10 +2164,10 @@ function onAdminSurqueroChange(name){
     populateRanchoDropdown(liderIOE, crewBase, false);
   } else {
     NAMES=ALL_WORKERS.map(function(w){return w.name;});
-    // V8-C6: filtrar grupales correctamente (antes copiaba ALL_ACTS sin filtrar)
-    ACTS=ALL_ACTS.filter(function(a){return (a.modo||'Individual').toLowerCase()!=='grupal';});
-    GRUPAL_ACTS=ALL_ACTS.filter(function(a){return (a.modo||'Individual').toLowerCase()==='grupal';});
+    // V20_78: vaciar y delegar el filtrado a onRanchoChange (mismo patrón que rama if(!name)).
+    ACTS = []; GRUPAL_ACTS = [];
     populateRanchoDropdown('', '', true); // sin lider: mostrar todos los ranchos
+    try { onRanchoChange(); } catch(e){}
   }
   // ✅ Cargar datos guardados del surquero seleccionado
   // getUserKey() ya apunta a la key correcta porque inp.value fue actualizado arriba
@@ -7304,13 +7322,26 @@ function grpCalcType(act){
 function showGrpPicker(){
   var list = gEl('grpPickList'); if(!list) return;
   list.innerHTML = '';
-  if(!GRUPAL_ACTS.length){
+  // V20_78: defensa adicional — filtrar SIEMPRE por rancho activo aunque GRUPAL_ACTS venga contaminado.
+  // Si rancho está vacío, mostrar lista completa (admin sin rancho seleccionado).
+  var _ranchoActivo = (typeof gVal==='function' ? (gVal('rancho')||'') : '').toLowerCase();
+  var _gListVisible = GRUPAL_ACTS;
+  if(_ranchoActivo){
+    _gListVisible = GRUPAL_ACTS.filter(function(a){
+      return !a.farm || (a.farm||'').toLowerCase() === _ranchoActivo;
+    });
+  }
+  if(!_gListVisible.length){
     list.innerHTML = '<div style="color:var(--gr);font-size:13px;text-align:center;padding:10px">No hay actividades grupales para este rancho</div>';
     gEl('grpPickOv').classList.add('on'); return;
   }
   var icons = {puertas:'🪝', cajas:'📦', hora:'⏰', pieza:'🔢'};
-  for(var i=0;i<GRUPAL_ACTS.length;i++){
-    var act = GRUPAL_ACTS[i];
+  // V20_78: usar lista filtrada PERO mantener índice ORIGINAL en GRUPAL_ACTS para que addGrpAct lo encuentre
+  for(var i=0;i<_gListVisible.length;i++){
+    var act = _gListVisible[i];
+    // Encontrar índice ORIGINAL en GRUPAL_ACTS (porque addGrpAct usa ese índice)
+    var origIdx = GRUPAL_ACTS.indexOf(act);
+    if(origIdx < 0) continue;
     var ct  = grpCalcType(act);
     var desc = ct==='puertas' ? 'Acres × ancho ÷ personas × $'+act.p
              : ct==='cajas'   ? 'Total ÷ personas × $'+act.p+'/'+act.tipo
@@ -7320,7 +7351,8 @@ function showGrpPicker(){
     btn.style.cssText='background:var(--ap);border:1.5px solid var(--a);border-radius:10px;padding:14px;text-align:left;cursor:pointer;font-family:\'DM Sans\',sans-serif;width:100%';
     btn.innerHTML='<div style="font-size:15px;font-weight:700;color:var(--dk)">'+(icons[ct]||'🌿')+' '+esc(act.es)+'</div>'
       +'<div style="font-size:11px;color:var(--gr);margin-top:3px">'+esc(desc)+'</div>'; // V9
-    (function(idx){ btn.addEventListener('click',function(){ addGrpAct(idx); }); })(i);
+    // V20_78: pasar origIdx (no i del loop filtrado) para que addGrpAct encuentre la actividad correcta
+    (function(idx){ btn.addEventListener('click',function(){ addGrpAct(idx); }); })(origIdx);
     list.appendChild(btn);
   }
   gEl('grpPickOv').classList.add('on');
