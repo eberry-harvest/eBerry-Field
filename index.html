@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_82';
+window.APP_VERSION = 'V20_84';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -1317,12 +1317,7 @@ body.readOnly [onclick*="openNewDay"]{display:none !important}
     <button class="btn pdf" onclick="genPDF()"><span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#1a7a4a;color:#fff;font-weight:900;font-size:12px;margin-right:6px">3</span>📄 Generar PDF para Payroll</button>
     <button class="btn bw" style="display:none" onclick="sendWA()">📲 Enviar PDF por WhatsApp</button>
     <button class="btn" style="background:#3a7fd4;color:#fff" onclick="openNewDay()"><span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#1a7a4a;color:#fff;font-weight:900;font-size:12px;margin-right:6px">4</span>🌅 Nuevo Día</button>
-    <div style="height:1px;background:var(--bd);margin:10px 0"></div>
-    <div style="font-size:11px;font-weight:700;color:var(--gr);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">📲 Compartir datos entre dispositivos</div>
-    <button class="btn" style="background:#6c3483;color:#fff" onclick="exportData()"><span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#1a7a4a;color:#fff;font-weight:900;font-size:12px;margin-right:6px">5</span>📥 Exportar datos (descargar)</button>
-    <button class="btn" style="background:#1a5276;color:#fff" onclick="importData()"><span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#1a7a4a;color:#fff;font-weight:900;font-size:12px;margin-right:6px">6</span>📤 Importar datos (cargar)</button>
-    <input type="file" id="importFile" accept=".json" style="display:none" onchange="onImportFile(this)">
-    <p style="font-size:11px;color:var(--gr);text-align:center">Exporta para mandar a otro cel por WhatsApp</p>
+    <!-- V20_83: bloque "📲 Compartir datos entre dispositivos" eliminado — duplicaba la pestaña ⑨ Archivos -->
   </div>
   <!-- 🧪 TEST: solo visible para admin — quitar en producción -->
   <div id="testCard" class="card" style="display:none;border:2px dashed #e74c3c">
@@ -5210,11 +5205,16 @@ function _autoSaveConditionMet(){
   try {
     var hasWorker = (typeof workers !== 'undefined' && workers && workers.length > 0);
     if(hasWorker) return true;
+    // V20_84: también activar autoSave si hay actividad grupal (caso día solo-grupal,
+    // ej: jornada completa de empaque en cuadrilla — antes quedaba sin guardar).
+    var hasGrp = (typeof grpActs !== 'undefined' && grpActs && grpActs.length > 0);
+    if(hasGrp) return true;
     // También revisar otros ranchos (admin multi-rancho que cambia de pill antes de capturar hEnt)
     if(typeof _ranchos !== 'undefined' && _ranchos && _ranchos.length){
       for(var i=0;i<_ranchos.length;i++){
         var r=_ranchos[i];
         if(r && r.workers && r.workers.length>0) return true;
+        if(r && r.grpActs && r.grpActs.length>0) return true; // V20_84: grupal también cuenta
       }
     }
     return false;
@@ -8174,6 +8174,27 @@ function migrateActsToNames(){
 // ── AUSENCIAS SYSTEM ──
 // (var ausencias movida a APP STATE — Iota)
 
+// V20_84: helper para saber si un trabajador (por nombre) participa en algún grupal del día.
+// Bug raíz: la lógica de ausencias solo miraba `workers[]` (individuales) — los workers
+// que solo hacían grupal caían como "ausentes" aunque sí trabajaron. Este helper resuelve
+// el id desde ALL_WORKERS y busca en grpActs[].participantes; fallback por nombre via getW().
+function _isInAnyGrpAct(name){
+  if(!name || typeof grpActs==='undefined' || !grpActs || !grpActs.length) return false;
+  var dbW = (typeof findInArr==='function') ? findInArr(ALL_WORKERS, name) : null;
+  var wid = dbW ? dbW.id : null;
+  for(var gi=0; gi<grpActs.length; gi++){
+    var g = grpActs[gi];
+    if(!g || !g.participantes || !g.participantes.length) continue;
+    if(wid != null && g.participantes.indexOf(wid) >= 0) return true;
+    // Fallback por nombre (si el worker no está en ALL_WORKERS pero sí en workers[])
+    for(var pi=0; pi<g.participantes.length; pi++){
+      var pw = (typeof getW==='function') ? getW(g.participantes[pi]) : null;
+      if(pw && pw.name === name) return true;
+    }
+  }
+  return false;
+}
+
 function getAusenciaCandidates(){
   var result = [];
   // NAMES es array de strings (nombres) de la cuadrilla del surquero
@@ -8181,6 +8202,7 @@ function getAusenciaCandidates(){
   for(var i=0;i<pool.length;i++){
     var name = pool[i]; if(!name) continue;
     if(nameInArr(workers,name)) continue;
+    if(_isInAnyGrpAct(name)) continue; // V20_84: trabajador en grupal NO es ausente
     if(nameInArr(ausencias,name)) continue;
     // Buscar empNum en ALL_WORKERS
     var dbW = findInArr(ALL_WORKERS,name);
@@ -8198,9 +8220,9 @@ function syncAusencias(){
       return !!findInStrArr(NAMES,a.name);
     });
   }
-  // 2) Quitar los que ya estan trabajando
+  // 2) Quitar los que ya estan trabajando (V20_84: incluye grupales — antes solo individuales)
   ausencias = ausencias.filter(function(a){
-    return !nameInArr(workers,a.name);
+    return !nameInArr(workers,a.name) && !_isInAnyGrpAct(a.name);
   });
   // 3) Auto-agregar faltantes — preservando motivo si ya existía guardado
   // Admin sin surquero seleccionado → no hacer sync (usa showAllEmployeesAsAbsent)
@@ -8294,10 +8316,12 @@ function showAllEmployeesAsAbsent(){
   var filteredWorkers = getWorkersForRancho();
 
   // V10: Excluir workers ya agregados en Trabajadores y ausencias manuales
+  // V20_84: también excluir los que están en grupales (antes caían como ausentes en vista admin)
   var absentOnly = [];
   for(var i=0;i<filteredWorkers.length;i++){
     var w = filteredWorkers[i];
     if(nameInArr(workers, w.name)) continue;
+    if(_isInAnyGrpAct(w.name)) continue;
     if(nameInArr(ausencias, w.name)) continue;
     absentOnly.push(w);
   }
@@ -8369,6 +8393,10 @@ function addAusenciaFromBar(){
 
 function addAusenciaConfirmed(name, empNum){
   if(nameInArr(ausencias,name)){ toast("⚠️ Ya está en ausencias"); return; }
+  // V20_84: si está participando en un grupal, advertir antes de marcar ausente
+  if(_isInAnyGrpAct(name)){
+    if(!confirm('⚠️ '+name+' está participando en una actividad grupal hoy.\n\n¿Seguro que quieres marcarlo como ausente? Esto puede generar inconsistencias en Sheets.')) return;
+  }
   var num = empNum||"";
   if(!num){ var dbW=findInArr(ALL_WORKERS,name); if(dbW) num=dbW.empNum||""; }
   ausencias.push({name:name, empNum:num, motivo:""});
