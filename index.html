@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_84';
+window.APP_VERSION = 'V20_85';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -3776,6 +3776,7 @@ var qrScanner = null;
 var qrSessionCount = 0;
 var qrCooldown = false; // evita escaneos duplicados
 var qrActive = false;   // true mientras el scanner está abierto — modales saben que deben regresar al scanner
+var _qrStartTimer = null; // V20_85: handle del setTimeout de startQR — cancelarlo en stopQR para evitar startup tardío
 
 function startQR(){
   var ov = gEl('qrOv');
@@ -3786,7 +3787,10 @@ function startQR(){
   setQRStatus('Apunta la cámara al código QR del trabajador','');
 
   // Pequeño delay para que el DOM se renderice antes de iniciar la cámara
-  setTimeout(function(){
+  // V20_85: guardar handle para que stopQR pueda cancelarlo si el usuario cierra antes
+  _qrStartTimer = setTimeout(function(){
+    _qrStartTimer = null;
+    if(!qrActive) return; // V20_85: si ya cerró el modal, abortar
     if(qrScanner) { try{qrScanner.clear();}catch(e){} }
     qrScanner = new Html5Qrcode("qrReader");
     qrScanner.start(
@@ -3803,6 +3807,7 @@ function startQR(){
 
 function pauseQR(){
   // Pausa la cámara sin cerrar el overlay (para mostrar modales encima)
+  if(!qrActive) return; // V20_85: simetría con resumeQR — no pausar si ya se cerró
   if(qrScanner){ qrScanner.stop().catch(function(){}); }
 }
 // V20_02-FIX: guard anti-concurrencia en resumeQR
@@ -3824,13 +3829,30 @@ function resumeQR(){
   }, 500);
 }
 function stopQR(){
+  // V20_85 FIX: el modal se quedaba trabado al cerrar antes de escanear. Causa:
+  // Html5Qrcode.stop() falla durante state STARTING (setTimeout 300ms aún no disparó),
+  // el .catch silenciaba el error y la cámara seguía iniciándose después de cerrar.
   qrActive = false;
-  if(qrScanner){
-    qrScanner.stop().then(function(){
-      qrScanner.clear();
-    }).catch(function(){});
-  }
+  // 1) Cancelar startup pendiente para que no cree el scanner después del cierre
+  if(_qrStartTimer){ clearTimeout(_qrStartTimer); _qrStartTimer = null; }
+  if(_qrResuming){ _qrResuming = false; }
+  // 2) Cerrar overlay PRIMERO (UX inmediata, no esperar a la cámara)
   gEl('qrOv').classList.remove('on');
+  // 3) Detener scanner solo si está realmente escaneando (state===2)
+  if(qrScanner){
+    try {
+      var st = (qrScanner.getState && qrScanner.getState());
+      if(st === 2){ // SCANNING
+        qrScanner.stop().then(function(){
+          try{ qrScanner.clear(); }catch(e){}
+          qrScanner = null;
+        }).catch(function(){ qrScanner = null; });
+      } else {
+        try{ qrScanner.clear(); }catch(e){}
+        qrScanner = null;
+      }
+    } catch(e){ qrScanner = null; }
+  }
 }
 
 // V10: Pausa QR automática — observa TODOS los overlays, incluyendo dinámicos
