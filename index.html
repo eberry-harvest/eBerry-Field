@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_69';
+window.APP_VERSION = 'V20_72';
 (function(){
   // Toast persistente de "versión antigua detectada" — NO se puede cerrar, obliga a actualizar
   function showVersionMismatch(remoteV){
@@ -2387,7 +2387,8 @@ function loadSheetsData(){
           tipo:tipoNorm, payType:t.tipo||'', p:t.rate||16.23, hr:tipoNorm==='Hora',
           modo: modo,  // 'Individual' | 'Grupal'
           // V20_29: columnas G-M del motor data-driven (FieldSync v5.8+)
-          variable: t.variable||'', H: t.H, I: t.I, J: t.J, K: t.K, L: t.L, M: t.M
+          variable: t.variable||'', H: t.H, I: t.I, J: t.J, K: t.K, L: t.L, M: t.M,
+          N: t.N, O: t.O, P: t.P  // V20_71 Fase B: cols N, O, P=FactorAcres
         });
       }
       // V10: Diagnóstico — cuántas actividades cargaron por rancho
@@ -2623,7 +2624,8 @@ function nh(a,b){
 // ============================================================================
 // V20_27: MOTOR DATA-DRIVEN — Intérprete de fórmulas desde MASTER (cols G-M)
 // Lee la configuración de cada actividad y arma (H·I·J·K)/(L·M)
-// Reemplaza gradualmente: getActConstante, isPennrose5Act, piesToAcresWithAC
+// V20_70 Fase A: getActConstante eliminada (era función muerta `return 100`).
+// Reemplaza gradualmente: isPennrose5Act, piesToAcresWithAC (Fases B-C)
 // ============================================================================
 
 // parseFormulaCell: clasifica una celda H-M en 4 tipos
@@ -3347,9 +3349,11 @@ function _enterReadOnly(payload){
       // V20_60: piezas también son discretas — mismo trato
       _vars.totalP = Math.round(_qtyT);
     } else if(_ct==='puertas'){
-      // Pennrose5Act calcula desde acres (qty=acres×87.2/np). Reconstruir acres totales si aplica.
-      if(_grpAct && isPennrose5Act(_grpAct) && PENNROSE_ANCHO){
-        _vars.pennAcres = _qtyT / PENNROSE_ANCHO;
+      // Pennrose5Act calcula desde acres (qty=acres×ancho/np). Reconstruir acres totales si aplica.
+      // V20_71 Fase B: ancho leído del MASTER (col I) con fallback 87.2.
+      var _ancRO = _grpAct ? getActAncho(_grpAct) : PENNROSE_ANCHO;
+      if(_grpAct && isPennrose5Act(_grpAct) && _ancRO){
+        _vars.pennAcres = _qtyT / _ancRO;
       } else {
         // No-Pennrose: sintético 1 surco con largo equivalente a 100*qty (qty=metros/100)
         _vars.surcos = [{ largo: _qtyT * 100, num: 1 }];
@@ -5802,30 +5806,35 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
         }
       }
       var anchoCama_=parseFloat(g_.vars.anchoCama)||0;
-      var _ancEff=isPennrose5Act(gact_)?PENNROSE_ANCHO:anchoCama_;
+      // V20_71 Fase B: ancho leído del MASTER (col I) con fallback 87.2
+      var _ancEff=isPennrose5Act(gact_)?getActAncho(gact_):anchoCama_;
       var puertas_=(grandAcres_>0&&_ancEff>0)?grandAcres_*_ancEff:grandPies_/100;
       if(!puertas_) continue;
       var ppx_=puertas_/np_;
       // V20_05: guardar anchoCama en el col para evitar desalineación tras sort T1/T2
-      col_={label:gact_.es, ct:'puertas', perPersona:{}, totalVal:puertas_, np:np_, precio:gact_.p, unitLabel:'Doors p/p', finca:g_.vars.finca||'', ini:g_.vars.ini||'', fin:g_.vars.fin||'', anchoCama:anchoCama_};
+      // V20_71 Fase B: usar nombre en inglés en label (PDF es para Cindy en EN)
+      col_={label:(gact_.en||gact_.es), ct:'puertas', perPersona:{}, totalVal:puertas_, np:np_, precio:gact_.p, unitLabel:'Doors p/p', finca:g_.vars.finca||'', ini:g_.vars.ini||'', fin:g_.vars.fin||'', anchoCama:anchoCama_};
       for(var pi_=0;pi_<g_.participantes.length;pi_++) col_.perPersona[g_.participantes[pi_]]=ppx_;
     } else if(ct_==='cajas'){
       var totalC_=parseFloat(g_.vars.totalC)||0;
       var precioC_=parseFloat(g_.vars.precioC)||gact_.p||0.80;
       if(!totalC_) continue;
       var cpx_=totalC_/np_;
-      col_={label:gact_.es, ct:'cajas', perPersona:{}, totalVal:totalC_, np:np_, precio:precioC_, unitLabel:'Boxes p/p', finca:g_.vars.finca||'', ini:g_.vars.ini||'', fin:g_.vars.fin||''};
+      // V20_71 Fase B: usar nombre en inglés en label (PDF es para Cindy en EN)
+      col_={label:(gact_.en||gact_.es), ct:'cajas', perPersona:{}, totalVal:totalC_, np:np_, precio:precioC_, unitLabel:'Boxes p/p', finca:g_.vars.finca||'', ini:g_.vars.ini||'', fin:g_.vars.fin||''};
       for(var pi2_=0;pi2_<g_.participantes.length;pi2_++) col_.perPersona[g_.participantes[pi2_]]=cpx_;
     } else if(ct_==='hora'){
       var hGrp_=nh(g_.vars.ini||'',g_.vars.fin||'');
       if(!hGrp_) continue;
-      col_={label:gact_.es, ct:'hora', perPersona:{}, totalVal:hGrp_, np:np_, precio:gact_.p, unitLabel:'Hours', finca:'', ini:g_.vars.ini||'', fin:g_.vars.fin||''};
+      // V20_71 Fase B: usar nombre en inglés en label (PDF es para Cindy en EN)
+      col_={label:(gact_.en||gact_.es), ct:'hora', perPersona:{}, totalVal:hGrp_, np:np_, precio:gact_.p, unitLabel:'Hours', finca:'', ini:g_.vars.ini||'', fin:g_.vars.fin||''};
       for(var pi3_=0;pi3_<g_.participantes.length;pi3_++) col_.perPersona[g_.participantes[pi3_]]=hGrp_;
     } else {
       var totalP_=parseFloat(g_.vars.totalP)||0;
       if(!totalP_) continue;
       var qpx_=totalP_/np_;
-      col_={label:gact_.es, ct:'generic', perPersona:{}, totalVal:totalP_, np:np_, precio:gact_.p, unitLabel:gact_.payType||'Pieces p/p', finca:g_.vars.finca||'', ini:g_.vars.ini||'', fin:g_.vars.fin||''};
+      // V20_71 Fase B: usar nombre en inglés en label (PDF es para Cindy en EN)
+      col_={label:(gact_.en||gact_.es), ct:'generic', perPersona:{}, totalVal:totalP_, np:np_, precio:gact_.p, unitLabel:gact_.payType||'Pieces p/p', finca:g_.vars.finca||'', ini:g_.vars.ini||'', fin:g_.vars.fin||''};
       for(var pi4_=0;pi4_<g_.participantes.length;pi4_++) col_.perPersona[g_.participantes[pi4_]]=qpx_;
     }
     if(col_) grpPuertasCols.push(col_);
@@ -6888,10 +6897,11 @@ function sendToSheets() {
       var metros = 0;
       var surcos = g.vars.surcos || [];
       for (var si = 0; si < surcos.length; si++) metros += (parseFloat(surcos[si].largo) || 0) * (parseFloat(surcos[si].num) || 0);
-      // V20_13: Pennrose5Act → usa g.vars.pennAcres × 87.2 / personas (sin surcos)
+      // V20_13: Pennrose5Act → usa g.vars.pennAcres × ancho / personas (sin surcos)
+      // V20_71 Fase B: ancho leído del MASTER (col I) con fallback 87.2
       if(isPennrose5Act(act)){
         var _acP=parseFloat(g.vars.pennAcres)||0;
-        qtyPerPerson = (_acP*PENNROSE_ANCHO)/np;
+        qtyPerPerson = (_acP*getActAncho(act))/np;
       } else {
         qtyPerPerson = (metros / 100) / np;
       }
@@ -6988,36 +6998,66 @@ function sendToSheets() {
 // grpActs = [{gai: índice en GRUPAL_ACTS, participantes:[wid,...], vars:{}}]
 // ✅ grpActs declarada en línea 1077 junto con workers/wid — NO redeclarar aquí
 
-// V20_12: 5 actividades en Pennrose usan ancho de cama fijo 87.2.
-// Fórmula: puertas = acres × 87.2 (input del usuario es ACRES directo, no pies).
-// TODO: migrar lista a columna del Google Sheet (ver project_mejora_constante_sheet.md).
-var PENNROSE_ACTS_87_2 = [
-  "Sacar plastico",
-  "Levantar Plastico",
-  "Levantar y sacar plastico",
-  "Quitar y levantar estaca",
-  "Quitar hilo"
-];
-var PENNROSE_ANCHO = 87.2;
-function isPennrose5Act(actOrName){
-  var rancho = (typeof gVal==='function'?(gVal('rancho')||''):'').trim();
-  var rNorm = rancho.split(/\s+/)[0].toLowerCase();
-  if(rNorm!=='pennrose') return false;
-  var esName='';
-  if(typeof actOrName==='string') esName=actOrName;
-  else if(actOrName) esName = actOrName.es || actOrName.esName || '';
-  esName=(esName||'').trim().toLowerCase();
-  for(var _ci=0;_ci<PENNROSE_ACTS_87_2.length;_ci++){
-    if(PENNROSE_ACTS_87_2[_ci].toLowerCase()===esName) return true;
+// V20_72 Fase C: limpieza definitiva del hardcoded Pennrose.
+// PENNROSE_ACTS_87_2 (lista hardcoded de 5 actividades) ELIMINADA — ahora 100% data-driven desde MASTER col I.
+// PENNROSE_ANCHO se mantiene como ÚNICO fallback offline (1 sola línea, 1 solo punto de uso) dentro de getActAncho.
+// Sistema reconectado al Google Sheet col I (multiplicador) — Serafín lo controla desde Sheets.
+var PENNROSE_ANCHO = 87.2; // ÚLTIMO fallback offline — se usa SOLO si act.I es undefined/inválido.
+
+// _resolveActByName: busca un act por nombre en ALL_ACTS o devuelve el objeto si ya lo es.
+function _resolveActByName(actOrName){
+  if(!actOrName) return null;
+  if(typeof actOrName === 'object') return actOrName;
+  var n = String(actOrName).toLowerCase().trim();
+  var pool = (typeof ALL_ACTS!=='undefined' && ALL_ACTS) ? ALL_ACTS : (typeof ACTS!=='undefined'?ACTS:[]);
+  for(var _ri=0;_ri<pool.length;_ri++){
+    if((pool[_ri].es||'').toLowerCase().trim()===n) return pool[_ri];
   }
-  return false;
+  return null;
 }
-// Legacy (pies ÷ 100 en cálculos fallback de otros ranchos). Para Pennrose5Act ahora se usa isPennrose5Act + PENNROSE_ANCHO.
-function getActConstante(actOrName){ return 100; }
+
+// getActAncho: retorna el multiplicador del MASTER col I, o fallback 87.2 si no está disponible.
+// Soporta coma decimal locale (ej: "87,2" → 87.2).
+function getActAncho(actOrName){
+  var act = _resolveActByName(actOrName);
+  if(!act) return PENNROSE_ANCHO; // fallback offline si act no encontrado
+  var multI = parseFloat(String(act.I||'').replace(',','.'));
+  if(!isNaN(multI) && multI > 0) return multI;
+  return PENNROSE_ANCHO; // fallback offline si col I vacía
+}
+
+// V20_72 Fase C: isPennrose5Act 100% data-driven — chequea farm===pennrose + col I > 0.
+// Sin lista hardcoded. Si MASTER no tiene col I, retorna false (la actividad NO se trata como Pennrose5Act).
+// Esto significa que TÚ controlas desde Sheets qué actividades Pennrose usan ancho fijo.
+function isPennrose5Act(actOrName){
+  var act = _resolveActByName(actOrName);
+  // Determinar rancho del act o de gVal('rancho') como fallback
+  var farm = '';
+  if(act){
+    farm = (act.farm||act.rancho||'').toLowerCase().trim();
+  }
+  if(!farm){
+    var rancho = (typeof gVal==='function'?(gVal('rancho')||''):'').trim();
+    farm = rancho.toLowerCase();
+  }
+  farm = farm.split(/\s+/)[0]; // "Pennrose Farms" → "pennrose"
+  if(farm !== 'pennrose') return false;
+  // Sin act resuelto → no podemos data-driven, retorna false (debe llenarse col I en MASTER)
+  if(!act) return false;
+  // Ruta data-driven: col I numérica > 0
+  var multI = parseFloat(String(act.I||'').replace(',','.'));
+  return !isNaN(multI) && multI > 0;
+}
+
+// V20_70 Fase A: getActConstante() ELIMINADA (era función muerta — return 100, sin callers reales).
+// V20_72 Fase C: PENNROSE_ACTS_87_2 ELIMINADA (lista hardcoded reemplazada por col I del MASTER).
+// El motor V20_27 cubre individuales. Grupales/modo lectura migrados en Fase B (V20_71).
+
 // V20_22: Ancho de cama default para convertir piezas → acres en el invoice.
 // Pennrose (5 actividades específicas) usa 87.2; otros ranchos usan 5.67 (default genérico).
 function getAnchoCamaDefault(act){
-  if(isPennrose5Act(act)) return PENNROSE_ANCHO; // 87.2
+  // V20_71 Fase B: ancho leído del MASTER (col I) con fallback 87.2
+  if(isPennrose5Act(act)) return getActAncho(act);
   return 5.67;
 }
 
@@ -7131,9 +7171,11 @@ function renderGrpActs(){
     var varsHtml = '';
     // V20_13: grupal Pennrose5Act → UI simplificada (solo TOTAL ACRES + ancho fijo)
     if(ct === 'puertas' && isPennrose5Act(act)){
+      // V20_71 Fase B: ancho leído del MASTER (col I) con fallback 87.2
+      var _ancRen = getActAncho(act);
       var _pA = g.vars.pennAcres || '';
       var _pAN = parseFloat(_pA) || 0;
-      var _pPue = _pAN * PENNROSE_ANCHO;
+      var _pPue = _pAN * _ancRen;
       varsHtml = '<div style="margin-bottom:10px">'
         + '<label style="font-size:10px;font-weight:700;color:var(--gr)">TOTAL ACRES</label>'
         + '<input type="text" inputmode="decimal" value="'+_pA+'" placeholder="Ej: 5.26"'
@@ -7141,9 +7183,9 @@ function renderGrpActs(){
         + ' style="font-size:18px;font-weight:700;padding:10px;width:100%;margin-top:3px;border:2px solid var(--b);border-radius:8px;color:var(--b);font-family:\'DM Sans\',sans-serif">'
         + '</div>'
         + '<div style="background:#eef;border-radius:6px;padding:6px 10px;margin-bottom:6px;font-size:11px;color:#334;display:flex;justify-content:space-between">'
-        + '<span>Ancho de cama (Pennrose)</span><b>'+PENNROSE_ANCHO+' (fijo)</b></div>'
+        + '<span>Ancho de cama (Pennrose)</span><b>'+_ancRen+' (fijo)</b></div>'
         + (_pAN>0?'<div style="background:var(--dk);border-radius:7px;padding:9px 12px;margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">'
-          + '<span style="font-size:12px;font-weight:600;color:rgba(255,255,255,.7)">🚪 Puertas totales (acres×'+PENNROSE_ANCHO+')</span>'
+          + '<span style="font-size:12px;font-weight:600;color:rgba(255,255,255,.7)">🚪 Puertas totales (acres×'+_ancRen+')</span>'
           + '<b style="font-family:\'Bebas Neue\',sans-serif;font-size:20px;color:var(--a)">'+_pPue.toFixed(2)+'</b></div>':'')
         + '<div class="r2" style="margin-bottom:8px">'
         + '<div><label style="font-size:10px">🟢 Entrada</label>'
@@ -7221,10 +7263,11 @@ function renderGrpActs(){
       }
       // Omega: puertas = acres × anchoCama cuando hay ambos, fallback pies/100
       var anchoCamaTot=parseFloat(g.vars.anchoCama)||0;
-      // V20_12: Pennrose5Act fuerza anchoCama=87.2
-      var _ancTot=isPennrose5Act(act)?PENNROSE_ANCHO:anchoCamaTot;
+      // V20_12: Pennrose5Act fuerza anchoCama del MASTER (col I)
+      // V20_71 Fase B: ancho leído del MASTER con fallback 87.2
+      var _ancTot=isPennrose5Act(act)?getActAncho(act):anchoCamaTot;
       var puertasTot=(grandAcres>0&&_ancTot>0)?grandAcres*_ancTot:grandPies/100;
-      var puertasFormula=(grandAcres>0&&_ancTot>0)?'(acres×'+(isPennrose5Act(act)?PENNROSE_ANCHO:'ancho')+')':'(÷100)';
+      var puertasFormula=(grandAcres>0&&_ancTot>0)?'(acres×'+(isPennrose5Act(act)?getActAncho(act):'ancho')+')':'(÷100)';
 
       varsHtml = '<div style="font-size:11px;font-weight:700;color:var(--gr);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">📏 Bloques / Surcos</div>'
         + filasHtml
@@ -7358,7 +7401,8 @@ function updGrpPreview(gi){
       }
     }
     var anchoCama=parseFloat(g.vars.anchoCama)||0;
-    var _ancPv=isPennrose5Act(act)?PENNROSE_ANCHO:anchoCama;
+    // V20_71 Fase B: ancho leído del MASTER (col I) con fallback 87.2
+    var _ancPv=isPennrose5Act(act)?getActAncho(act):anchoCama;
     var puertas=(grandAcres>0&&_ancPv>0)?grandAcres*_ancPv:grandPies/100;
     if(puertas&&np){
       var ppx=puertas/np;
@@ -7610,8 +7654,10 @@ function calcGrpAct(gi){
     var puertas=0;
     var formulaStr='';
     if(isPennrose5Act(act) && grandAcres>0){
-      puertas=grandAcres*PENNROSE_ANCHO;
-      formulaStr=grandAcres.toFixed(3)+' acres × '+PENNROSE_ANCHO+' = <strong>'+puertas.toFixed(2)+' puertas</strong>';
+      // V20_71 Fase B: ancho leído del MASTER (col I) con fallback 87.2
+      var _ancCG = getActAncho(act);
+      puertas=grandAcres*_ancCG;
+      formulaStr=grandAcres.toFixed(3)+' acres × '+_ancCG+' = <strong>'+puertas.toFixed(2)+' puertas</strong>';
     } else if(grandAcres>0 && anchoCama>0){
       puertas=grandAcres*anchoCama;
       formulaStr=grandAcres.toFixed(3)+' acres × '+anchoCama+' = <strong>'+puertas.toFixed(2)+' puertas</strong>';
@@ -7677,7 +7723,8 @@ function grpPayDetail(wid_){
         }
       }
       var anchoCama=parseFloat(g.vars.anchoCama)||0;
-      var _ancGpd=isPennrose5Act(act)?PENNROSE_ANCHO:anchoCama;
+      // V20_71 Fase B: ancho leído del MASTER (col I) con fallback 87.2
+      var _ancGpd=isPennrose5Act(act)?getActAncho(act):anchoCama;
       var puertas=(grandAcres>0&&_ancGpd>0)?grandAcres*_ancGpd:grandPies/100;
       if(puertas){
         var ppx=puertas/np;
@@ -8188,7 +8235,9 @@ function refreshDataBackground(){
       for(var i=0;i<data.tasks.length;i++){
         var t=data.tasks[i]; var tipoNorm=tipoMap[t.tipo]||'Hora';
         var modo=(t.modo||'Individual').trim();
-        ALL_ACTS.push({farm:t.farm,es:t.es,en:t.en||t.es,tipo:tipoNorm,payType:t.tipo||'',p:t.rate||16.23,hr:tipoNorm==='Hora',modo:modo});
+        // V20_71 Fase B: incluir cols G-P del motor también en refresh background
+        ALL_ACTS.push({farm:t.farm,es:t.es,en:t.en||t.es,tipo:tipoNorm,payType:t.tipo||'',p:t.rate||16.23,hr:tipoNorm==='Hora',modo:modo,
+          variable:t.variable||'', H:t.H, I:t.I, J:t.J, K:t.K, L:t.L, M:t.M, N:t.N, O:t.O, P:t.P});
       }
       saveCache(ALL_WORKERS, ALL_ACTS, LIDERES);
       // Delta2: si estábamos en FALLBACK y recuperamos datos, notificar
