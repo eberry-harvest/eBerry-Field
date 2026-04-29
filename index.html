@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_68';
+window.APP_VERSION = 'V20_69';
 (function(){
   // Toast persistente de "versión antigua detectada" — NO se puede cerrar, obliga a actualizar
   function showVersionMismatch(remoteV){
@@ -3388,20 +3388,6 @@ function _enterReadOnly(payload){
   // 7) Re-render
   var list = gEl('wlist'); if(list) list.innerHTML = '';
   workers.forEach(function(w,i){ if(list) list.appendChild(mkCard(w,i)); });
-
-  // V20_68: defensa adicional — forzar clases 'on' en pill toggle/inputs después del render
-  // para garantizar que el horario se vea expandido aunque a.showTime venga undefined del payload.
-  try {
-    workers.forEach(function(w){
-      (w.acts||[]).forEach(function(a, ai){
-        var tg = gEl('tg'+w.id+'_'+ai);
-        var tf = gEl('tf'+w.id+'_'+ai);
-        if(tg) tg.classList.add('on');
-        if(tf) tf.classList.add('on');
-      });
-    });
-  } catch(e){ console.warn('V20_68 force expand fallo:', e); }
-
   try { updParam && updParam(); } catch(e){}
   try { updParts && updParts(); } catch(e){}
   try { renderGrpActs && renderGrpActs(); } catch(e){}
