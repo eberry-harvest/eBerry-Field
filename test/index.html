@@ -24,7 +24,7 @@
 </script>
 <script>
 // V50 (port V20_23): estandarización de colores PDF
-window.APP_VERSION = 'V92';
+window.APP_VERSION = 'V98';
 (function(){
   // V86 (port V20_77): AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Si _ackedVersion === APP_VERSION cargado, ese ack ya cumplió → limpiar para que próximas updates lleguen.
@@ -1454,12 +1454,7 @@ body { padding-bottom: 90px; }
     <button id="pdfAllBtn" class="btn pdf" style="display:none" onclick="genPDFAllRanchos()">📄 PDF TODOS los Ranchos</button>
     <button class="btn bw" style="display:none" onclick="sendWA()">📲 Enviar PDF por WhatsApp</button>
     <button class="btn" style="background:#3a7fd4;color:#fff" onclick="openNewDay()"><span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#1a7a4a;color:#fff;font-weight:900;font-size:12px;margin-right:6px">4</span>🌅 Nuevo Día</button>
-    <div style="height:1px;background:var(--bd);margin:10px 0"></div>
-    <div style="font-size:11px;font-weight:700;color:var(--gr);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">📲 Compartir datos entre dispositivos</div>
-    <button class="btn" style="background:#6c3483;color:#fff" onclick="exportData()"><span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#1a7a4a;color:#fff;font-weight:900;font-size:12px;margin-right:6px">5</span>📥 Exportar datos (descargar)</button>
-    <button class="btn" style="background:#1a5276;color:#fff" onclick="importData()"><span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#1a7a4a;color:#fff;font-weight:900;font-size:12px;margin-right:6px">6</span>📤 Importar datos (cargar)</button>
-    <input type="file" id="importFile" accept=".json" style="display:none" onchange="onImportFile(this)">
-    <p style="font-size:11px;color:var(--gr);text-align:center">Exporta para mandar a otro cel por WhatsApp</p>
+    <!-- V93 (port V20_83): bloque "📲 Compartir datos entre dispositivos" eliminado — duplicaba la pestaña ⑨ Archivos -->
   </div>
   <!-- 🧪 TEST: solo visible para admin — quitar en producción -->
   <div id="testCard" class="card" style="display:none;border:2px dashed #e74c3c">
@@ -3792,6 +3787,17 @@ function _enterReadOnly(payload){
     for(var gi=0;gi<(GRUPAL_ACTS||[]).length;gi++){
       if(GRUPAL_ACTS[gi].es===pg.actEs){ gaiIdx=gi; break; }
     }
+    // V98 (port V20_88): si no se encontró en GRUPAL_ACTS, buscar en ALL_ACTS
+    if(gaiIdx===-1 && typeof ALL_ACTS!=='undefined' && ALL_ACTS){
+      for(var _aa88=0; _aa88<ALL_ACTS.length; _aa88++){
+        if(ALL_ACTS[_aa88].es===pg.actEs && (ALL_ACTS[_aa88].modo||'').toLowerCase()==='grupal'){
+          GRUPAL_ACTS.push(ALL_ACTS[_aa88]);
+          gaiIdx = GRUPAL_ACTS.length - 1;
+          console.log('[V98] Grupal recuperada de ALL_ACTS para modo lectura:', pg.actEs);
+          break;
+        }
+      }
+    }
     var partIds = (pg.workers||[]).map(function(pw){
       var match=null;
       for(var wi=0;wi<workers.length;wi++){
@@ -4223,6 +4229,7 @@ var qrScanner = null;
 var qrSessionCount = 0;
 var qrCooldown = false; // evita escaneos duplicados
 var qrActive = false;   // true mientras el scanner está abierto — modales saben que deben regresar al scanner
+var _qrStartTimer = null; // V95 (port V20_85): handle del setTimeout de startQR — cancelarlo en stopQR
 
 function startQR(){
   var ov = gEl('qrOv');
@@ -4233,7 +4240,10 @@ function startQR(){
   setQRStatus('Apunta la cámara al código QR del trabajador','');
 
   // Pequeño delay para que el DOM se renderice antes de iniciar la cámara
-  setTimeout(function(){
+  // V95 (port V20_85): guardar handle para que stopQR pueda cancelarlo
+  _qrStartTimer = setTimeout(function(){
+    _qrStartTimer = null;
+    if(!qrActive) return; // V95 (port V20_85): si ya cerró el modal, abortar
     if(qrScanner) { try{qrScanner.clear();}catch(e){} }
     qrScanner = new Html5Qrcode("qrReader");
     qrScanner.start(
@@ -4250,6 +4260,7 @@ function startQR(){
 
 function pauseQR(){
   // Pausa la cámara sin cerrar el overlay (para mostrar modales encima)
+  if(!qrActive) return; // V95 (port V20_85): simetría con resumeQR
   if(qrScanner){ qrScanner.stop().catch(function(){}); }
 }
 // V32-FIX: guard anti-concurrencia en resumeQR
@@ -4271,13 +4282,29 @@ function resumeQR(){
   }, 500);
 }
 function stopQR(){
+  // V95 (port V20_85): el modal se quedaba trabado al cerrar antes de escanear.
+  // Causa: Html5Qrcode.stop() falla durante state STARTING (setTimeout 300ms aún no disparó).
   qrActive = false;
-  if(qrScanner){
-    qrScanner.stop().then(function(){
-      qrScanner.clear();
-    }).catch(function(){});
-  }
+  // 1) Cancelar startup pendiente para que no cree el scanner después del cierre
+  if(_qrStartTimer){ clearTimeout(_qrStartTimer); _qrStartTimer = null; }
+  if(_qrResuming){ _qrResuming = false; }
+  // 2) Cerrar overlay PRIMERO (UX inmediata, no esperar a la cámara)
   gEl('qrOv').classList.remove('on');
+  // 3) Detener scanner solo si está realmente escaneando (state===2)
+  if(qrScanner){
+    try {
+      var st = (qrScanner.getState && qrScanner.getState());
+      if(st === 2){ // SCANNING
+        qrScanner.stop().then(function(){
+          try{ qrScanner.clear(); }catch(e){}
+          qrScanner = null;
+        }).catch(function(){ qrScanner = null; });
+      } else {
+        try{ qrScanner.clear(); }catch(e){}
+        qrScanner = null;
+      }
+    } catch(e){ qrScanner = null; }
+  }
 }
 
 // V10: Pausa QR automática — observa TODOS los overlays, incluyendo dinámicos
@@ -4572,6 +4599,30 @@ function addAct(wid_){
 function mkActRow(wid_,ai,_cont){
   var w=getW(wid_); if(!w||!w.acts[ai])return;
   var a=w.acts[ai]; var act=ACTS[a.ai];
+  // V97 (port V20_87): fallback defensivo si ACTS[a.ai] es undefined.
+  if(!act){
+    if(a.esName){
+      for(var _ax87=0; _ax87<ACTS.length; _ax87++){
+        if(ACTS[_ax87].es===a.esName){ act=ACTS[_ax87]; break; }
+      }
+      if(!act && typeof ALL_ACTS!=='undefined' && ALL_ACTS){
+        for(var _aa87=0; _aa87<ALL_ACTS.length; _aa87++){
+          if(ALL_ACTS[_aa87].es===a.esName){ act=ALL_ACTS[_aa87]; break; }
+        }
+      }
+    }
+    if(!act){
+      act = {
+        es: a.esName || '?', en: a.esName || '?',
+        tipo: a.tipo || a._payType || 'Hora',
+        payType: a._payType || a.tipo || 'Hours',
+        p: parseFloat(a._unitPrice||a.unitPrice||0)||0,
+        hr: (a._payType==='Hours'||a.tipo==='Hora'),
+        modo: 'Individual', variable: '', I: '', P: ''
+      };
+      console.warn('[V97] Actividad no encontrada en ACTS ni ALL_ACTS — fallback mínimo:', a.esName);
+    }
+  }
   var cont=_cont||gEl('ac'+wid_); if(!cont)return;
   var div=document.createElement('div');
   div.className='ar'; div.id='ar'+wid_+'_'+ai;
@@ -5619,11 +5670,15 @@ function _autoSaveConditionMet(){
   try {
     var hasWorker = (typeof workers !== 'undefined' && workers && workers.length > 0);
     if(hasWorker) return true;
+    // V94 (port V20_84): día solo-grupal también activa autoSave
+    var hasGrp = (typeof grpActs !== 'undefined' && grpActs && grpActs.length > 0);
+    if(hasGrp) return true;
     // Multi-rancho: revisar otros ranchos (admin que cambia de pill antes de capturar hEnt)
     if(typeof _ranchos !== 'undefined' && _ranchos && _ranchos.length){
       for(var i=0;i<_ranchos.length;i++){
         var r=_ranchos[i];
         if(r && r.workers && r.workers.length>0) return true;
+        if(r && r.grpActs && r.grpActs.length>0) return true; // V94 (port V20_84)
       }
     }
     return false;
@@ -6675,7 +6730,8 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
       for(var _i81=0;_i81<ACTS.length;_i81++){ if(ACTS[_i81].es===col4.esName){ _actC81=ACTS[_i81]; break; } }
     }
     var _isVD81 = !!(_actC81 && (_actC81.variable||'').toLowerCase()==='vardoor');
-    var _factVD81 = _isVD81 ? getActFactorAcres(_actC81) : null;
+    // V96 (port V20_86): usar getAnchoCamaDefault (con fallback col I) en vez de getActFactorAcres directo.
+    var _factVD81 = _isVD81 ? getAnchoCamaDefault(_actC81) : null;
     if(_isVD81 && _factVD81 && tot>0){
       var _ac81 = tot/_factVD81;
       totLbl = '<span style="font-size:9px;color:#0f6e56;display:block">'+_ac81.toFixed(4)+' acres</span>'
@@ -7750,9 +7806,20 @@ var PENNROSE_ANCHO = 87.2; // V84 (port V20_73): fallback offline cuando act.I n
 // V84 (port V20_71 Fase B): helpers para refactor data-driven Pennrose.
 function _resolveActByName(actOrName){
   if(!actOrName) return null;
-  if(typeof actOrName === 'object') return actOrName;
-  var n = String(actOrName).toLowerCase().trim();
   var pool = (typeof ALL_ACTS!=='undefined' && ALL_ACTS) ? ALL_ACTS : (typeof ACTS!=='undefined'?ACTS:[]);
+  if(typeof actOrName === 'object'){
+    // V96 (port V20_86): objeto sin P pero con es → enriquecer desde ALL_ACTS
+    if(actOrName.P===undefined && actOrName.es){
+      var _en = String(actOrName.es).toLowerCase().trim();
+      for(var _ei=0;_ei<pool.length;_ei++){
+        if((pool[_ei].es||'').toLowerCase().trim()===_en && pool[_ei].P!==undefined){
+          return pool[_ei];
+        }
+      }
+    }
+    return actOrName;
+  }
+  var n = String(actOrName).toLowerCase().trim();
   for(var _ri=0;_ri<pool.length;_ri++){
     if((pool[_ri].es||'').toLowerCase().trim()===n) return pool[_ri];
   }
@@ -7797,17 +7864,23 @@ function isPennrose5Act(actOrName){
 // V84 (port V20_70 Fase A): getActConstante() ELIMINADA (era función muerta — return 100, sin callers reales).
 // V84 (port V20_72 Fase C): PENNROSE_ACTS_87_2 ELIMINADA (lista hardcoded reemplazada por col I del MASTER).
 
-// V84 (port V20_22/V20_73): Ancho de cama default para convertir piezas → acres en el invoice.
-// Pennrose (data-driven via col I) usa el valor del MASTER; otros ranchos usan 5.67 (default genérico).
+// V96 (port V20_86): ELIMINADO fallback 5.67 — si MASTER no tiene col P ni I, retornar null y mostrar warning.
+var _missingFactorWarned = {};
 function getAnchoCamaDefault(act){
-  // V85 (port V20_76): priorizar col P (FactorAcres) si existe.
   var fact = getActFactorAcres(act);
   if(fact) return fact;
   if(isPennrose5Act(act)){
     var ancho = getActAncho(act);
-    return ancho || 5.67; // fallback genérico si col I vacía
+    if(ancho) return ancho;
   }
-  return 5.67;
+  try {
+    var _name = (act && act.es) || '?';
+    if(!_missingFactorWarned[_name]){
+      _missingFactorWarned[_name] = true;
+      console.warn('[V96] Falta FactorAcres en MASTER col P (o col I para Pennrose) para actividad: '+_name+'. Acres no se calcularán.');
+    }
+  } catch(e){}
+  return null;
 }
 
 // Detecta el tipo de cálculo de una actividad grupal
@@ -7968,7 +8041,21 @@ function renderGrpActs(){
   for(var gi=0;gi<grpActs.length;gi++){
     var g   = grpActs[gi];
     var act = GRUPAL_ACTS[g.gai];
-    if(!act) continue;
+    // V98 (port V20_88): red de seguridad — si act undefined en modo lectura, sintetizar mínimo
+    if(!act){
+      if(window._readOnlyMode && (g.esName || g._actEs)){
+        act = {
+          es: g.esName || g._actEs,
+          en: g.esName || g._actEs,
+          tipo: g._payType || 'Pieces',
+          payType: g._payType || 'Pieces',
+          p: parseFloat(g._unitPrice||0)||0,
+          hr: false, calc: '', modo: 'Grupal',
+          variable: '', I: '', P: ''
+        };
+        console.warn('[V98] Grupal sin act resuelto — fallback sintético en modo lectura:', act.es);
+      } else continue;
+    }
     var ct  = grpCalcType(act);
     // Estado open: default true si no existe
     if(g.open===undefined) g.open=true;
@@ -8602,6 +8689,25 @@ function migrateActsToNames(){
 // ── AUSENCIAS SYSTEM ──
 // (var ausencias movida a APP STATE — Iota)
 
+// V94 (port V20_84): helper para saber si un trabajador (por nombre) participa en algún grupal del día.
+// Bug raíz: la lógica de ausencias solo miraba `workers[]` (individuales) — los workers
+// que solo hacían grupal caían como "ausentes" aunque sí trabajaron.
+function _isInAnyGrpAct(name){
+  if(!name || typeof grpActs==='undefined' || !grpActs || !grpActs.length) return false;
+  var dbW = (typeof findInArr==='function') ? findInArr(ALL_WORKERS, name) : null;
+  var wid = dbW ? dbW.id : null;
+  for(var gi=0; gi<grpActs.length; gi++){
+    var g = grpActs[gi];
+    if(!g || !g.participantes || !g.participantes.length) continue;
+    if(wid != null && g.participantes.indexOf(wid) >= 0) return true;
+    for(var pi=0; pi<g.participantes.length; pi++){
+      var pw = (typeof getW==='function') ? getW(g.participantes[pi]) : null;
+      if(pw && pw.name === name) return true;
+    }
+  }
+  return false;
+}
+
 function getAusenciaCandidates(){
   var result = [];
   // NAMES es array de strings (nombres) de la cuadrilla del surquero
@@ -8609,6 +8715,7 @@ function getAusenciaCandidates(){
   for(var i=0;i<pool.length;i++){
     var name = pool[i]; if(!name) continue;
     if(nameInArr(workers,name)) continue;
+    if(_isInAnyGrpAct(name)) continue; // V94 (port V20_84): trabajador en grupal NO es ausente
     if(nameInArr(ausencias,name)) continue;
     // Buscar empNum en ALL_WORKERS
     var dbW = findInArr(ALL_WORKERS,name);
@@ -8626,9 +8733,9 @@ function syncAusencias(){
       return !!findInStrArr(NAMES,a.name);
     });
   }
-  // 2) Quitar los que ya estan trabajando
+  // 2) Quitar los que ya estan trabajando (V94 port V20_84: incluye grupales)
   ausencias = ausencias.filter(function(a){
-    return !nameInArr(workers,a.name);
+    return !nameInArr(workers,a.name) && !_isInAnyGrpAct(a.name);
   });
   // 3) Auto-agregar faltantes — preservando motivo si ya existía guardado
   // Admin sin surquero seleccionado → no hacer sync (usa showAllEmployeesAsAbsent)
@@ -8722,10 +8829,12 @@ function showAllEmployeesAsAbsent(){
   var filteredWorkers = getWorkersForRancho();
 
   // V10: Excluir workers ya agregados en Trabajadores y ausencias manuales
+  // V94 (port V20_84): excluir también los que están en grupales
   var absentOnly = [];
   for(var i=0;i<filteredWorkers.length;i++){
     var w = filteredWorkers[i];
     if(nameInArr(workers, w.name)) continue;
+    if(_isInAnyGrpAct(w.name)) continue;
     if(nameInArr(ausencias, w.name)) continue;
     absentOnly.push(w);
   }
@@ -8797,6 +8906,10 @@ function addAusenciaFromBar(){
 
 function addAusenciaConfirmed(name, empNum){
   if(nameInArr(ausencias,name)){ toast("⚠️ Ya está en ausencias"); return; }
+  // V94 (port V20_84): si está en grupal, advertir antes de marcar ausente
+  if(_isInAnyGrpAct(name)){
+    if(!confirm('⚠️ '+name+' está participando en una actividad grupal hoy.\n\n¿Seguro que quieres marcarlo como ausente? Esto puede generar inconsistencias en Sheets.')) return;
+  }
   var num = empNum||"";
   if(!num){ var dbW=findInArr(ALL_WORKERS,name); if(dbW) num=dbW.empNum||""; }
   ausencias.push({name:name, empNum:num, motivo:""});
@@ -8873,7 +8986,7 @@ function setMotivoClose(idx, motivo){
 // ── LOCAL CACHE (instant load on return visits) ──
 // ✅ v4.2: Cambiamos la key del caché para forzar recarga fresca
 // (borra el caché viejo que no tenía el campo "modo")
-var CACHE_KEY = 'eb_appdata_v3';  // Tau: bump para invalidar cache con tipoMap viejo
+var CACHE_KEY = 'eb_appdata_v4';  // V96 (port V20_86): bump para invalidar cache pre-V20_71 (sin col P FactorAcres)
 
 function saveCache(workers, acts, lideres){
   try{
@@ -10258,7 +10371,12 @@ function buildInvoiceAutoData(){
   }
   for(var k in actMap){
     var m = actMap[k];
-    var blockLabel = m.isHr ? 'Horas' : (m.isPuertas ? 'Acres' : 'Piezas');
+    // V96 (port V20_86): si falta FactorAcres, label cambia a "⚠️ Falta FactorAcres" para visibilidad
+    var blockLabel;
+    if(m.isHr) blockLabel = 'Horas';
+    else if(m.isPuertas){
+      blockLabel = (m.ancho && m.ancho > 0) ? 'Acres' : '⚠️ Falta FactorAcres';
+    } else blockLabel = 'Piezas';
     var equipLbl = m.equipment;
     if(m.isHr && (m.ini || m.fin)){
       equipLbl += ' (' + to12h(m.ini||'') + '-' + to12h(m.fin||'') + ')';
@@ -10266,6 +10384,9 @@ function buildInvoiceAutoData(){
     var fieldVal;
     if(m.isPuertas && m.ancho > 0){
       fieldVal = (m.totalField / m.ancho).toFixed(2);
+    } else if(m.isPuertas){
+      // V96 (port V20_86): puertas pero sin factor → mostrar puertas crudas + flag visible
+      fieldVal = m.totalField.toFixed(2) + ' puertas';
     } else {
       fieldVal = m.totalField.toFixed(2);
     }
