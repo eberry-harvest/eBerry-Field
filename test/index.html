@@ -26,7 +26,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_91_16';
+window.APP_VERSION = 'V20_91_18';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -4558,7 +4558,18 @@ function onQRSuccess(decoded){
       }
       _qrMode = 'trabajador'; // resetear después
       return;
-    } catch(e){ console.warn('manualConfirm branch error',e); _pendingManualAdd=null; _pendingManualRole=null; _qrMode='trabajador'; }
+    } catch(e){
+      // V20_91_18 FIX: si doAddConfirmed/stopQR throwea, el catch debe RETURNAR.
+      // Sin return, la ejecución caía al check inCrew (L4579) y agregaba al surquero
+      // (que escaneó SU QR para autorizar) como trabajador a la lista.
+      console.warn('[V20_91_18] manualConfirm branch error',e);
+      _pendingManualAdd = null;
+      _pendingManualRole = null;
+      _qrMode = 'trabajador';
+      try { stopQR(); } catch(_){}
+      try { toast('⚠️ Error procesando autorización — intenta de nuevo'); } catch(_){}
+      return;
+    }
   }
 
   // V20_91_01: para chofer/surquero/dual → siempre mostrar modal de confirmación con texto contextual
@@ -12577,10 +12588,15 @@ function onCheckInManualAC(value){
       pop.innerHTML = '<div style="padding:12px;color:var(--gr);font-size:13px">Sin coincidencias</div>';
       pop.style.display='block'; return;
     }
+    // V20_91_17: safeHighlight necesita RegExp con grupo de captura, no string crudo.
+    // Bug previo: pasábamos value (string) → safeHighlight hacía text.replace(string, '\x00$1\x01')
+    // → como no hay grupo, $1 quedaba literal en salida → "$1" visible en lugar de letras.
+    var rxHi;
+    try { rxHi = new RegExp('('+value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','gi'); } catch(_){ rxHi = null; }
     var html = '';
     for(var k=0; k<matches.length; k++){
       var nmEsc = esc(matches[k].name).replace(/'/g,"\\'");
-      var nmHi  = (typeof safeHighlight==='function') ? safeHighlight(matches[k].name, value) : esc(matches[k].name);
+      var nmHi  = (rxHi && typeof safeHighlight==='function') ? safeHighlight(matches[k].name, rxHi) : esc(matches[k].name);
       html += '<div class="acItem" onclick="checkInManualSelect(\''+nmEsc+'\')">'+nmHi+'</div>';
     }
     pop.innerHTML = html;
