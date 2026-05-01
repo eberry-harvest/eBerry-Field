@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_91_09';
+window.APP_VERSION = 'V20_91_10';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -1212,7 +1212,7 @@ body.readOnly [onclick*="openNewDay"]{display:none !important}
       <option value="">— Selecciona un rancho —</option>
     </select>
     <div class="r2">
-      <div><label>Fecha</label><input type="date" id="fecha" data-save onchange="updDate()"></div>
+      <div><label>Fecha</label><input type="date" id="fecha" data-save onchange="onFechaChange()"></div>
       <div><label># Bus</label><input type="text" id="numBus" data-save placeholder="951"></div>
     </div>
     <div class="r2">
@@ -4061,10 +4061,67 @@ function onActInput(ev){
 
 // ============================================================================
 // V8: getPH() eliminada — reemplazada por getHRate()
+// V20_91_10: rastrea la última fecha activa para detectar cambios manuales del input
+var _lastFecha = '';
+
 function updDate(){
   var v=gVal('fecha'); if(!v)return;
   var p=v.split('-');
   if(p.length===3) gEl('hdate').textContent=p[2]+'/'+p[1]+'/'+p[0];
+  _lastFecha = v;
+}
+
+// V20_91_10: handler del input fecha — confirm si hay datos del día actual antes de cambiar.
+// Reglas:
+// - Sin workers ni datos → cambio libre
+// - Con workers/datos → confirm "¿seguro? se borrará todo y será como nuevo día"
+// - Si acepta → reset completo (igual que startNewDay sin keepWorkers)
+// - Si cancela → revertir input a _lastFecha
+function onFechaChange(){
+  var newFecha = gVal('fecha') || '';
+  // Primera vez (login fresh) o sin datos → solo actualizar header
+  var hasData = (workers && workers.length > 0) || (grpActs && grpActs.length > 0) || (ausencias && ausencias.length > 0);
+  if(!_lastFecha || !hasData || newFecha === _lastFecha){
+    updDate();
+    return;
+  }
+  // Pedir confirmación al cambiar de día con datos en curso
+  var ok = confirm('Estás cambiando la fecha del día.\n\n' +
+    '⚠️ Hay '+workers.length+' trabajador(es) registrado(s) en el día actual ('+_lastFecha+').\n\n' +
+    'Si continúas, todo se borrará y será como un día nuevo.\n\n' +
+    '¿Seguro que quieres cambiar de día?');
+  if(!ok){
+    // Revertir input
+    gEl('fecha').value = _lastFecha;
+    return;
+  }
+  // Aceptado: reset completo manteniendo la nueva fecha
+  saveQuiet();
+  workers = []; wid = 0; grpActs = []; ausencias = [];
+  estP = []; hilP = []; cajasP = [];
+  _dayFlow = _initDayFlow();
+  _qrMode = 'trabajador';
+  // Limpiar campos del form
+  var resetFields=['numBus','numCam','finca','notas','estAcres','estAncho','hilAcres','hilAncho','cajasTotal','hEnt','hSal','lIni','lFin'];
+  for(var i=0;i<resetFields.length;i++){ var el=gEl(resetFields[i]); if(el) el.value=''; }
+  // Re-render
+  var list = gEl('wlist'); if(list) list.innerHTML='';
+  if(list){
+    var ph=document.createElement('div'); ph.id='wph';
+    ph.style.cssText='text-align:center;padding:40px 18px;color:var(--gr);font-size:14px';
+    ph.textContent='Escribe un nombre en la barra de abajo';
+    list.appendChild(ph);
+  }
+  try { _renderIniciarDia(); } catch(e){}
+  try { _renderHorarioLocks(); } catch(e){}
+  try { _renderCheckOutBtn(); } catch(e){}
+  try { renderGrpActs(); } catch(e){}
+  try { renderAusencias(); } catch(e){}
+  updParam();
+  updParts();
+  toast('🌅 Cambiaste a ' + newFecha + ' — día reiniciado');
+  _lastFecha = newFecha;
+  autoSave();
 }
 function updParam(){
   updDate();
@@ -7565,7 +7622,10 @@ function startNewDay(keepWorkers){
   saveQuiet();
   var savedWorkers=[];
   if(keepWorkers){
-    savedWorkers=workers.map(function(w){ return {id:w.id, name:w.name, empNum:w.empNum||'', contractRate:w.contractRate||0, open:false, acts:[], totalPay:0}; });
+    // V20_91_10: NO preservar campos check-in/check-out — nuevo día empieza limpio
+    savedWorkers=workers.map(function(w){ return {id:w.id, name:w.name, empNum:w.empNum||'', contractRate:w.contractRate||0, open:false, acts:[], totalPay:0,
+      role:'trabajador', checkInTime:'', checkInTs:0, checkInLocked:false,
+      checkOutTime:'', checkOutLocked:false, canUndoUntil:0}; });
   }
   var now=new Date();
   var mo=now.getMonth()+1; var dy=now.getDate();
@@ -7576,6 +7636,10 @@ function startNewDay(keepWorkers){
   // ✅ Limpiar horarios — el surquero los captura manualmente
   var timeFields=['hEnt','hSal','lIni','lFin'];
   for(var i=0;i<timeFields.length;i++){ var te=gEl(timeFields[i]); if(te) te.value=''; }
+  // V20_91_10 FIX: resetear _dayFlow al iniciar nuevo día. Sin esto, _dayFlow.checkOutDone seguía
+  // true tras "Nuevo Día" → trabajadores nuevos se rechazaban con "día cerrado" (BUG reportado).
+  _dayFlow = _initDayFlow();
+  _qrMode = 'trabajador';
   estP=[]; hilP=[]; cajasP=[]; grpActs=[];
   workers=savedWorkers;
   if(!keepWorkers) wid=0;
