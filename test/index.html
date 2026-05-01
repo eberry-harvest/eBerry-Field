@@ -26,7 +26,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_91_18';
+window.APP_VERSION = 'V20_91_19';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -1736,10 +1736,19 @@ function logoutUser(){
   // Sin esto, cada cambio de surquero dejaba _autoSaveTimer y _checkSendTimer huérfanos.
   if(typeof _autoSaveTimer !== 'undefined' && _autoSaveTimer){ clearInterval(_autoSaveTimer); _autoSaveTimer=null; }
   if(typeof _checkSendTimer !== 'undefined' && _checkSendTimer){ clearInterval(_checkSendTimer); _checkSendTimer=null; }
+  // V20_91_19 FIX: capturar userKey ANTES de nullear currentUser para borrar localStorage del día.
+  // Bug previo: logoutUser llamaba saveQuiet (que GUARDABA en localStorage) y resetState (que solo
+  // limpiaba MEMORIA). El próximo login leía la key persistida y restauraba el día anterior.
+  var _userKeyToClear = '';
+  try { _userKeyToClear = (typeof getUserKey==='function') ? getUserKey() : ''; } catch(_){}
   // V20_02-HOTFIX2: setear null ANTES de limpiar — evita que listeners disparen saveQuiet con datos vacíos
   currentUser = null;
   // Ahora sí limpiar (saveQuiet ya no corre porque currentUser=null)
   resetState();
+  // V20_91_19 FIX: borrar la key del día activo del localStorage para que el próximo login arranque limpio
+  if(_userKeyToClear){
+    try { localStorage.removeItem(_userKeyToClear); console.log('[V20_91_19] logout: localStorage limpiado:', _userKeyToClear); } catch(_){}
+  }
   var wlist = gEl('wlist'); if(wlist) wlist.innerHTML = '';
   var sel = gEl('rancho'); if(sel){ sel.innerHTML = '<option value="">— Selecciona un rancho —</option>'; sel.value = ''; }
   ACTS = []; GRUPAL_ACTS = []; NAMES = [];
@@ -4470,6 +4479,47 @@ function onQRSuccess(decoded){
   var qrName = parts[1].trim();
   var qrEmpNum = parts[2].trim();
 
+  // V20_91_19: branch manualConfirm AL INICIO — antes de cualquier validación de surquero/duplicado/contrato.
+  // El surquero (líder) NO está en ALL_WORKERS ni en CONTRATOS — checkContrato lo rechazaría y nunca
+  // alcanzaría el branch viejo en L4530. Además se corrigió empNum → qrEmpNum (variable real).
+  if(_qrMode === 'manualConfirm'){
+    try {
+      var _meEmp = (currentUser && currentUser.empNum) ? String(currentUser.empNum).trim() : '';
+      var _meNm  = ((currentUser && currentUser.name) || '').toLowerCase().trim();
+      var _qrEmp = String(qrEmpNum || '').trim();
+      var _qrNm  = String(qrName  || '').toLowerCase().trim();
+      var _ok = (_meEmp && _qrEmp && _meEmp === _qrEmp) || (_meNm && _qrNm && _meNm === _qrNm);
+      if(!_ok){
+        setQRStatus('⚠️ Ese QR no es tuyo, escanea TU tarjeta de surquero','err');
+        _scheduleQRStatusReset(4000);
+        return;
+      }
+      pauseQR();
+      var _pendName = _pendingManualAdd;
+      var _pendRole = _pendingManualRole || 'trabajador';
+      _pendingManualAdd = null;
+      _pendingManualRole = null;
+      _qrMode = _pendRole;
+      try { stopQR(); } catch(_){}
+      if(_pendName){
+        try { window._lastAuthorizedBy = currentUser.empNum||currentUser.name||''; window._lastAddedManually = true; } catch(_){}
+        doAddConfirmed(_pendName);
+        var _roleTxt = (_pendRole === 'chofer') ? ' como CHOFER' : '';
+        toast('✅ '+_pendName+' agregado'+_roleTxt+' (autorizado por '+(currentUser.name||'surquero')+')');
+      }
+      _qrMode = 'trabajador';
+      return;
+    } catch(e){
+      console.warn('[V20_91_19] manualConfirm branch error', e);
+      _pendingManualAdd = null;
+      _pendingManualRole = null;
+      _qrMode = 'trabajador';
+      try { stopQR(); } catch(_){}
+      try { toast('⚠️ Error: '+(e&&e.message||'autorización falló')); } catch(_){}
+      return;
+    }
+  }
+
   // V20_91_01: validar surquero — su tarjeta debe coincidir con currentUser.name
   // V20_91_08 FIX: extender validación a modo choferSurquero (chofer Y surquero misma persona)
   // Lógica: si la persona escaneada va a ser surquero (sea solo o combinado con chofer), DEBE ser quien inició sesión.
@@ -4525,52 +4575,8 @@ function onQRSuccess(decoded){
     return;
   }
 
-  // V20_91_14: branch para "manualConfirm" — el surquero escaneó SU PROPIO QR para autorizar
-  // un alta manual hecha desde el bottom-sheet de Check-in.
-  if(_qrMode === 'manualConfirm'){
-    try {
-      var _meEmp = (currentUser && currentUser.empNum) ? String(currentUser.empNum).trim() : '';
-      var _meNm  = ((currentUser && currentUser.name) || '').toLowerCase().trim();
-      var _qrEmp = String(empNum || '').trim();
-      var _qrNm  = String(qrName || '').toLowerCase().trim();
-      var _ok = (_meEmp && _qrEmp && _meEmp === _qrEmp) || (_meNm && _qrNm && _meNm === _qrNm);
-      if(!_ok){
-        setQRStatus('⚠️ Ese QR no es tuyo, escanea TU tarjeta de surquero','err');
-        _scheduleQRStatusReset(4000);
-        return; // mantener cámara abierta para reintentar
-      }
-      pauseQR();
-      var _pendName = _pendingManualAdd;
-      var _pendRole = _pendingManualRole || 'trabajador'; // V20_91_16
-      _pendingManualAdd = null;
-      _pendingManualRole = null;
-      // V20_91_16: setear _qrMode al rol real para que doAddConfirmed → _applyCheckInForMode aplique correctamente
-      _qrMode = _pendRole;
-      try { stopQR(); } catch(_){}
-      if(_pendName){
-        try {
-          window._lastAuthorizedBy  = currentUser.empNum || currentUser.name || '';
-          window._lastAddedManually = true;
-        } catch(_){}
-        doAddConfirmed(_pendName);
-        var _roleTxt = (_pendRole === 'chofer') ? ' como CHOFER' : '';
-        toast('✅ '+_pendName+' agregado'+_roleTxt+' (autorizado por '+(currentUser.name||'surquero')+')');
-      }
-      _qrMode = 'trabajador'; // resetear después
-      return;
-    } catch(e){
-      // V20_91_18 FIX: si doAddConfirmed/stopQR throwea, el catch debe RETURNAR.
-      // Sin return, la ejecución caía al check inCrew (L4579) y agregaba al surquero
-      // (que escaneó SU QR para autorizar) como trabajador a la lista.
-      console.warn('[V20_91_18] manualConfirm branch error',e);
-      _pendingManualAdd = null;
-      _pendingManualRole = null;
-      _qrMode = 'trabajador';
-      try { stopQR(); } catch(_){}
-      try { toast('⚠️ Error procesando autorización — intenta de nuevo'); } catch(_){}
-      return;
-    }
-  }
+  // V20_91_19: branch manualConfirm movido al INICIO de onQRSuccess (después del parsing).
+  // El branch viejo aquí estaba después de checkContrato que rechazaba al surquero.
 
   // V20_91_01: para chofer/surquero/dual → siempre mostrar modal de confirmación con texto contextual
   if(_qrMode === 'chofer' || _qrMode === 'surquero' || _qrMode === 'choferSurquero'){
@@ -6002,23 +6008,22 @@ function _persistState(vals, wSave){
 window._autoSaveActive = false;
 
 function _autoSaveConditionMet(){
-  // V20_64 EMERGENCIA: surqueros en producción no estaban guardando porque la condición
-  // exigía hEnt+worker simultáneos. Ahora basta con 1 worker real (en cualquier rancho)
-  // — un worker capturado YA es señal de uso legítimo, no demo. hEnt puede llegar después.
-  // Sigue bloqueando demos vacíos (sin workers, sin nada) → no re-introduce contaminación.
+  // V20_91_19: auto-guardado se activa cuando hay >= 4 workers (más confianza en uso real)
+  // o por activación manual via click en pill / botón "💾 Guardar" (que setean _autoSaveActive=true permanente).
+  // Antes (V20_64): se activaba con 1 worker → demasiado prematuro, surqueros perdían captura por ruido.
   try {
-    var hasWorker = (typeof workers !== 'undefined' && workers && workers.length > 0);
+    var MIN_WORKERS = 4; // V20_91_19: regla de Serafín 2026-05-01
+    var hasWorker = (typeof workers !== 'undefined' && workers && workers.length >= MIN_WORKERS);
     if(hasWorker) return true;
-    // V20_84: también activar autoSave si hay actividad grupal (caso día solo-grupal,
-    // ej: jornada completa de empaque en cuadrilla — antes quedaba sin guardar).
+    // V20_84: también activar autoSave si hay actividad grupal (caso día solo-grupal)
     var hasGrp = (typeof grpActs !== 'undefined' && grpActs && grpActs.length > 0);
     if(hasGrp) return true;
-    // También revisar otros ranchos (admin multi-rancho que cambia de pill antes de capturar hEnt)
+    // También revisar otros ranchos (admin multi-rancho)
     if(typeof _ranchos !== 'undefined' && _ranchos && _ranchos.length){
       for(var i=0;i<_ranchos.length;i++){
         var r=_ranchos[i];
-        if(r && r.workers && r.workers.length>0) return true;
-        if(r && r.grpActs && r.grpActs.length>0) return true; // V20_84: grupal también cuenta
+        if(r && r.workers && r.workers.length>=MIN_WORKERS) return true;
+        if(r && r.grpActs && r.grpActs.length>0) return true;
       }
     }
     return false;
