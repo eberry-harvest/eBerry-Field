@@ -24,7 +24,7 @@
 </script>
 <script>
 // V50 (port V20_23): estandarización de colores PDF
-window.APP_VERSION = 'V98';
+window.APP_VERSION = 'V101';
 (function(){
   // V86 (port V20_77): AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Si _ackedVersion === APP_VERSION cargado, ese ack ya cumplió → limpiar para que próximas updates lleguen.
@@ -1809,6 +1809,9 @@ function logoutUser(){
   saveQuiet();
   closeSession();
   if(_keepAliveTimer){ clearInterval(_keepAliveTimer); _keepAliveTimer=null; }
+  // V101 (port V20_91 / V9-FIX11): limpiar timers globales para evitar memory leak en relogin
+  if(typeof _autoSaveTimer !== 'undefined' && _autoSaveTimer){ clearInterval(_autoSaveTimer); _autoSaveTimer=null; }
+  if(typeof _checkSendTimer !== 'undefined' && _checkSendTimer){ clearInterval(_checkSendTimer); _checkSendTimer=null; }
   // V32-FIX: limpiar estado completo del surquero anterior
   resetState();
   var wlist = gEl('wlist'); if(wlist) wlist.innerHTML = '';
@@ -2257,20 +2260,37 @@ function closeWelcome(){
   }
 }
 
+// V101 (port V20_91 / V9-FIX5): defensa estructural XSS via textContent + DocumentFragment
 function showRejectedDetail(){
   var list = gEl('rejDetailList');
   list.innerHTML = '';
+  var frag = document.createDocumentFragment();
   for(var i=0;i<_rejectedWorkers.length;i++){
     var w = _rejectedWorkers[i];
-    var item = '<div style="display:flex;align-items:center;gap:10px;padding:10px;background:#fff;border-radius:8px;margin-bottom:6px;border:1.5px solid var(--r)">'
-      +'<span style="font-size:18px;color:var(--r)">✗</span>'
-      +'<div style="flex:1">'
-        +'<div style="font-weight:700;font-size:14px">'+esc(w.name)+'</div>'
-        +'<div style="font-size:11px;color:var(--gr)">Emp# '+esc(w.empNum)+'</div>'
-        +'<div style="font-size:11px;color:var(--r);margin-top:2px">'+esc(w.reason)+'</div>'
-      +'</div></div>';
-    list.innerHTML += item;
+    var row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px;background:#fff;border-radius:8px;margin-bottom:6px;border:1.5px solid var(--r)';
+    var icon = document.createElement('span');
+    icon.style.cssText = 'font-size:18px;color:var(--r)';
+    icon.textContent = '✗';
+    var info = document.createElement('div');
+    info.style.flex = '1';
+    var nameDiv = document.createElement('div');
+    nameDiv.style.cssText = 'font-weight:700;font-size:14px';
+    nameDiv.textContent = w.name||'';
+    var empDiv = document.createElement('div');
+    empDiv.style.cssText = 'font-size:11px;color:var(--gr)';
+    empDiv.textContent = 'Emp# ' + (w.empNum||'');
+    var reasonDiv = document.createElement('div');
+    reasonDiv.style.cssText = 'font-size:11px;color:var(--r);margin-top:2px';
+    reasonDiv.textContent = w.reason||'';
+    info.appendChild(nameDiv);
+    info.appendChild(empDiv);
+    info.appendChild(reasonDiv);
+    row.appendChild(icon);
+    row.appendChild(info);
+    frag.appendChild(row);
   }
+  list.appendChild(frag);
   gEl('rejDetailOv').classList.add('on');
 }
 
@@ -5305,6 +5325,8 @@ function getGlobalHours(){
 }
 
 function buildAnalisis(){
+  // V101 (port V20_91 / V9-FIX2): guard temprano contra race durante login/swap multi-rancho
+  if(!workers || !workers.length) return;
   var totalEsperado=0, totalReal=0;
   var totalPerdida=0, wConPerdida=0; // V6-C4: movidos aquí (antes eran loops separados)
   var wHTML='';
@@ -5573,7 +5595,29 @@ function sendWA(){
   document.body.appendChild(a); a.click();
   setTimeout(function(){ document.body.removeChild(a); },100);
 }
-function copyR(){ if(navigator.clipboard){ navigator.clipboard.writeText(mkReport()).then(function(){ toast('✓ Copiado'); }); } }
+// V101 (port V20_91 / V9-FIX4): fallback execCommand para Safari iOS < 13.4 y Samsung Internet viejo
+function copyR(){
+  var text = mkReport();
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(text).then(function(){ toast('✓ Copiado'); }).catch(function(){
+      _copyFallback(text);
+    });
+  } else {
+    _copyFallback(text);
+  }
+}
+function _copyFallback(text){
+  try {
+    var ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly','');
+    ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px';
+    document.body.appendChild(ta); ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    toast('✓ Copiado');
+  } catch(e){ toast('⚠️ No se pudo copiar'); }
+}
 
 // ── USER-SPECIFIC STORAGE KEY ──
 function getUserKey(){
@@ -7366,7 +7410,11 @@ function exportData(){
   try{
     var exportObj = { version: 'pennrose2026', exportDate: new Date().toISOString(), current: null, history: {} };
     var raw = localStorage.getItem('pr9');
-    if(raw) exportObj.current = JSON.parse(raw);
+    // V101 (port V20_91 / V9-FIX8 modificado): try/catch CON toast de aviso al usuario
+    if(raw){
+      try{ exportObj.current = JSON.parse(raw); }
+      catch(e){ exportObj.current = null; toast('⚠️ Datos del día actual corruptos — exportando solo historial'); }
+    }
     for(var i=0;i<localStorage.length;i++){
       var k=localStorage.key(i);
       if(k&&k.indexOf('pr9_hist_')===0){ try{ exportObj.history[k]=JSON.parse(localStorage.getItem(k)); }catch(e){ /* skip corrupto */ } }
@@ -8669,7 +8717,9 @@ function migrateActsToNames(){
     var KEYS=['pr9','pr26v9','pr26v8','pr26v7'];
     for(var ki=0;ki<KEYS.length;ki++){
       var raw=localStorage.getItem(KEYS[ki]); if(!raw)continue;
-      var d=JSON.parse(raw); if(!d.w)continue;
+      // V101 (port V20_91 / V9-FIX6): try/catch para no abortar migración por una key corrupta
+      var d; try{ d=JSON.parse(raw); }catch(e){ console.warn('[V101] Skip key corrupta en migración:', KEYS[ki]); continue; }
+      if(!d.w)continue;
       var changed=false;
       for(var i=0;i<d.w.length;i++){
         for(var j=0;j<d.w[i].acts.length;j++){
@@ -10624,9 +10674,10 @@ function generateInvoicePDF(){
 // ── Format date for invoice (MM/DD/YY) ──
 function formatDateInv(fecha){
   try {
-    var p = fecha.split('-');
+    var p = (fecha||'').split('-');
+    if(p.length < 3) return fecha||''; // V101 (port V20_91 / V9-FIX12): validar formato
     return p[1] + '/' + p[2] + '/' + p[0].slice(2);
-  } catch(e){ return fecha; }
+  } catch(e){ return fecha||''; }
 }
 
 // ── Show face reg button for admin ──
@@ -11299,7 +11350,8 @@ function loadSemData(){
     for(var i=0;i<localStorage.length;i++){
       var k = localStorage.key(i);
       if(k && k.indexOf(prefix) === 0){
-        var d = JSON.parse(localStorage.getItem(k));
+        // V101 (port V20_91 / V9-FIX7): try/catch granular
+        var d; try{ d = JSON.parse(localStorage.getItem(k)); }catch(e){ continue; }
         if(d && d.weekStart){
           gEl('semWeekStart').value = d.weekStart;
           gEl('semActivity').value = d.actIdx || '';
@@ -11314,7 +11366,8 @@ function loadSemData(){
     for(var i=0;i<localStorage.length;i++){
       var k = localStorage.key(i);
       if(k && k.indexOf(SEM_KEY) === 0){
-        var d = JSON.parse(localStorage.getItem(k));
+        // V101 (port V20_91 / V9-FIX7): try/catch granular
+        var d; try{ d = JSON.parse(localStorage.getItem(k)); }catch(e){ continue; }
         if(d && d.weekStart && (d.rancho||'') === paramRancho){
           gEl('semWeekStart').value = d.weekStart;
           gEl('semActivity').value = d.actIdx || '';
@@ -11334,7 +11387,8 @@ function restoreSemInputs(){
     var key = SEM_KEY + '_' + (currentUser?currentUser.name:'') + '_' + (gVal('semRancho')||'') + '_' + gVal('semWeekStart');
     var raw = localStorage.getItem(key);
     if(!raw) return;
-    var data = JSON.parse(raw);
+    // V101 (port V20_91 / V9-FIX10): try/catch para evitar crash si storage corrupto
+    var data; try{ data = JSON.parse(raw); }catch(e){ console.warn('[V101] loadSemData JSON corrupto:', e.message); return; }
     if(!data || !data.rows) return;
 
     var selAct = ALL_ACTS[parseInt(gVal('semActivity'))];
