@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_91_07';
+window.APP_VERSION = 'V20_91_08';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -4306,11 +4306,16 @@ function onQRSuccess(decoded){
   var qrEmpNum = parts[2].trim();
 
   // V20_91_01: validar surquero — su tarjeta debe coincidir con currentUser.name
-  if(_qrMode === 'surquero'){
+  // V20_91_08 FIX: extender validación a modo choferSurquero (chofer Y surquero misma persona)
+  // Lógica: si la persona escaneada va a ser surquero (sea solo o combinado con chofer), DEBE ser quien inició sesión.
+  if(_qrMode === 'surquero' || _qrMode === 'choferSurquero'){
     var qrLower = (qrName||'').toLowerCase().trim();
     var meLower = ((currentUser && currentUser.name)||'').toLowerCase().trim();
     if(meLower && qrLower !== meLower){
-      setQRStatus('⚠️ Esta tarjeta no es la tuya — debes escanear TU propia tarjeta','err');
+      var _modeMsg = (_qrMode === 'choferSurquero')
+        ? '⚠️ Para "Chofer y Surquero" solo TÚ puedes ser registrado — escanea TU tarjeta'
+        : '⚠️ Esta tarjeta no es la tuya — debes escanear TU propia tarjeta';
+      setQRStatus(_modeMsg,'err');
       _scheduleQRStatusReset(4000);
       return;
     }
@@ -6025,6 +6030,23 @@ function applyAutoFill(){
     var crewBase = currentUser.crew ? currentUser.crew.replace(/\s*\d+$/,'').trim() : '';
     var rEl = gEl('rancho');
     if(rEl && crewBase){
+      // V20_91_08 FIX: si el dropdown está vacío (race condition con loadSheetsData async)
+      // o solo tiene el placeholder, repopular con datos actualizados.
+      // Antes: dropdown se llenaba en login pero ALL_WORKERS/CONTRATOS aún no estaban → opciones pobres → no match.
+      var _hasRealOptions = false;
+      for(var _ck=0;_ck<rEl.options.length;_ck++){
+        if(rEl.options[_ck].value){ _hasRealOptions=true; break; }
+      }
+      if(!_hasRealOptions){
+        var _ioeRefresh = '';
+        var _wRefresh = (typeof findInArr === 'function') ? findInArr(ALL_WORKERS, currentUser.name) : null;
+        if(_wRefresh) _ioeRefresh = _wRefresh.ioe || '';
+        try {
+          populateRanchoDropdown(_ioeRefresh, crewBase, false);
+          // populateRanchoDropdown ya pre-selecciona — salir
+          return;
+        } catch(e){ console.warn('[V20_91_08] applyAutoFill repopulate falló:', e); }
+      }
       var _matched = false;
       for(var _oi=0;_oi<rEl.options.length;_oi++){
         if(rEl.options[_oi].value.toLowerCase()===crewBase.toLowerCase()){ rEl.selectedIndex=_oi; _matched=true; break; }
@@ -6033,6 +6055,12 @@ function applyAutoFill(){
         for(var _oi2=0;_oi2<rEl.options.length;_oi2++){
           // V20_91_07 FIX: solo opciones con value no vacío (evita matchear el placeholder)
           if(rEl.options[_oi2].value && rEl.options[_oi2].value.toLowerCase().indexOf(crewBase.toLowerCase())===0){ rEl.selectedIndex=_oi2; _matched=true; break; }
+        }
+      }
+      // V20_91_08 FIX adicional: si DESPUÉS de los matches sigue sin matchear y el primer option real (no placeholder) coincide en partial, usar ese
+      if(!_matched){
+        for(var _oi3=0;_oi3<rEl.options.length;_oi3++){
+          if(rEl.options[_oi3].value && rEl.options[_oi3].value.toLowerCase().indexOf(crewBase.toLowerCase())>=0){ rEl.selectedIndex=_oi3; _matched=true; break; }
         }
       }
       // Solo re-filtrar ACTS, NO guardar
