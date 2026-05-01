@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_90';
+window.APP_VERSION = 'V20_88';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -7495,32 +7495,38 @@ function getAnchoCamaDefault(act){
 // 'cajas'   = total cajas × precio ÷ personas
 // Omega: detectar si una actividad (individual o grupal) es tipo "puertas/surcos"
 // Aplica a: Amarre de hilo, Colocación de estaca, Colocación de plástico (y variantes en inglés)
-// V20_90: REFACTOR puro data-driven. ELIMINADOS keywords hardcoded.
-// Fuentes de verdad: col G (variable=VarDoor) o farm+col I (Pennrose5Act).
-// Si MASTER no tiene config para la actividad → NO es puertas → app la trata como Piezas/Horas según col D.
 function isActPuertas(act){
   if(!act) return false;
+  // V20_81: si la variable del MASTER es VarDoor → automáticamente puertas (acres).
+  // Cubre actividades VarDoor que no contienen keywords ("hilo", "estaca", etc.) en el nombre.
   if((act.variable||'').toLowerCase()==='vardoor') return true;
-  if(act.calc==='puertas') return true; // legacy compat (datos viejos)
-  if(isPennrose5Act(act)) return true; // backward compat — Pennrose por farm+col I
-  return false;
+  if(act.calc==='puertas') return true;
+  var es = (act.es||'').toLowerCase();
+  var en = (act.en||'').toLowerCase();
+  // V6-C7: excluir cosechas, pizcas Y podas — "Poda de tomate" NO es puertas
+  if(es.indexOf('cosecha')>=0||es.indexOf('pizca')>=0||es.indexOf('poda')>=0||en.indexOf('harvest')>=0||en.indexOf('pick')>=0||en.indexOf('prun')>=0) return false;
+  // "tomate" solo si va con amarre/hilo (no suelto) — keywords más específicos
+  return es.indexOf('estaca')>=0||es.indexOf('hilo')>=0||es.indexOf('amarre')>=0||es.indexOf('plástico')>=0||es.indexOf('plastico')>=0
+    ||es.indexOf('colocación')>=0||es.indexOf('colocacion')>=0
+    ||(es.indexOf('tomate')>=0&&(es.indexOf('amarre')>=0||es.indexOf('hilo')>=0))
+    ||en.indexOf('stake')>=0||en.indexOf('staking')>=0||en.indexOf('wire')>=0||en.indexOf('drip')>=0||en.indexOf('plastic')>=0||en.indexOf('tying')>=0;
 }
 
-// V20_90: REFACTOR puro data-driven. ELIMINADOS keywords hardcoded.
-// 'puertas' = col G == VarDoor (o Pennrose5Act) — calcula acres
-// 'cajas'   = col G == VarBox (o col D Boxes) — total cajas × precio ÷ personas
-// 'hora'    = col D Hora (act.hr) — horas × precio (por persona)
-// 'pieza'   = default — cantidad ÷ personas × precio
+// 'hora'    = horas × precio (por persona)
+// 'pieza'   = cantidad ÷ personas × precio
 function grpCalcType(act){
   if(!act) return 'pieza';
-  if(act.calc) return act.calc; // legacy compat (datos viejos con calc explícito)
-  var v = (act.variable||'').toLowerCase();
-  if(v === 'vardoor') return 'puertas';
-  if(isPennrose5Act(act)) return 'puertas'; // backward compat
-  if(v === 'varbox') return 'cajas';
-  // payType del MASTER col D normalizado
-  var pt = (act.payType||'').toLowerCase();
-  if(pt === 'boxes' || pt === 'box') return 'cajas';
+  var es = (act.es||'').toLowerCase();
+  if(act.calc) return act.calc; // si viene de fallback con calc explícito
+  // V8-C9: excluir cosechas, pizcas y podas — español E inglés
+  var en2 = (act.en||'').toLowerCase();
+  if(es.indexOf('cosecha')>=0||es.indexOf('pizca')>=0||es.indexOf('poda')>=0
+    ||en2.indexOf('harvest')>=0||en2.indexOf('pick')>=0||en2.indexOf('prun')>=0) return 'pieza';
+  if(es.indexOf('estaca')>=0||es.indexOf('hilo')>=0||es.indexOf('amarre')>=0||es.indexOf('plástico')>=0||es.indexOf('plastico')>=0
+    ||es.indexOf('colocación')>=0||es.indexOf('colocacion')>=0
+    ||(es.indexOf('tomate')>=0&&(es.indexOf('amarre')>=0||es.indexOf('hilo')>=0))
+    ||en2.indexOf('drip')>=0||en2.indexOf('wire')>=0||en2.indexOf('plastic')>=0||en2.indexOf('tying')>=0||en2.indexOf('staking')>=0) return 'puertas';
+  if(es.indexOf('caja')>=0||es.indexOf('box')>=0||es.indexOf('empaque')>=0) return 'cajas';
   if(act.hr) return 'hora';
   return 'pieza';
 }
@@ -9906,13 +9912,6 @@ function buildInvoiceAutoData(){
       if(!act && esName){
         for(var _ax=0; _ax<ACTS.length; _ax++){
           if(ACTS[_ax].es === esName){ act = ACTS[_ax]; break; }
-        }
-        // V20_90: fallback a ALL_ACTS si act sigue null (admin viendo otro rancho desde Sheets).
-        // Antes esto causaba que actividades Hora se mostraran como "Piezas" en el invoice.
-        if(!act && typeof ALL_ACTS!=='undefined' && ALL_ACTS){
-          for(var _aa90=0; _aa90<ALL_ACTS.length; _aa90++){
-            if(ALL_ACTS[_aa90].es === esName){ act = ALL_ACTS[_aa90]; break; }
-          }
         }
       }
       var isHr = act ? !!act.hr : false;
