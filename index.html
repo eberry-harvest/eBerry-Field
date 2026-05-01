@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_88';
+window.APP_VERSION = 'V20_89';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -3414,14 +3414,23 @@ function _enterReadOnly(payload){
       _vars.totalP = Math.round(_qtyT);
     } else if(_ct==='puertas'){
       // Pennrose5Act calcula desde acres (qty=acres×ancho/np). Reconstruir acres totales si aplica.
-      // V20_73 Fase C: ancho leído del MASTER (col I), sin fallback hardcoded. Guard _ancRO truthy protege división.
       var _ancRO = _grpAct ? getActAncho(_grpAct) : null;
       if(_grpAct && isPennrose5Act(_grpAct) && _ancRO){
         _vars.pennAcres = _qtyT / _ancRO;
+        _vars.anchoCama = _ancRO; // V20_89: hidratar también anchoCama para que UI lo muestre
       } else {
-        // No-Pennrose: sintético 1 surco con largo equivalente a 100*qty (qty=metros/100)
-        _vars.surcos = [{ largo: _qtyT * 100, num: 1 }];
-        _vars.anchoCama = 1;
+        // V20_89: hidratar totalPies + totalAcres + anchoCama con factor real (col P del MASTER).
+        // Antes: surcos sintético solo con largo/num + anchoCama=1 → invoice calculaba acres=0
+        // porque buildInvoiceAutoData lee surcos[].totalPies/totalAcres (no largo×num) y dividía entre 1.
+        var _factRO = _grpAct ? getActFactorAcres(_grpAct) : null;
+        var _puertasRO = _qtyT;
+        var _acresRO = _factRO ? (_puertasRO / _factRO) : 0;
+        _vars.surcos = [{
+          largo: '', num: '',
+          totalPies: _puertasRO * 100,    // metros lineales (puertas × 100)
+          totalAcres: _acresRO || ''       // acres reales calculados via col P
+        }];
+        _vars.anchoCama = _factRO || 1;   // factor real, no hardcoded 1
       }
     }
     // 'hora' no necesita qty mapping — el cálculo es por ini/fin solamente
