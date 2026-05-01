@@ -26,7 +26,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_91_15';
+window.APP_VERSION = 'V20_91_16';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -1232,9 +1232,9 @@ body.readOnly [onclick*="openNewDay"]{display:none !important}
     <div class="ct">🌅 Iniciar Día</div>
     <p style="font-size:12px;color:var(--gr);margin-bottom:9px">Escanea los QR de chofer y surquero antes de capturar trabajadores. La hora del check-in queda congelada y no se puede editar.</p>
     <div id="iniciarDiaButtons">
-      <button id="btnScanChofer" class="btn bg" onclick="startQRMode('chofer')" style="margin-bottom:8px">🚌 Escanear Chofer</button>
-      <button id="btnScanSurquero" class="btn bo" onclick="startQRMode('surquero')" disabled style="margin-bottom:8px;opacity:.5">👤 Escanear Surquero</button>
-      <button id="btnScanChoferSurquero" class="btn bw" onclick="startQRMode('choferSurquero')" style="margin-bottom:4px">🚌+👤 Chofer y Surquero (misma persona)</button>
+      <button id="btnScanChofer" class="btn bg" onclick="openCheckInSheet('chofer')" style="margin-bottom:8px">🚌 Registrar Chofer</button>
+      <button id="btnScanSurquero" class="btn bo" onclick="openCheckInSheet('surquero')" disabled style="margin-bottom:8px;opacity:.5">👤 Registrar Surquero</button>
+      <button id="btnScanChoferSurquero" class="btn bw" onclick="openCheckInSheet('choferSurquero')" style="margin-bottom:4px">🚌+👤 Chofer y Surquero (misma persona)</button>
     </div>
     <div id="iniciarDiaStatus"></div>
     <input type="hidden" id="dfChoferTime" data-save value="">
@@ -4541,8 +4541,11 @@ function onQRSuccess(decoded){
       }
       pauseQR();
       var _pendName = _pendingManualAdd;
+      var _pendRole = _pendingManualRole || 'trabajador'; // V20_91_16
       _pendingManualAdd = null;
-      _qrMode = 'trabajador';
+      _pendingManualRole = null;
+      // V20_91_16: setear _qrMode al rol real para que doAddConfirmed → _applyCheckInForMode aplique correctamente
+      _qrMode = _pendRole;
       try { stopQR(); } catch(_){}
       if(_pendName){
         try {
@@ -4550,10 +4553,12 @@ function onQRSuccess(decoded){
           window._lastAddedManually = true;
         } catch(_){}
         doAddConfirmed(_pendName);
-        toast('✅ '+_pendName+' agregado (autorizado por '+(currentUser.name||'surquero')+')');
+        var _roleTxt = (_pendRole === 'chofer') ? ' como CHOFER' : '';
+        toast('✅ '+_pendName+' agregado'+_roleTxt+' (autorizado por '+(currentUser.name||'surquero')+')');
       }
+      _qrMode = 'trabajador'; // resetear después
       return;
-    } catch(e){ console.warn('manualConfirm branch error',e); _pendingManualAdd=null; _qrMode='trabajador'; }
+    } catch(e){ console.warn('manualConfirm branch error',e); _pendingManualAdd=null; _pendingManualRole=null; _qrMode='trabajador'; }
   }
 
   // V20_91_01: para chofer/surquero/dual → siempre mostrar modal de confirmación con texto contextual
@@ -12448,8 +12453,10 @@ var _checkSendTimer = setInterval(checkDaysWithoutSend, 30 * 60 * 1000);
 /* ============================================================
    V20_91_14 — Flujo Check-in Unificado (Bottom Sheet)
    ============================================================ */
-var _pendingManualAdd = null;   // nombre seleccionado del autocomplete manual, esperando confirm QR del surquero
-var _reopenAfterAdd   = false;  // bandera: reabrir el sheet tras un add exitoso
+var _pendingManualAdd  = null;   // nombre seleccionado del autocomplete manual, esperando confirm QR del surquero
+var _pendingManualRole = null;   // V20_91_16: rol que se va a registrar (chofer/trabajador) tras confirm
+var _reopenAfterAdd    = false;  // bandera: reabrir el sheet tras un add exitoso (solo trabajador)
+var _cisRole           = 'trabajador'; // V20_91_16: rol activo del bottom-sheet
 
 function _updCheckInBtnState(){
   var btn = gEl('btnOpenCheckIn'); if(!btn) return;
@@ -12468,19 +12475,51 @@ function _updCheckInBtnState(){
   }
 }
 
-function openCheckInSheet(){
+// V20_91_16: openCheckInSheet ahora acepta rol (trabajador/chofer/surquero/choferSurquero)
+function openCheckInSheet(role){
   try{
-    if(!_dayFlow || _dayFlow.diaIniciado!==true){ toast('⚠️ Primero registra Chofer y Surquero'); return; }
-    if(_dayFlow.checkOutDone===true){
+    var r = role || 'trabajador';
+    if(_dayFlow && _dayFlow.checkOutDone===true){
       var hh = _dayFlow.checkOutTime || '';
       toast('🔒 Día cerrado'+(hh?' a las '+hh:'')); return;
     }
+    if(r === 'trabajador'){
+      if(!_dayFlow || _dayFlow.diaIniciado!==true){ toast('⚠️ Primero registra Chofer y Surquero'); return; }
+    } else {
+      // Validaciones para chofer/surquero/dual
+      if(r === 'chofer' && _dayFlow && _dayFlow.choferScanned){ toast('✅ Chofer ya registrado'); return; }
+      if(r === 'surquero' && _dayFlow && _dayFlow.surqueroScanned){ toast('✅ Surquero ya registrado'); return; }
+      if(r === 'surquero' && _dayFlow && !_dayFlow.choferScanned){ toast('⚠️ Primero registra al chofer'); return; }
+      if(r === 'choferSurquero' && _dayFlow && (_dayFlow.choferScanned || _dayFlow.surqueroScanned)){ toast('✅ Día ya iniciado'); return; }
+    }
+    _cisRole = r;
     var sheet = gEl('checkInSheet'); if(!sheet) return;
+    // Reset visual
     var manualBox = gEl('checkInManualBox'); if(manualBox) manualBox.style.display='none';
     var pop = gEl('checkInACPop'); if(pop){ pop.style.display='none'; pop.innerHTML=''; }
     var srch = gEl('checkInSrch'); if(srch) srch.value='';
     var hint = gEl('checkInConfirmHint'); if(hint) hint.style.display='none';
-    var cnt = gEl('cisCount'); if(cnt) cnt.textContent='('+((workers&&workers.length)||0)+' registrados hoy)';
+    // Header dinámico según rol
+    var titles = {
+      trabajador: '👥 Registrar trabajador',
+      chofer: '🚌 Registrar chofer del bus',
+      surquero: '👤 Registrar surquero (tú)',
+      choferSurquero: '🚌+👤 Chofer y Surquero (misma persona)'
+    };
+    var titleEl = gEl('cisTitle'); if(titleEl) titleEl.textContent = titles[r] || titles.trabajador;
+    // Contador solo para trabajador
+    var cnt = gEl('cisCount');
+    if(cnt){
+      if(r === 'trabajador'){
+        cnt.style.display = '';
+        cnt.textContent = '('+((workers&&workers.length)||0)+' registrados hoy)';
+      } else {
+        cnt.style.display = 'none';
+      }
+    }
+    // Manual oculto para surquero solo y choferSurquero (regla de Serafín 2026-05-01)
+    var manualBtn = gEl('cisBtnManual');
+    if(manualBtn) manualBtn.style.display = (r === 'surquero' || r === 'choferSurquero') ? 'none' : '';
     sheet.classList.add('show');
   }catch(e){ console.warn('openCheckInSheet',e); }
 }
@@ -12491,14 +12530,16 @@ function closeCheckInSheet(){
     var box = gEl('checkInManualBox'); if(box) box.style.display='none';
     var pop = gEl('checkInACPop'); if(pop){ pop.style.display='none'; pop.innerHTML=''; }
     var hint = gEl('checkInConfirmHint'); if(hint) hint.style.display='none';
+    _cisRole = 'trabajador'; // V20_91_16: reset al cerrar para no heredar modo
   }catch(e){ console.warn('closeCheckInSheet',e); }
 }
 
 function checkInScanQR(){
   try{
-    _reopenAfterAdd = true;
+    var roleSnapshot = _cisRole || 'trabajador';
+    _reopenAfterAdd = (roleSnapshot === 'trabajador'); // chofer/surquero/dual son one-shot
     closeCheckInSheet();
-    startQRMode('trabajador');
+    startQRMode(roleSnapshot);
   }catch(e){ console.warn('checkInScanQR',e); _reopenAfterAdd=false; }
 }
 
@@ -12551,26 +12592,34 @@ function checkInManualSelect(name){
   try{
     if(!name) return;
     if(typeof alreadyAdded==='function' && alreadyAdded(name)){ toast('⚠️ '+name+' ya está en la lista'); return; }
+    if(_cisRole === 'surquero' || _cisRole === 'choferSurquero'){
+      toast('⚠️ Manual no disponible — usa QR o FaceID'); return;
+    }
     _pendingManualAdd = name;
+    _pendingManualRole = _cisRole || 'trabajador'; // V20_91_16: snapshot del rol antes de cerrar sheet
     var box = gEl('checkInManualBox'); if(box) box.style.display='none';
     var pop = gEl('checkInACPop'); if(pop){ pop.style.display='none'; pop.innerHTML=''; }
     var hint = gEl('checkInConfirmHint');
     if(hint){
-      hint.innerHTML = '🔐 Confirma con <b>tu QR de surquero</b> para agregar a <b>'+esc(name)+'</b>. La cámara se abre automáticamente.';
+      var roleLbl = (_pendingManualRole === 'chofer') ? ' como CHOFER del bus' : '';
+      hint.innerHTML = '🔐 Confirma con <b>tu QR de surquero</b> para registrar a <b>'+esc(name)+'</b>'+roleLbl+'. La cámara se abre automáticamente.';
       hint.style.display='block';
     }
     _qrMode = 'manualConfirm';
-    _reopenAfterAdd = true;
-    setTimeout(function(){ try{ closeCheckInSheet(); startQR(); }catch(e){ console.warn('manual->startQR',e); } }, 350);
-  }catch(e){ console.warn('checkInManualSelect',e); _pendingManualAdd=null; }
+    _reopenAfterAdd = (_pendingManualRole === 'trabajador');
+    setTimeout(function(){ try{ closeCheckInSheet(); _qrMode='manualConfirm'; startQR(); }catch(e){ console.warn('manual->startQR',e); } }, 350);
+  }catch(e){ console.warn('checkInManualSelect',e); _pendingManualAdd=null; _pendingManualRole=null; }
 }
 
 function checkInFaceID(){
   try{
-    _reopenAfterAdd = true;
+    var roleSnapshot = _cisRole || 'trabajador';
+    _reopenAfterAdd = (roleSnapshot === 'trabajador');
     closeCheckInSheet();
-    if(typeof startFaceID==='function') startFaceID();
-    else { toast('⚠️ FaceID no disponible'); _reopenAfterAdd=false; }
+    if(typeof startFaceID==='function'){
+      _qrMode = roleSnapshot; // V20_91_16: FaceID respeta el rol del sheet
+      startFaceID();
+    } else { toast('⚠️ FaceID no disponible'); _reopenAfterAdd=false; }
   }catch(e){ console.warn('checkInFaceID',e); _reopenAfterAdd=false; }
 }
 
@@ -12610,7 +12659,7 @@ function checkInFaceID(){
     <button type="button" class="cis-btn cis-btn-primary" onclick="checkInScanQR()">
       <span style="font-size:24px">📷</span><span>Escanear QR</span>
     </button>
-    <button type="button" class="cis-btn cis-btn-secondary" onclick="checkInManualStart()">
+    <button id="cisBtnManual" type="button" class="cis-btn cis-btn-secondary" onclick="checkInManualStart()">
       <span class="cis-row1"><span style="font-size:20px">✍️</span><span>Escribir nombre</span></span>
       <span class="cis-sub">Confirma con tu QR de surquero</span>
     </button>
