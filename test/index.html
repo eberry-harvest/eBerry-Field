@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_91_05';
+window.APP_VERSION = 'V20_91_06';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -4192,7 +4192,15 @@ function resumeQR(){
   if(!qrActive) return;
   if(_qrResuming) return;
   _qrResuming = true;
-  setQRStatus('Apunta la cámara al siguiente QR','');
+  // V20_91_06 FIX: NO sobrescribir mensaje de error activo. El MutationObserver detectaba
+  // el cambio de textContent en setQRStatus(error) → disparaba resumeQR a los 150ms →
+  // sobrescribía "⚠️ Primero escanea al chofer..." con "Apunta...". El usuario solo veía
+  // el error 1 segundo o menos. Respetamos el timer activo de error.
+  var qrStatusEl = gEl('qrStatus');
+  var hasActiveError = qrStatusEl && qrStatusEl.classList.contains('err') && _qrStatusTimer;
+  if(!hasActiveError){
+    setQRStatus('Apunta la cámara al siguiente QR','');
+  }
   setTimeout(function(){
     _qrResuming = false;
     if(qrScanner && qrActive){
