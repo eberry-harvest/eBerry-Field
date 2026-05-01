@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_91_10';
+window.APP_VERSION = 'V20_91_11';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -1234,6 +1234,11 @@ body.readOnly [onclick*="openNewDay"]{display:none !important}
     <label>Finca / Labor</label>
     <div id="fincaParamSlot"></div>
     <input type="hidden" id="finca" data-save value="">
+    <!-- V20_91_11: Botones simples Check-in / Check-out abajo de Finca y Labor -->
+    <div style="display:flex;gap:8px;margin-top:14px">
+      <button class="btn bg" style="flex:1;min-height:50px;font-size:15px;font-weight:700" onclick="startQRMode('surquero')">✅ Check-in</button>
+      <button class="btn" style="flex:1;min-height:50px;font-size:15px;font-weight:700;background:#c0392b;color:#fff;border:1.5px solid #c0392b" onclick="confirmCheckOutDia()">🏁 Check-out</button>
+    </div>
   </div>
   <div class="card">
     <div class="ct">⏰ Horario Base del Grupo</div>
