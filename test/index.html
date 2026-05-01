@@ -26,7 +26,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_91_13';
+window.APP_VERSION = 'V20_91_15';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -1037,6 +1037,39 @@ body.readOnly textarea{
 body.readOnly [onclick*="sendToSheets"],
 body.readOnly [onclick*="openNewDay"]{display:none !important}
 /* TODO LO DEMÁS (tabs, botón PDF, generador, navegación, ver trabajadores, etc.) FUNCIONA */
+
+/* === V20_91_14: Check-in Bottom Sheet === */
+#checkInSheet{position:fixed;inset:0;z-index:9000;display:none;background:rgba(0,0,0,.55);align-items:flex-end;justify-content:center}
+#checkInSheet.show{display:flex;animation:cisFade .2s ease}
+.cis-sheet{width:100%;max-width:560px;background:#fff;border-radius:18px 18px 0 0;padding:18px 16px 24px;box-shadow:0 -8px 24px rgba(0,0,0,.18);animation:cisSlide .28s cubic-bezier(.2,.8,.2,1);max-height:92vh;overflow-y:auto;font-family:'DM Sans',sans-serif}
+@keyframes cisSlide{from{transform:translateY(100%)}to{transform:translateY(0)}}
+@keyframes cisFade{from{opacity:0}to{opacity:1}}
+.cis-grip{width:42px;height:5px;border-radius:3px;background:var(--bd);margin:0 auto 14px}
+.cis-head{display:flex;align-items:baseline;gap:8px;margin-bottom:14px}
+.cis-title{font-size:17px;font-weight:700;color:var(--dk);flex:1}
+.cis-count{font-size:13px;color:var(--gr);font-weight:500}
+.cis-btn{width:100%;display:flex;align-items:center;gap:12px;border:0;border-radius:12px;font-family:inherit;font-weight:600;cursor:pointer;padding:0 16px;text-align:left;transition:transform .08s,filter .15s}
+.cis-btn:active{transform:scale(.98)}
+.cis-btn-primary{min-height:64px;background:var(--g);color:#fff;font-size:18px;margin-bottom:10px;box-shadow:0 3px 10px rgba(48,168,87,.28)}
+.cis-btn-secondary{min-height:50px;background:var(--gp);color:var(--dk);border:1.5px solid var(--g2);font-size:15px;margin-bottom:8px;flex-direction:column;align-items:flex-start;gap:2px;justify-content:center}
+.cis-btn-secondary .cis-row1{display:flex;align-items:center;gap:10px;font-size:15px}
+.cis-btn-secondary .cis-sub{font-size:11px;color:var(--gr);font-weight:500;margin-left:30px}
+.cis-btn-done{min-height:44px;background:var(--lt);color:var(--gr);border:1px solid var(--bd);font-size:14px;justify-content:center;margin-top:14px}
+#checkInManualBox{display:none;margin-top:12px}
+#checkInSrch{width:100%;min-height:48px;padding:0 14px;font-size:16px;font-family:inherit;border:1.5px solid var(--bd);border-radius:10px;background:#fff}
+#checkInSrch:focus{outline:none;border-color:var(--g)}
+#checkInACPop{margin-top:6px;max-height:280px;overflow-y:auto;border:1px solid var(--bd);border-radius:10px;background:#fff}
+#checkInACPop .acItem{padding:14px;min-height:48px;border-bottom:1px solid var(--bd);cursor:pointer;font-size:15px;display:flex;align-items:center}
+#checkInACPop .acItem:last-child{border-bottom:0}
+#checkInACPop .acItem:active{background:var(--gp)}
+#checkInConfirmHint{display:none;background:var(--gp);border:1.5px solid var(--g2);border-radius:10px;padding:10px 12px;margin-top:10px;font-size:13px;color:var(--dk);line-height:1.4}
+/* Botón Check-in deshabilitado se ve gris */
+#btnOpenCheckIn[disabled]{opacity:.55;cursor:not-allowed;background:#9aa0a8 !important;border-color:#9aa0a8 !important}
+/* Empty state pestaña Trabajadores (V20_91_14) */
+.wlist-empty{padding:30px 16px;text-align:center;color:var(--gr);background:var(--lt);border:2px dashed var(--bd);border-radius:14px;margin:14px 0}
+.wlist-empty .e-ico{font-size:36px;margin-bottom:10px}
+.wlist-empty .e-tit{font-size:15px;font-weight:700;color:var(--dk);margin-bottom:4px}
+.wlist-empty .e-txt{font-size:13px;color:var(--gr)}
 </style>
 
 <!-- NUEVO DIA MODAL -->
@@ -1238,9 +1271,9 @@ body.readOnly [onclick*="openNewDay"]{display:none !important}
       <div id="fincaParamSlot"></div>
     </div>
     <input type="hidden" id="finca" data-save value="">
-    <!-- V20_91_11: Botones simples Check-in / Check-out abajo de Finca y Labor -->
+    <!-- V20_91_14: Check-in unificado (abre bottom-sheet) y Check-out -->
     <div style="display:flex;gap:8px;margin-top:14px">
-      <button class="btn bg" style="flex:1;min-height:50px;font-size:15px;font-weight:700" onclick="startQRMode('surquero')">✅ Check-in</button>
+      <button id="btnOpenCheckIn" class="btn bg" style="flex:1;min-height:50px;font-size:15px;font-weight:700" onclick="openCheckInSheet()" disabled>✅ Check-in cuadrilla</button>
       <button class="btn" style="flex:1;min-height:50px;font-size:15px;font-weight:700;background:#c0392b;color:#fff;border:1.5px solid #c0392b" onclick="confirmCheckOutDia()">🏁 Check-out</button>
     </div>
   </div>
@@ -1291,7 +1324,8 @@ body.readOnly [onclick*="openNewDay"]{display:none !important}
     <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px">Trabajadores</div>
     <button onclick="askDelAll()" style="background:var(--rp);color:var(--r);border:1.5px solid var(--r);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer">🗑️ Eliminar todos</button>
   </div>
-  <div style="font-size:13px;color:var(--gr);margin-bottom:11px">Usa la barra de abajo para agregar 👇</div>
+  <!-- V20_91_14: agregar trabajadores ahora se hace desde Parámetros → Check-in cuadrilla -->
+  <div style="font-size:13px;color:var(--gr);margin-bottom:11px">Toca <b>✅ Check-in cuadrilla</b> en Parámetros para registrar trabajadores.</div>
   <div class="banner" id="banner"></div>
   <div id="wlist" class="resp-grid resp-grid-workers"></div>
   <!-- V20_91_01: botón Cerrar día (check-out global) — solo visible si hay workers y aún no se ha cerrado -->
@@ -1522,13 +1556,12 @@ body.readOnly [onclick*="openNewDay"]{display:none !important}
 <!-- STICKY BOTTOM -->
 <div class="btm">
   <div class="addbar" id="addbar">
-    <div class="acw">
+    <!-- V20_91_14: addbar oculto — agregar trabajadores ahora va por bottom-sheet en Parámetros.
+         Se mantiene el HTML como respaldo legacy por si código existente lo referencia. -->
+    <div class="acw" style="display:none">
       <div class="drop" id="drop"></div>
       <input type="text" id="srch" placeholder="🔍 Buscar o escribir nombre..." autocomplete="off" oninput="onAC(this.value)" onblur="closeAC()">
     </div>
-    <button class="qrbtn" onclick="startQR()" title="Escanear QR">📷</button>
-    <button class="qrbtn" id="faceIdBtn" onclick="startFaceID()" title="Reconocimiento Facial" style="background:#8e44ad">👤</button>
-    <button class="abtn" onclick="addFrom()">+ Agregar</button>
   </div>
   <div class="nav">
     <button class="np" id="np" onclick="prev()">← Atrás</button>
@@ -4492,6 +4525,37 @@ function onQRSuccess(decoded){
     return;
   }
 
+  // V20_91_14: branch para "manualConfirm" — el surquero escaneó SU PROPIO QR para autorizar
+  // un alta manual hecha desde el bottom-sheet de Check-in.
+  if(_qrMode === 'manualConfirm'){
+    try {
+      var _meEmp = (currentUser && currentUser.empNum) ? String(currentUser.empNum).trim() : '';
+      var _meNm  = ((currentUser && currentUser.name) || '').toLowerCase().trim();
+      var _qrEmp = String(empNum || '').trim();
+      var _qrNm  = String(qrName || '').toLowerCase().trim();
+      var _ok = (_meEmp && _qrEmp && _meEmp === _qrEmp) || (_meNm && _qrNm && _meNm === _qrNm);
+      if(!_ok){
+        setQRStatus('⚠️ Ese QR no es tuyo, escanea TU tarjeta de surquero','err');
+        _scheduleQRStatusReset(4000);
+        return; // mantener cámara abierta para reintentar
+      }
+      pauseQR();
+      var _pendName = _pendingManualAdd;
+      _pendingManualAdd = null;
+      _qrMode = 'trabajador';
+      try { stopQR(); } catch(_){}
+      if(_pendName){
+        try {
+          window._lastAuthorizedBy  = currentUser.empNum || currentUser.name || '';
+          window._lastAddedManually = true;
+        } catch(_){}
+        doAddConfirmed(_pendName);
+        toast('✅ '+_pendName+' agregado (autorizado por '+(currentUser.name||'surquero')+')');
+      }
+      return;
+    } catch(e){ console.warn('manualConfirm branch error',e); _pendingManualAdd=null; _qrMode='trabajador'; }
+  }
+
   // V20_91_01: para chofer/surquero/dual → siempre mostrar modal de confirmación con texto contextual
   if(_qrMode === 'chofer' || _qrMode === 'surquero' || _qrMode === 'choferSurquero'){
     pauseQR();
@@ -4699,6 +4763,12 @@ function doAddConfirmed(name){
     var pat=detPat();
     if(pat){ setTimeout(function(){ showCp(workers.length-1,pat); },400); }
   }
+  // V20_91_14: si el alta vino del bottom-sheet, reabrirlo para registrar al siguiente
+  if(_reopenAfterAdd){
+    _reopenAfterAdd = false;
+    setTimeout(function(){ try{ openCheckInSheet(); }catch(_){ } }, 1500);
+  }
+  try { _updCheckInBtnState(); } catch(_){}
 }
 
 function mkCard(w,wi){
@@ -12315,6 +12385,248 @@ function checkDaysWithoutSend(){
 // V7: revisar cada 30 min con referencia para cleanup
 var _checkSendTimer = setInterval(checkDaysWithoutSend, 30 * 60 * 1000);
 
+/* ============================================================
+   V20_91_15 — BLOQUEO TOTAL en modo lectura (incluye grupales)
+   ============================================================
+   Bug reportado por Serafín 2026-05-01: admin cargó día desde Sheets
+   y pudo editar grupales (qty, surcos, participantes, ini/fin).
+   Causa raíz: CSS body.readOnly{input:pointer-events:none} solo
+   bloquea inputs/select/textarea — los <div onclick> y <button>
+   inline de grupales lo bypaseaban totalmente.
+   Fix: monkey-patch global que envuelve cada función modificadora
+   con guard _readOnlyMode antes de ejecutar el original.
+   ============================================================ */
+(function(){
+  var FN_NAMES = [
+    // GRUPALES (bug reportado)
+    'setGrpVar','addGrpAct','removeGrpAct','delGrpAct','onSurcoSmart','setSurcoVar',
+    'addSurcoFila','delSurcoFila','confirmDelSurco','askDelSurcoFila','togGrpPart',
+    // INDIVIDUALES
+    'onIndField','onIndBloqueField','addIndBloque','delIndBloque','askDelIndBloque',
+    'onQty','chAct','delAct','askDelAct','onShift','addShift','delShift',
+    'onIni','onFin','togTime','rmWorker','askDelWorker','askDelAll',
+    // AUSENCIAS
+    'addAusencia','addAusenciaConfirmed','setMotivo','setMotivoClose',
+    'rmAusencia','askRemAus','removeAusencia',
+    // PARÁMETROS / CONTEXTO
+    'onRanchoChange','onSurqueroChange','onAdminSurqueroChange','onFechaChange','updParam',
+    'addRanchBlock','removeRanchBlock','onRanchConfigChangeV67','onRanchoChangeV67',
+    // SEMANAL (escribe localStorage directo, no pasa por autoSave)
+    'saveSemData','onSemQty','onSemHrs','onSemFinca','onSemNotes','calcSemRow',
+    'onSemWeekChange','onSemActivityChange','onSemRanchoChange',
+    // CHECK-IN/OUT
+    '_applyCheckInForMode','_applyCheckOutForWorker','confirmCheckOutDia','confirmCheckOutWorker',
+    'startQRMode','openCheckInSheet','checkInScanQR','checkInManualStart','checkInManualSelect',
+    'onCheckInManualAC','checkInFaceID','_undoWorker',
+    // DÍA / NOTAS
+    'startNewDay','openNewDay','saveNotaV65','toggleNotaV65','cancelNotaV65',
+    // IMPORT / EXPORT
+    'importData','confirmImport','archImportSelected'
+  ];
+  var blocked = 0, missing = [];
+  for(var i=0;i<FN_NAMES.length;i++){
+    var n = FN_NAMES[i];
+    if(typeof window[n] === 'function'){
+      (function(name, orig){
+        window[name] = function(){
+          if(window._readOnlyMode === true){
+            try { toast('🔒 Modo lectura — no se pueden modificar datos'); } catch(_){}
+            console.warn('[ReadOnly] bloqueado:', name);
+            return;
+          }
+          return orig.apply(this, arguments);
+        };
+      })(n, window[n]);
+      blocked++;
+    } else {
+      missing.push(n);
+    }
+  }
+  console.log('[V20_91_15] ReadOnly guard: '+blocked+' funciones envueltas. Faltantes:', missing);
+})();
+
+/* ============================================================
+   V20_91_14 — Flujo Check-in Unificado (Bottom Sheet)
+   ============================================================ */
+var _pendingManualAdd = null;   // nombre seleccionado del autocomplete manual, esperando confirm QR del surquero
+var _reopenAfterAdd   = false;  // bandera: reabrir el sheet tras un add exitoso
+
+function _updCheckInBtnState(){
+  var btn = gEl('btnOpenCheckIn'); if(!btn) return;
+  var diaOk  = !!(_dayFlow && _dayFlow.diaIniciado);
+  var closed = !!(_dayFlow && _dayFlow.checkOutDone);
+  if(closed){
+    btn.disabled = true;
+    btn.textContent = '🔒 Día cerrado';
+  } else if(!diaOk){
+    btn.disabled = true;
+    btn.textContent = '✅ Check-in (registra primero chofer + surquero)';
+  } else {
+    btn.disabled = false;
+    var n = (workers && workers.length) || 0;
+    btn.textContent = n > 0 ? ('✅ Check-in cuadrilla ('+n+' registrados)') : '✅ Check-in cuadrilla';
+  }
+}
+
+function openCheckInSheet(){
+  try{
+    if(!_dayFlow || _dayFlow.diaIniciado!==true){ toast('⚠️ Primero registra Chofer y Surquero'); return; }
+    if(_dayFlow.checkOutDone===true){
+      var hh = _dayFlow.checkOutTime || '';
+      toast('🔒 Día cerrado'+(hh?' a las '+hh:'')); return;
+    }
+    var sheet = gEl('checkInSheet'); if(!sheet) return;
+    var manualBox = gEl('checkInManualBox'); if(manualBox) manualBox.style.display='none';
+    var pop = gEl('checkInACPop'); if(pop){ pop.style.display='none'; pop.innerHTML=''; }
+    var srch = gEl('checkInSrch'); if(srch) srch.value='';
+    var hint = gEl('checkInConfirmHint'); if(hint) hint.style.display='none';
+    var cnt = gEl('cisCount'); if(cnt) cnt.textContent='('+((workers&&workers.length)||0)+' registrados hoy)';
+    sheet.classList.add('show');
+  }catch(e){ console.warn('openCheckInSheet',e); }
+}
+
+function closeCheckInSheet(){
+  try{
+    var sheet = gEl('checkInSheet'); if(sheet) sheet.classList.remove('show');
+    var box = gEl('checkInManualBox'); if(box) box.style.display='none';
+    var pop = gEl('checkInACPop'); if(pop){ pop.style.display='none'; pop.innerHTML=''; }
+    var hint = gEl('checkInConfirmHint'); if(hint) hint.style.display='none';
+  }catch(e){ console.warn('closeCheckInSheet',e); }
+}
+
+function checkInScanQR(){
+  try{
+    _reopenAfterAdd = true;
+    closeCheckInSheet();
+    startQRMode('trabajador');
+  }catch(e){ console.warn('checkInScanQR',e); _reopenAfterAdd=false; }
+}
+
+function checkInManualStart(){
+  try{
+    var box = gEl('checkInManualBox'); if(!box) return;
+    box.style.display='block';
+    var srch = gEl('checkInSrch');
+    if(srch){ srch.value=''; setTimeout(function(){ try{ srch.focus(); }catch(_){} }, 80); }
+    var pop = gEl('checkInACPop'); if(pop){ pop.innerHTML=''; pop.style.display='none'; }
+  }catch(e){ console.warn('checkInManualStart',e); }
+}
+
+function onCheckInManualAC(value){
+  try{
+    var pop = gEl('checkInACPop'); if(!pop) return;
+    var v = (value||'').trim().toLowerCase();
+    if(v.length < 2){ pop.innerHTML=''; pop.style.display='none'; return; }
+    var crewKey = '';
+    try{ crewKey = ((currentUser && currentUser.crew)||'').toString().toLowerCase().replace(/\s*\d+\s*$/,'').trim(); }catch(_){}
+    var isAdm = !!(currentUser && currentUser.isAdmin);
+    var matches = [];
+    for(var i=0; i<ALL_WORKERS.length && matches.length<12; i++){
+      var w = ALL_WORKERS[i]; if(!w || !w.name) continue;
+      if(!isAdm && crewKey){
+        var wc = (w.crew||'').toString().toLowerCase().replace(/\s*\d+\s*$/,'').trim();
+        if(wc && wc!==crewKey) continue;
+      }
+      var nm = w.name.toLowerCase();
+      if(nm.indexOf(v) === -1) continue;
+      if(typeof alreadyAdded==='function' && alreadyAdded(w.name)) continue;
+      matches.push(w);
+    }
+    if(!matches.length){
+      pop.innerHTML = '<div style="padding:12px;color:var(--gr);font-size:13px">Sin coincidencias</div>';
+      pop.style.display='block'; return;
+    }
+    var html = '';
+    for(var k=0; k<matches.length; k++){
+      var nmEsc = esc(matches[k].name).replace(/'/g,"\\'");
+      var nmHi  = (typeof safeHighlight==='function') ? safeHighlight(matches[k].name, value) : esc(matches[k].name);
+      html += '<div class="acItem" onclick="checkInManualSelect(\''+nmEsc+'\')">'+nmHi+'</div>';
+    }
+    pop.innerHTML = html;
+    pop.style.display='block';
+  }catch(e){ console.warn('onCheckInManualAC',e); }
+}
+
+function checkInManualSelect(name){
+  try{
+    if(!name) return;
+    if(typeof alreadyAdded==='function' && alreadyAdded(name)){ toast('⚠️ '+name+' ya está en la lista'); return; }
+    _pendingManualAdd = name;
+    var box = gEl('checkInManualBox'); if(box) box.style.display='none';
+    var pop = gEl('checkInACPop'); if(pop){ pop.style.display='none'; pop.innerHTML=''; }
+    var hint = gEl('checkInConfirmHint');
+    if(hint){
+      hint.innerHTML = '🔐 Confirma con <b>tu QR de surquero</b> para agregar a <b>'+esc(name)+'</b>. La cámara se abre automáticamente.';
+      hint.style.display='block';
+    }
+    _qrMode = 'manualConfirm';
+    _reopenAfterAdd = true;
+    setTimeout(function(){ try{ closeCheckInSheet(); startQR(); }catch(e){ console.warn('manual->startQR',e); } }, 350);
+  }catch(e){ console.warn('checkInManualSelect',e); _pendingManualAdd=null; }
+}
+
+function checkInFaceID(){
+  try{
+    _reopenAfterAdd = true;
+    closeCheckInSheet();
+    if(typeof startFaceID==='function') startFaceID();
+    else { toast('⚠️ FaceID no disponible'); _reopenAfterAdd=false; }
+  }catch(e){ console.warn('checkInFaceID',e); _reopenAfterAdd=false; }
+}
+
+// Decorar _renderIniciarDia y confirmCheckOutDia para refrescar el botón
+(function(){
+  try{
+    if(typeof _renderIniciarDia === 'function'){
+      var _origR = _renderIniciarDia;
+      _renderIniciarDia = function(){
+        try { _origR.apply(this, arguments); } catch(e){ console.warn('_renderIniciarDia',e); }
+        _updCheckInBtnState();
+      };
+    }
+    if(typeof confirmCheckOutDia === 'function'){
+      var _origC = confirmCheckOutDia;
+      confirmCheckOutDia = function(){
+        var r = _origC.apply(this, arguments);
+        try { _updCheckInBtnState(); } catch(_){}
+        return r;
+      };
+    }
+  }catch(e){ console.warn('decorate fns',e); }
+  // Refrescar al cargar
+  setTimeout(function(){ try{ _updCheckInBtnState(); }catch(_){} }, 600);
+})();
+
 </script>
+
+<!-- V20_91_14: Check-in Bottom Sheet -->
+<div id="checkInSheet" role="dialog" aria-modal="true" aria-labelledby="cisTitle" onclick="if(event.target===this)closeCheckInSheet()">
+  <div class="cis-sheet" role="document">
+    <div class="cis-grip" aria-hidden="true"></div>
+    <div class="cis-head">
+      <span id="cisTitle" class="cis-title">👥 Registrar trabajador</span>
+      <span id="cisCount" class="cis-count">(0 registrados hoy)</span>
+    </div>
+    <button type="button" class="cis-btn cis-btn-primary" onclick="checkInScanQR()">
+      <span style="font-size:24px">📷</span><span>Escanear QR</span>
+    </button>
+    <button type="button" class="cis-btn cis-btn-secondary" onclick="checkInManualStart()">
+      <span class="cis-row1"><span style="font-size:20px">✍️</span><span>Escribir nombre</span></span>
+      <span class="cis-sub">Confirma con tu QR de surquero</span>
+    </button>
+    <button type="button" class="cis-btn cis-btn-secondary" onclick="checkInFaceID()">
+      <span class="cis-row1"><span style="font-size:20px">😊</span><span>FaceID</span></span>
+    </button>
+    <div id="checkInManualBox">
+      <input id="checkInSrch" type="text" placeholder="Escribe el nombre…" autocomplete="off" oninput="onCheckInManualAC(this.value)" />
+      <div id="checkInACPop"></div>
+    </div>
+    <div id="checkInConfirmHint"></div>
+    <button type="button" class="cis-btn cis-btn-done" onclick="closeCheckInSheet()">
+      ✓ Listo, terminé
+    </button>
+  </div>
+</div>
+
 </body>
 </html>
