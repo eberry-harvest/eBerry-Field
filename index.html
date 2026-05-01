@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_86';
+window.APP_VERSION = 'V20_87';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -4147,6 +4147,31 @@ function addAct(wid_){
 function mkActRow(wid_,ai,_cont){
   var w=getW(wid_); if(!w||!w.acts[ai])return;
   var a=w.acts[ai]; var act=ACTS[a.ai];
+  // V20_87: si ACTS[a.ai] es undefined (admin cargó día de otro rancho desde Sheets — ai apunta
+  // fuera del rango de ACTS filtrado), resolver por nombre o crear fallback. Antes reventaba en L4233.
+  if(!act){
+    if(a.esName){
+      for(var _ax87=0; _ax87<ACTS.length; _ax87++){
+        if(ACTS[_ax87].es===a.esName){ act=ACTS[_ax87]; break; }
+      }
+      if(!act && typeof ALL_ACTS!=='undefined' && ALL_ACTS){
+        for(var _aa87=0; _aa87<ALL_ACTS.length; _aa87++){
+          if(ALL_ACTS[_aa87].es===a.esName){ act=ALL_ACTS[_aa87]; break; }
+        }
+      }
+    }
+    if(!act){
+      act = {
+        es: a.esName || '?', en: a.esName || '?',
+        tipo: a.tipo || a._payType || 'Hora',
+        payType: a._payType || a.tipo || 'Hours',
+        p: parseFloat(a._unitPrice||a.unitPrice||0)||0,
+        hr: (a._payType==='Hours'||a.tipo==='Hora'),
+        modo: 'Individual', variable: '', I: '', P: ''
+      };
+      console.warn('[V20_87] Actividad no encontrada en ACTS ni ALL_ACTS — fallback mínimo:', a.esName);
+    }
+  }
   var cont=_cont||gEl('ac'+wid_); if(!cont)return;
   var div=document.createElement('div');
   div.className='ar'; div.id='ar'+wid_+'_'+ai;
