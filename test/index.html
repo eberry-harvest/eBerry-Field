@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>eBerry Field App Test</title>
+<title>eBerry Field App</title>
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_91_08';
+window.APP_VERSION = 'V20_91_09';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -2794,6 +2794,70 @@ function _renderCheckOutBtn(){
   }
 }
 
+// V20_91_09: aplica check-out a UN worker — congela checkOutTime + popula fin de la última activity
+function _applyCheckOutForWorker(worker, hhmm){
+  if(!worker) return;
+  var ts = Date.now();
+  worker.checkOutTime = hhmm;
+  worker.checkOutTs = ts;
+  worker.checkOutLocked = true;
+  // V20_91_09: popular `fin` del último shift de la última activity con checkOutTime
+  // Paralelo a la lógica de check-in (ini de primer activity)
+  if(worker.acts && worker.acts.length){
+    var lastAi = worker.acts.length - 1;
+    var lastAct = worker.acts[lastAi];
+    if(lastAct){
+      if(!lastAct.shifts || !lastAct.shifts.length){
+        lastAct.shifts = [{ini: lastAct.ini||'', fin: lastAct.fin||''}];
+      }
+      var lastSi = lastAct.shifts.length - 1;
+      lastAct.shifts[lastSi].fin = hhmm;
+      lastAct.fin = hhmm;
+      lastAct.showTime = true;
+      lastAct._finLocked = true;
+    }
+  }
+}
+
+// V20_91_09: cierra check-out individual de UN worker (botón en tarjeta)
+function confirmCheckOutWorker(id){
+  var w = (typeof getW==='function') ? getW(id) : null;
+  if(!w) return;
+  if(w.checkOutLocked){ toast('⚠️ ' + w.name + ' ya cerró su día a las ' + (w.checkOutTime||'')); return; }
+  if(window._readOnlyMode){ toast('🔒 Modo lectura'); return; }
+  var ok = confirm('¿Cerrar día de '+w.name+'?\n\nLa hora actual quedará congelada como su salida y no se podrá editar.');
+  if(!ok) return;
+  var hhmm = _hhmmNow();
+  _applyCheckOutForWorker(w, hhmm);
+  toast('🏁 ' + w.name + ' cerrado a las ' + hhmm);
+  if(typeof autoSave === 'function') autoSave();
+  try { updCheckInOutDisplay(id); } catch(e){}
+  try {
+    var ac = gEl('ac'+id);
+    if(ac){
+      ac.innerHTML = '';
+      for(var i=0; i<w.acts.length; i++) mkActRow(id, i);
+    }
+  } catch(e){}
+  try { _renderWorkerCheckOutBtn(id); } catch(e){}
+}
+
+// V20_91_09: render del botón individual "Cerrar" dentro de la tarjeta del worker
+function _renderWorkerCheckOutBtn(id){
+  var slot = gEl('wcoBtn'+id);
+  if(!slot) return;
+  var w = (typeof getW==='function') ? getW(id) : null;
+  if(!w){ slot.innerHTML=''; return; }
+  if(window._readOnlyMode){ slot.innerHTML=''; return; }
+  if(w.checkOutLocked && w.checkOutTime){
+    slot.innerHTML = '<div style="padding:8px 12px;background:#eef9ee;border:1px solid var(--g);border-radius:6px;color:#1a5d1a;font-size:11px;font-weight:600;text-align:center">🔒 Cerrado a las '+esc(w.checkOutTime)+'</div>';
+  } else if(w.checkInTime){
+    slot.innerHTML = '<button onclick="confirmCheckOutWorker('+id+')" style="background:#c0392b;color:#fff;border:none;border-radius:6px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;width:100%;min-height:38px">🏁 Cerrar día (este trabajador)</button>';
+  } else {
+    slot.innerHTML = '';
+  }
+}
+
 // V20_91_01: cerrar día — botón global en pestaña Trabajadores.
 // Congela checkOutTime para todos los workers con la MISMA hora (la del botón).
 function confirmCheckOutDia(){
@@ -2808,23 +2872,31 @@ function confirmCheckOutDia(){
   var ok = confirm('Vas a registrar la HORA DE FINALIZACIÓN del día para TODOS los trabajadores ('+workers.length+'). Esta acción es definitiva.\n\n¿Continuar?');
   if(!ok) return;
   var hhmm = _hhmmNow();
-  var ts = Date.now();
+  // V20_91_09: usar helper _applyCheckOutForWorker (popula fin de última activity + congela)
+  // Solo aplicar a workers que NO estén ya cerrados individualmente.
   for(var i=0;i<workers.length;i++){
-    workers[i].checkOutTime = hhmm;
-    workers[i].checkOutTs = ts;
-    workers[i].checkOutLocked = true;
+    if(!workers[i].checkOutLocked){
+      _applyCheckOutForWorker(workers[i], hhmm);
+    }
   }
   _dayFlow.checkOutDone = true;
   _dayFlow.checkOutTime = hhmm;
   // V20_91_04 FIX: SIEMPRE sobrescribir hSal con la hora de cierre del día.
-  // Antes el `!hS.value` dejaba pegada la hora de cierre del día anterior.
   var hS = gEl('hSal');
   if(hS) hS.value = hhmm;
   toast('🏁 Día cerrado a las ' + hhmm);
   if(typeof autoSave === 'function') autoSave();
-  // V20_91_02: refrescar chips de todos los workers + bloquear hSal + actualizar botón Cerrar día
+  // V20_91_09: re-render completo de tarjetas de workers para que el `fin` readonly aplique
   for(var wi=0; wi<workers.length; wi++){
     try { updCheckInOutDisplay(workers[wi].id); } catch(e){}
+    try { _renderWorkerCheckOutBtn(workers[wi].id); } catch(e){}
+    try {
+      var ac = gEl('ac'+workers[wi].id);
+      if(ac){
+        ac.innerHTML = '';
+        for(var ai=0; ai<workers[wi].acts.length; ai++) mkActRow(workers[wi].id, ai);
+      }
+    } catch(e){}
   }
   try { _renderHorarioLocks(); } catch(e){}
   try { _renderCheckOutBtn(); } catch(e){}
@@ -4327,6 +4399,12 @@ function onQRSuccess(decoded){
     _scheduleQRStatusReset(4000);
     return;
   }
+  // V20_91_09: bloquear escaneo si el día ya fue cerrado
+  if(_qrMode === 'trabajador' && _dayFlow && _dayFlow.checkOutDone){
+    setQRStatus('⚠️ Día cerrado a las ' + (_dayFlow.checkOutTime||'') + ' — no se pueden agregar más trabajadores','err');
+    _scheduleQRStatusReset(4000);
+    return;
+  }
 
   // Verificar duplicado
   if(nameInArr(workers, qrName)){
@@ -4512,6 +4590,11 @@ function noUnk(){ pendingUnk=null; gEl('unkOv').classList.remove('on'); if(qrAct
 function doAddConfirmed(name){
   // V20_91_01: capturar el modo de escaneo ANTES de cualquier cosa (evita reset por otros flujos)
   var _modeAtAdd = _qrMode || 'trabajador';
+  // V20_91_09: bloquear si el día ya fue cerrado (no se pueden agregar más trabajadores)
+  if(_modeAtAdd === 'trabajador' && _dayFlow && _dayFlow.checkOutDone){
+    toast('⚠️ Día cerrado a las ' + (_dayFlow.checkOutTime||'') + ' — no se pueden agregar más trabajadores');
+    return;
+  }
   // V20_27: regla HORARIO OBLIGATORIO — no aplica para chofer/surquero (van sin actividades inicialmente)
   if(_modeAtAdd === 'trabajador'){
     if(!checkHorarioBeforeAdd()) return;
@@ -4581,6 +4664,10 @@ function mkCard(w,wi){
   var rb=document.createElement('button'); rb.className='rmbtn'; rb.textContent='✕ Quitar';
   (function(id){ rb.addEventListener('click',function(){ askDelWorker(id); }); })(w.id);
   b.appendChild(rb);
+  // V20_91_09: slot para botón individual "Cerrar día (este trabajador)"
+  var wcoSlot=document.createElement('div'); wcoSlot.id='wcoBtn'+w.id;
+  wcoSlot.style.cssText='margin-top:8px;padding:0 4px';
+  b.appendChild(wcoSlot);
   // V20_91_02: slot para linkcito undo 60s
   var undoSlot=document.createElement('div'); undoSlot.id='undo'+w.id;
   undoSlot.style.cssText='text-align:center;padding:4px;margin-top:6px';
@@ -4588,10 +4675,11 @@ function mkCard(w,wi){
   b.appendChild(document.createElement('br'));
   c.appendChild(b);
   for(var i=0;i<w.acts.length;i++) mkActRow(w.id,i,ac);
-  // V20_91_02: render inicial de chip y undo (si aplica)
+  // V20_91_02 + V20_91_09: render inicial de chip, undo y botón check-out individual
   setTimeout(function(){
     try { updCheckInOutDisplay(w.id); } catch(e){}
     try { _renderUndoLink(w.id); } catch(e){}
+    try { _renderWorkerCheckOutBtn(w.id); } catch(e){}
   }, 50);
   return c;
 }
@@ -7511,15 +7599,22 @@ function renderShifts(wi, ai){
   var a=w.acts[ai]; var tf=gEl('tf'+wi+'_'+ai); if(!tf)return;
   if(!a.shifts||!a.shifts.length) a.shifts=[{ini:a.ini||'',fin:a.fin||''}];
   tf.innerHTML='';
+  // V20_91_09: detectar si esta act es la última del worker (para fin lock del check-out)
+  var _isLastAct = (ai === w.acts.length - 1);
+  var _isLastShift = (s) => (s === a.shifts.length - 1);
   for(var s=0;s<a.shifts.length;s++){
     var sh=a.shifts[s];
     var row=document.createElement('div'); row.className='shift-row';
     var lbl=a.shifts.length>1?'Turno '+(s+1):'';
-    // V20_91_05: readonly del input ini si es primer shift de primer act y _iniLocked (viene del check-in del worker)
+    // V20_91_05: readonly del input ini si es primer shift de primer act y _iniLocked
     var iniLocked = !!(a._iniLocked && ai === 0 && s === 0);
     var iniReadonly = iniLocked ? ' readonly style="background:#eef9ee;cursor:not-allowed" title="🔒 Hora de entrada del check-in (no editable)"' : '';
     var iniLabelExtra = iniLocked ? ' 🔒' : '';
-    row.innerHTML='<div><label style="margin:0;font-size:10px">🟢 '+(lbl?lbl+' Inicio':'Inicio')+iniLabelExtra+'</label><input type="time" step="1800" value="'+(sh.ini||'')+'" id="shi'+wi+'_'+ai+'_'+s+'"'+iniReadonly+'></div><div><label style="margin:0;font-size:10px">🏁 '+(lbl?lbl+' Fin':'Fin')+'</label><input type="time" step="1800" value="'+(sh.fin||'')+'" id="shf'+wi+'_'+ai+'_'+s+'"></div>'+(a.shifts.length>1?'<button class="shift-del" onclick="delShift('+wi+','+ai+','+s+')">✕</button>':'<div></div>');
+    // V20_91_09: readonly del input fin si es último shift de última act y _finLocked (viene del check-out)
+    var finLocked = !!(a._finLocked && _isLastAct && s === a.shifts.length - 1);
+    var finReadonly = finLocked ? ' readonly style="background:#eef9ee;cursor:not-allowed" title="🔒 Hora de salida del check-out (no editable)"' : '';
+    var finLabelExtra = finLocked ? ' 🔒' : '';
+    row.innerHTML='<div><label style="margin:0;font-size:10px">🟢 '+(lbl?lbl+' Inicio':'Inicio')+iniLabelExtra+'</label><input type="time" step="1800" value="'+(sh.ini||'')+'" id="shi'+wi+'_'+ai+'_'+s+'"'+iniReadonly+'></div><div><label style="margin:0;font-size:10px">🏁 '+(lbl?lbl+' Fin':'Fin')+finLabelExtra+'</label><input type="time" step="1800" value="'+(sh.fin||'')+'" id="shf'+wi+'_'+ai+'_'+s+'"'+finReadonly+'></div>'+(a.shifts.length>1?'<button class="shift-del" onclick="delShift('+wi+','+ai+','+s+')">✕</button>':'<div></div>');
     tf.appendChild(row);
     (function(wi2,ai2,si){
       setTimeout(function(){
