@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_85';
+window.APP_VERSION = 'V20_86';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -6338,7 +6338,9 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
       for(var _i81=0;_i81<ACTS.length;_i81++){ if(ACTS[_i81].es===col4.esName){ _actC81=ACTS[_i81]; break; } }
     }
     var _isVD81 = !!(_actC81 && (_actC81.variable||'').toLowerCase()==='vardoor');
-    var _factVD81 = _isVD81 ? getActFactorAcres(_actC81) : null;
+    // V20_86: usar getAnchoCamaDefault (que ya tiene fallback col I para Pennrose) en vez de getActFactorAcres directo.
+    // Da paridad con invoice. Si retorna null, no hay factor → se omite la línea de acres y solo se muestra puertas.
+    var _factVD81 = _isVD81 ? getAnchoCamaDefault(_actC81) : null;
     if(_isVD81 && _factVD81 && tot>0){
       var _ac81 = tot/_factVD81;
       totLbl = '<span style="font-size:9px;color:#0f6e56;display:block">'+_ac81.toFixed(4)+' acres</span>'
@@ -7354,11 +7356,24 @@ function sendToSheets() {
 // Validación visual de col I vacía vive en Google Sheet (formato condicional), no en app.
 
 // _resolveActByName: busca un act por nombre en ALL_ACTS o devuelve el objeto si ya lo es.
+// V20_86: si recibe un objeto SIN col P (incompleto), lo enriquece buscando en ALL_ACTS por nombre.
+// Esto cubre el caso donde act viene de ACTS filtrado de otro rancho o de un cache stale sin col P.
 function _resolveActByName(actOrName){
   if(!actOrName) return null;
-  if(typeof actOrName === 'object') return actOrName;
-  var n = String(actOrName).toLowerCase().trim();
   var pool = (typeof ALL_ACTS!=='undefined' && ALL_ACTS) ? ALL_ACTS : (typeof ACTS!=='undefined'?ACTS:[]);
+  if(typeof actOrName === 'object'){
+    // V20_86: objeto sin P pero con es → intentar enriquecer desde ALL_ACTS
+    if(actOrName.P===undefined && actOrName.es){
+      var _en = String(actOrName.es).toLowerCase().trim();
+      for(var _ei=0;_ei<pool.length;_ei++){
+        if((pool[_ei].es||'').toLowerCase().trim()===_en && pool[_ei].P!==undefined){
+          return pool[_ei];
+        }
+      }
+    }
+    return actOrName;
+  }
+  var n = String(actOrName).toLowerCase().trim();
   for(var _ri=0;_ri<pool.length;_ri++){
     if((pool[_ri].es||'').toLowerCase().trim()===n) return pool[_ri];
   }
@@ -7413,17 +7428,28 @@ function isPennrose5Act(actOrName){
 // El motor V20_27 cubre individuales. Grupales/modo lectura migrados en Fase B (V20_71).
 
 // V20_22: Ancho de cama default para convertir piezas → acres en el invoice.
-// Pennrose (5 actividades específicas) usa 87.2; otros ranchos usan 5.67 (default genérico).
+// V20_86: ELIMINADO fallback 5.67 (era de DeWitt, no de Mecca como decía el comentario viejo).
+// Si MASTER no tiene col P (FactorAcres) ni col I → retornar null y que el caller muestre warning visible.
+// Sin fallback silencioso para evitar acres mal calculados sin que nadie note.
+var _missingFactorWarned = {}; // V20_86: warn 1 sola vez por actividad por sesión
 function getAnchoCamaDefault(act){
   // V20_76: priorizar col P (FactorAcres) si existe.
   var fact = getActFactorAcres(act);
   if(fact) return fact;
-  // V20_73 Fase C: ancho leído del MASTER (col I) sin hardcoded; si col I vacía cae a default genérico 5.67.
+  // V20_73 Fase C: ancho leído del MASTER (col I) — Pennrose5Act específico
   if(isPennrose5Act(act)){
     var ancho = getActAncho(act);
-    return ancho || 5.67;
+    if(ancho) return ancho;
   }
-  return 5.67;
+  // V20_86: nada en MASTER → retornar null (NO 5.67 default). Caller debe manejar.
+  try {
+    var _name = (act && act.es) || '?';
+    if(!_missingFactorWarned[_name]){
+      _missingFactorWarned[_name] = true;
+      console.warn('[V20_86] Falta FactorAcres en MASTER col P (o col I para Pennrose) para actividad: '+_name+'. Acres no se calcularán.');
+    }
+  } catch(e){}
+  return null;
 }
 
 // Detecta el tipo de cálculo de una actividad grupal
@@ -8495,7 +8521,7 @@ function setMotivoClose(idx, motivo){
 // ── LOCAL CACHE (instant load on return visits) ──
 // ✅ v4.2: Cambiamos la key del caché para forzar recarga fresca
 // (borra el caché viejo que no tenía el campo "modo")
-var CACHE_KEY = 'eb_appdata_v3';  // Tau: bump para invalidar cache con tipoMap viejo
+var CACHE_KEY = 'eb_appdata_v4';  // V20_86: bump para invalidar cache pre-V20_71 (sin col P FactorAcres)
 
 function saveCache(workers, acts, lideres){
   try{
@@ -9880,7 +9906,12 @@ function buildInvoiceAutoData(){
   for(var k in actMap){
     var m = actMap[k];
     // V20_22: actividades puertas individuales muestran ACRES en vez de Piezas
-    var blockLabel = m.isHr ? 'Horas' : (m.isPuertas ? 'Acres' : 'Piezas');
+    // V20_86: si falta FactorAcres, label cambia a "⚠️ Falta FactorAcres" para visibilidad
+    var blockLabel;
+    if(m.isHr) blockLabel = 'Horas';
+    else if(m.isPuertas){
+      blockLabel = (m.ancho && m.ancho > 0) ? 'Acres' : '⚠️ Falta FactorAcres';
+    } else blockLabel = 'Piezas';
     var equipLbl = m.equipment;
     if(m.isHr && (m.ini || m.fin)){
       equipLbl += ' (' + to12h(m.ini||'') + '-' + to12h(m.fin||'') + ')';
@@ -9888,6 +9919,9 @@ function buildInvoiceAutoData(){
     var fieldVal;
     if(m.isPuertas && m.ancho > 0){
       fieldVal = (m.totalField / m.ancho).toFixed(2); // piezas ÷ ancho = acres
+    } else if(m.isPuertas){
+      // V20_86: puertas pero sin factor → mostrar puertas crudas + flag visible
+      fieldVal = m.totalField.toFixed(2) + ' puertas';
     } else {
       fieldVal = m.totalField.toFixed(2);
     }
