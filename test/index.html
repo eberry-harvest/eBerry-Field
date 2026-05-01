@@ -26,7 +26,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_91_19';
+window.APP_VERSION = 'V20_91_20';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -1271,10 +1271,11 @@ body.readOnly [onclick*="openNewDay"]{display:none !important}
       <div id="fincaParamSlot"></div>
     </div>
     <input type="hidden" id="finca" data-save value="">
-    <!-- V20_91_14: Check-in unificado (abre bottom-sheet) y Check-out -->
+    <!-- V20_91_20: Check-in unificado + Check-out multi-estado (slot dinámico). El botón de Check-out
+         tiene 4 estados: cuadrilla→chofer→surquero→cerrado. Se renderiza desde _renderCheckOutBtn(). -->
     <div style="display:flex;gap:8px;margin-top:14px">
       <button id="btnOpenCheckIn" class="btn bg" style="flex:1;min-height:50px;font-size:15px;font-weight:700" onclick="openCheckInSheet()" disabled>✅ Check-in cuadrilla</button>
-      <button class="btn" style="flex:1;min-height:50px;font-size:15px;font-weight:700;background:#c0392b;color:#fff;border:1.5px solid #c0392b" onclick="confirmCheckOutDia()">🏁 Check-out</button>
+      <div id="coBtnSlot" style="flex:1"></div>
     </div>
   </div>
   <div class="card">
@@ -1728,6 +1729,27 @@ function logoutUser(){
       try { localStorage.removeItem('eb_offline_queue'); } catch(e){}
     }
   } catch(e){ console.warn('V20_37 logout queue check fallo:', e); }
+
+  // V20_91_20 RULE: el surquero NO puede cerrar sesión si tiene trabajadores activos
+  // (con check-in pero sin check-out). El líder es el último en salir.
+  // Admin exento porque solo entra a ver histórico, no captura nada.
+  try {
+    if(currentUser && !currentUser.isAdmin && workers && workers.length){
+      var _activos = [];
+      for(var _i=0; _i<workers.length; _i++){
+        var _w = workers[_i];
+        if(_w && _w.checkInTime && !_w.checkOutLocked) _activos.push(_w.name);
+      }
+      if(_activos.length > 0){
+        var _lista = _activos.slice(0,5).join('\n• ');
+        if(_activos.length > 5) _lista += '\n• ... y ' + (_activos.length-5) + ' más';
+        alert('⛔ No puedes cerrar sesión todavía.\n\n' +
+              'Tienes ' + _activos.length + ' trabajador(es) activo(s) sin check-out:\n• ' + _lista +
+              '\n\nCierra el día primero desde Parámetros (botón Check-out) — eres el líder, sales al último.');
+        return;
+      }
+    }
+  } catch(e){ console.warn('[V20_91_20] logout activos check fallo:', e); }
 
   saveQuiet();
   closeSession();
@@ -2621,8 +2643,11 @@ function _initDayFlow(){
     choferWorkerId: null,
     surqueroWorkerId: null,
     diaIniciado: false,         // true cuando chofer + surquero registrados (o combinado)
-    checkOutDone: false,        // true tras presionar "Cerrar día"
-    checkOutTime: ''             // hora oficial de cierre del día (misma para todos)
+    crewClosed: false,          // V20_91_20: true tras cerrar trabajadores (chofer/surquero pendientes)
+    choferClosed: false,        // V20_91_20: true tras cerrar al chofer (caso no combinado)
+    _modoCombinado: false,      // V20_91_20: true si chofer y surquero son la misma persona
+    checkOutDone: false,        // true cuando todos cerraron (incluido chofer y surquero)
+    checkOutTime: ''             // hora oficial de cierre del día (la del último cierre)
   };
 }
 
@@ -2709,6 +2734,8 @@ function _applyCheckInForMode(worker, mode){
               : (mode === 'chofer') ? 'chofer'
               : (mode === 'surquero') ? 'surquero'
               : 'trabajador';
+  // V20_91_20: marcar modo combinado para flujo de check-out (omite estado 2 chofer)
+  if(mode === 'choferSurquero') _dayFlow._modoCombinado = true;
   // Actualizar _dayFlow
   if(mode === 'chofer' || mode === 'choferSurquero'){
     _dayFlow.choferScanned = true;
@@ -2834,15 +2861,83 @@ function _undoWorker(id){
 
 // V20_91_01: render del botón global "Cerrar día" en la pestaña Trabajadores.
 // Solo se muestra si hay workers y aún no se cerró.
+// V20_91_20: helper que devuelve el estado actual del check-out (1|2|3|4)
+// 1 = trabajadores abiertos (esperando cierre cuadrilla)
+// 2 = cuadrilla cerrada, chofer pendiente (NO modo combinado)
+// 3 = cuadrilla y chofer cerrados (o modo combinado), surquero pendiente
+// 4 = todo cerrado
+function _coState(){
+  if(!_dayFlow || !_dayFlow.diaIniciado) return 0;
+  if(_dayFlow.checkOutDone) return 4;
+  if(!_dayFlow.crewClosed)  return 1;
+  // Cuadrilla cerrada — ¿chofer ya cerrado o no aplica (combinado)?
+  if(_dayFlow._modoCombinado || _dayFlow.choferClosed) return 3;
+  // Si no hay choferWorkerId distinto del surquero → no hay chofer separado → saltar a 3
+  if(!_dayFlow.choferWorkerId || _dayFlow.choferWorkerId === _dayFlow.surqueroWorkerId) return 3;
+  return 2;
+}
+
+// V20_91_20: render del botón Check-out con switch por estado en el slot nuevo de Parámetros.
+// El slot viejo en Trabajadores (#checkOutDiaWrap) se vacía — Serafín 2026-05-01 quitó toda la UI de cierre de Trabajadores.
 function _renderCheckOutBtn(){
-  var wrap = gEl('checkOutDiaWrap');
-  if(!wrap) return;
-  if(!workers || !workers.length){ wrap.innerHTML = ''; return; }
-  if(_dayFlow && _dayFlow.checkOutDone){
-    wrap.innerHTML = '<div style="padding:14px;border:2px solid var(--g);border-radius:10px;background:#eef9ee;color:var(--dk);font-weight:600;text-align:center">🏁 Día cerrado a las ' + esc(_dayFlow.checkOutTime||'') + ' 🔒</div>';
-  } else {
-    wrap.innerHTML = '<button class="btn pdf" onclick="confirmCheckOutDia()" style="width:100%;padding:16px;font-size:15px;font-weight:700">🏁 Cerrar día (Check-out de todos)</button>';
+  // Vaciar slot legacy en pestaña Trabajadores
+  var oldWrap = gEl('checkOutDiaWrap');
+  if(oldWrap) oldWrap.innerHTML = '';
+  var slot = gEl('coBtnSlot');
+  if(!slot) return;
+  if(!_dayFlow || !_dayFlow.diaIniciado){
+    slot.innerHTML = '';
+    return;
   }
+  var st = _coState();
+  var combo = !!_dayFlow._modoCombinado;
+  var html = '';
+  var baseStyle = 'width:100%;min-height:50px;border:0;border-radius:8px;font-family:DM Sans,sans-serif;font-weight:700;font-size:15px;cursor:pointer';
+  if(st === 1){
+    html = '<button class="btn" style="'+baseStyle+';background:#c0392b;color:#fff;border:1.5px solid #c0392b" onclick="confirmCheckOut(\'coCuadrilla\')">🏁 Check-out cuadrilla</button>';
+  } else if(st === 2){
+    html = '<button class="btn" style="'+baseStyle+';background:#e67e22;color:#fff;border:1.5px solid #e67e22" onclick="confirmCheckOut(\'coChofer\')">🚌 Cerrar día del chofer</button>';
+  } else if(st === 3){
+    var lbl = combo ? '🚌+👤 Cerrar mi día (chofer+surquero)' : '👤 Cerrar mi sesión (surquero)';
+    html = '<button class="btn" style="'+baseStyle+';background:#27ae60;color:#fff;border:1.5px solid #27ae60" onclick="confirmCheckOut(\'coSurq\')">'+esc(lbl)+'</button>';
+  } else if(st === 4){
+    html = '<button disabled class="btn" style="'+baseStyle+';background:#95a5a6;color:#fff;cursor:not-allowed">🔒 Día cerrado a las '+esc(_dayFlow.checkOutTime||'--:--')+'</button>';
+  }
+  slot.innerHTML = html;
+}
+
+// V20_91_20: arranca el flow del check-out con QR según el modo del estado actual.
+function confirmCheckOut(mode){
+  if(window._readOnlyMode){ toast('🔒 Modo lectura'); return; }
+  if(!_dayFlow){ toast('⚠️ Día no iniciado'); return; }
+  if(!workers || !workers.length){ toast('⚠️ No hay trabajadores registrados'); return; }
+  var msg = '';
+  var roleTxt = '';
+  if(mode === 'coCuadrilla'){
+    var nReg = 0;
+    for(var i=0;i<workers.length;i++){
+      var w = workers[i];
+      var role = w.role || 'trabajador';
+      if(role === 'trabajador' && w.checkInTime && !w.checkOutLocked) nReg++;
+    }
+    if(!nReg){ toast('⚠️ No hay trabajadores activos para cerrar'); return; }
+    msg = '¿Cerrar día de la cuadrilla ('+nReg+' trabajadores)?\n\nChofer y surquero quedan pendientes para cerrar al final del viaje.\n\nEscanea TU QR de surquero para autorizar.';
+  } else if(mode === 'coChofer'){
+    var ch = (typeof getW==='function' && _dayFlow.choferWorkerId!=null) ? getW(_dayFlow.choferWorkerId) : null;
+    if(!ch){ toast('⚠️ No hay chofer registrado'); return; }
+    if(ch.checkOutLocked){ toast('⚠️ El chofer ya cerró'); return; }
+    msg = '¿Cerrar día del chofer ('+ch.name+')?\n\nEscanea el QR del chofer para confirmar.';
+  } else if(mode === 'coSurq'){
+    var sq = (typeof getW==='function' && _dayFlow.surqueroWorkerId!=null) ? getW(_dayFlow.surqueroWorkerId) : null;
+    if(!sq){ toast('⚠️ No hay surquero registrado'); return; }
+    if(sq.checkOutLocked){ toast('⚠️ Tu sesión ya está cerrada'); return; }
+    msg = _dayFlow._modoCombinado ?
+      '¿Cerrar tu día (chofer + surquero)?\n\nEscanea TU QR para confirmar.' :
+      '¿Cerrar tu sesión de surquero?\n\nEscanea TU QR para confirmar.';
+  } else { return; }
+  if(!confirm(msg)) return;
+  _qrMode = mode;
+  if(typeof startQR === 'function') startQR();
 }
 
 // V20_91_09: aplica check-out a UN worker — congela checkOutTime + popula fin de la última activity
@@ -2893,17 +2988,16 @@ function confirmCheckOutWorker(id){
   try { _renderWorkerCheckOutBtn(id); } catch(e){}
 }
 
-// V20_91_09: render del botón individual "Cerrar" dentro de la tarjeta del worker
+// V20_91_20: render del chip individual en la tarjeta del worker (SOLO informativo).
+// Ya NO pinta botón "Cerrar" — Serafín 2026-05-01 quitó toda la UI de cierre de la pestaña Trabajadores.
+// El cierre se hace solo desde Parámetros con el flujo multi-estado (cuadrilla→chofer→surquero).
 function _renderWorkerCheckOutBtn(id){
   var slot = gEl('wcoBtn'+id);
   if(!slot) return;
   var w = (typeof getW==='function') ? getW(id) : null;
   if(!w){ slot.innerHTML=''; return; }
-  if(window._readOnlyMode){ slot.innerHTML=''; return; }
   if(w.checkOutLocked && w.checkOutTime){
-    slot.innerHTML = '<div style="padding:8px 12px;background:#eef9ee;border:1px solid var(--g);border-radius:6px;color:#1a5d1a;font-size:11px;font-weight:600;text-align:center">🔒 Cerrado a las '+esc(w.checkOutTime)+'</div>';
-  } else if(w.checkInTime){
-    slot.innerHTML = '<button onclick="confirmCheckOutWorker('+id+')" style="background:#c0392b;color:#fff;border:none;border-radius:6px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;width:100%;min-height:38px">🏁 Cerrar día (este trabajador)</button>';
+    slot.innerHTML = '<div style="padding:6px 10px;background:#eef9ee;border:1px solid var(--g);border-radius:6px;color:#1a5d1a;font-size:11px;font-weight:600;text-align:center">🔒 Cerrado a las '+esc(w.checkOutTime)+'</div>';
   } else {
     slot.innerHTML = '';
   }
@@ -4577,6 +4671,140 @@ function onQRSuccess(decoded){
 
   // V20_91_19: branch manualConfirm movido al INICIO de onQRSuccess (después del parsing).
   // El branch viejo aquí estaba después de checkContrato que rechazaba al surquero.
+
+  // V20_91_20: 3 branches nuevos de check-out multi-estado.
+  // coCuadrilla = QR del surquero autoriza cerrar a trabajadores con role==='trabajador'
+  // coChofer    = QR del chofer cierra al chofer (worker.id === _dayFlow.choferWorkerId)
+  // coSurq      = QR del surquero cierra al surquero (y al chofer si modo combinado)
+  if(_qrMode === 'coCuadrilla'){
+    try {
+      var _meEmpC = (currentUser && currentUser.empNum) ? String(currentUser.empNum).trim() : '';
+      var _qrEmpC = String(qrEmpNum||'').trim();
+      if(!_meEmpC || _qrEmpC !== _meEmpC){
+        setQRStatus('⚠️ Solo el surquero autoriza — escanea TU QR','err');
+        _scheduleQRStatusReset(4000);
+        return;
+      }
+      pauseQR();
+      try { stopQR(); } catch(_){}
+      var _hh1 = _hhmmNow();
+      var _n1 = 0;
+      for(var _wi1=0; _wi1<workers.length; _wi1++){
+        var _w1 = workers[_wi1];
+        var _r1 = _w1.role || 'trabajador';
+        if(_r1 === 'trabajador' && _w1.checkInTime && !_w1.checkOutLocked){
+          _applyCheckOutForWorker(_w1, _hh1);
+          _n1++;
+        }
+      }
+      _dayFlow.crewClosed = true;
+      _qrMode = 'trabajador';
+      if(typeof autoSave === 'function') autoSave();
+      for(var _wi2=0; _wi2<workers.length; _wi2++){
+        try { updCheckInOutDisplay(workers[_wi2].id); } catch(_){}
+        try { _renderWorkerCheckOutBtn(workers[_wi2].id); } catch(_){}
+      }
+      try { _renderHorarioLocks(); } catch(_){}
+      try { _renderCheckOutBtn(); } catch(_){}
+      try { _updCheckInBtnState(); } catch(_){}
+      toast('✅ Cuadrilla cerrada a las '+_hh1+' ('+_n1+' trabajadores). Faltan: chofer y surquero.');
+      return;
+    } catch(e){
+      console.warn('[V20_91_20] coCuadrilla error', e);
+      _qrMode = 'trabajador';
+      try { stopQR(); } catch(_){}
+      try { toast('⚠️ Error: '+(e&&e.message||'cierre cuadrilla falló')); } catch(_){}
+      return;
+    }
+  }
+
+  if(_qrMode === 'coChofer'){
+    try {
+      var _wCh = (typeof getW==='function' && _dayFlow.choferWorkerId!=null) ? getW(_dayFlow.choferWorkerId) : null;
+      if(!_wCh){
+        setQRStatus('⚠️ No hay chofer registrado','err');
+        _scheduleQRStatusReset(4000);
+        return;
+      }
+      var _qrEmpCh = String(qrEmpNum||'').trim();
+      var _chEmp = String(_wCh.empNum||'').trim();
+      var _chNm = String(_wCh.name||'').toLowerCase().trim();
+      var _qrNmCh = String(qrName||'').toLowerCase().trim();
+      var _okCh = (_chEmp && _qrEmpCh && _chEmp === _qrEmpCh) || (_chNm && _qrNmCh && _chNm === _qrNmCh);
+      if(!_okCh){
+        setQRStatus('⚠️ Ese QR no es del chofer ('+esc(_wCh.name)+')','err');
+        _scheduleQRStatusReset(4000);
+        return;
+      }
+      pauseQR();
+      try { stopQR(); } catch(_){}
+      var _hh2 = _hhmmNow();
+      _applyCheckOutForWorker(_wCh, _hh2);
+      _dayFlow.choferClosed = true;
+      _qrMode = 'trabajador';
+      if(typeof autoSave === 'function') autoSave();
+      try { updCheckInOutDisplay(_wCh.id); } catch(_){}
+      try { _renderWorkerCheckOutBtn(_wCh.id); } catch(_){}
+      try { _renderHorarioLocks(); } catch(_){}
+      try { _renderCheckOutBtn(); } catch(_){}
+      toast('✅ Chofer cerrado a las '+_hh2);
+      return;
+    } catch(e){
+      console.warn('[V20_91_20] coChofer error', e);
+      _qrMode = 'trabajador';
+      try { stopQR(); } catch(_){}
+      try { toast('⚠️ Error: '+(e&&e.message||'cierre chofer falló')); } catch(_){}
+      return;
+    }
+  }
+
+  if(_qrMode === 'coSurq'){
+    try {
+      var _meEmpS = (currentUser && currentUser.empNum) ? String(currentUser.empNum).trim() : '';
+      var _meNmS  = ((currentUser && currentUser.name) || '').toLowerCase().trim();
+      var _qrEmpS = String(qrEmpNum||'').trim();
+      var _qrNmS  = String(qrName||'').toLowerCase().trim();
+      var _okS = (_meEmpS && _qrEmpS && _meEmpS === _qrEmpS) || (_meNmS && _qrNmS && _meNmS === _qrNmS);
+      if(!_okS){
+        setQRStatus('⚠️ Solo TU QR cierra tu sesión','err');
+        _scheduleQRStatusReset(4000);
+        return;
+      }
+      pauseQR();
+      try { stopQR(); } catch(_){}
+      var _hh3 = _hhmmNow();
+      // Cerrar surquero (y chofer si modo combinado)
+      var _idsToClose = [];
+      if(_dayFlow.surqueroWorkerId != null) _idsToClose.push(_dayFlow.surqueroWorkerId);
+      if(_dayFlow._modoCombinado && _dayFlow.choferWorkerId != null && _idsToClose.indexOf(_dayFlow.choferWorkerId)<0){
+        _idsToClose.push(_dayFlow.choferWorkerId);
+      }
+      for(var _ii=0; _ii<_idsToClose.length; _ii++){
+        var _wS = (typeof getW==='function') ? getW(_idsToClose[_ii]) : null;
+        if(_wS && !_wS.checkOutLocked) _applyCheckOutForWorker(_wS, _hh3);
+      }
+      _dayFlow.checkOutDone = true;
+      _dayFlow.checkOutTime = _hh3;
+      var _hS = gEl('hSal'); if(_hS) _hS.value = _hh3;
+      _qrMode = 'trabajador';
+      if(typeof autoSave === 'function') autoSave();
+      for(var _wi3=0; _wi3<workers.length; _wi3++){
+        try { updCheckInOutDisplay(workers[_wi3].id); } catch(_){}
+        try { _renderWorkerCheckOutBtn(workers[_wi3].id); } catch(_){}
+      }
+      try { _renderHorarioLocks(); } catch(_){}
+      try { _renderCheckOutBtn(); } catch(_){}
+      try { _updCheckInBtnState(); } catch(_){}
+      toast('🔒 Día cerrado a las '+_hh3);
+      return;
+    } catch(e){
+      console.warn('[V20_91_20] coSurq error', e);
+      _qrMode = 'trabajador';
+      try { stopQR(); } catch(_){}
+      try { toast('⚠️ Error: '+(e&&e.message||'cierre surquero falló')); } catch(_){}
+      return;
+    }
+  }
 
   // V20_91_01: para chofer/surquero/dual → siempre mostrar modal de confirmación con texto contextual
   if(_qrMode === 'chofer' || _qrMode === 'surquero' || _qrMode === 'choferSurquero'){
@@ -12437,6 +12665,7 @@ var _checkSendTimer = setInterval(checkDaysWithoutSend, 30 * 60 * 1000);
     'onSemWeekChange','onSemActivityChange','onSemRanchoChange',
     // CHECK-IN/OUT
     '_applyCheckInForMode','_applyCheckOutForWorker','confirmCheckOutDia','confirmCheckOutWorker',
+    'confirmCheckOut', // V20_91_20: nuevo flow multi-estado
     'startQRMode','openCheckInSheet','checkInScanQR','checkInManualStart','checkInManualSelect',
     'onCheckInManualAC','checkInFaceID','_undoWorker',
     // DÍA / NOTAS
