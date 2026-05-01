@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_87';
+window.APP_VERSION = 'V20_88';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -3378,6 +3378,19 @@ function _enterReadOnly(payload){
     var gaiIdx=-1;
     for(var gi=0;gi<(GRUPAL_ACTS||[]).length;gi++){
       if(GRUPAL_ACTS[gi].es===pg.actEs){ gaiIdx=gi; break; }
+    }
+    // V20_88: si no se encontró en GRUPAL_ACTS (filtrado por rancho del admin),
+    // buscar en ALL_ACTS (todas las del MASTER, sin filtrar) por es+modo='grupal'.
+    // Push a GRUPAL_ACTS para que renderGrpActs encuentre el act por gai.
+    if(gaiIdx===-1 && typeof ALL_ACTS!=='undefined' && ALL_ACTS){
+      for(var _aa88=0; _aa88<ALL_ACTS.length; _aa88++){
+        if(ALL_ACTS[_aa88].es===pg.actEs && (ALL_ACTS[_aa88].modo||'').toLowerCase()==='grupal'){
+          GRUPAL_ACTS.push(ALL_ACTS[_aa88]);
+          gaiIdx = GRUPAL_ACTS.length - 1;
+          console.log('[V20_88] Grupal recuperada de ALL_ACTS para modo lectura:', pg.actEs);
+          break;
+        }
+      }
     }
     var partIds = (pg.workers||[]).map(function(pw){
       var match=null;
@@ -7604,7 +7617,22 @@ function renderGrpActs(){
   for(var gi=0;gi<grpActs.length;gi++){
     var g   = grpActs[gi];
     var act = GRUPAL_ACTS[g.gai];
-    if(!act) continue;
+    // V20_88: red de seguridad — si act undefined en modo lectura, sintetizar uno mínimo
+    // desde g.esName para no omitir la grupal silenciosamente.
+    if(!act){
+      if(window._readOnlyMode && (g.esName || g._actEs)){
+        act = {
+          es: g.esName || g._actEs,
+          en: g.esName || g._actEs,
+          tipo: g._payType || 'Pieces',
+          payType: g._payType || 'Pieces',
+          p: parseFloat(g._unitPrice||0)||0,
+          hr: false, calc: '', modo: 'Grupal',
+          variable: '', I: '', P: ''
+        };
+        console.warn('[V20_88] Grupal sin act resuelto — fallback sintético en modo lectura:', act.es);
+      } else continue;
+    }
     var ct  = grpCalcType(act);
     // Estado open: default true si no existe
     if(g.open===undefined) g.open=true;
