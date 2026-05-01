@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_91_03';
+window.APP_VERSION = 'V20_91_05';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -2662,9 +2662,11 @@ function _applyCheckInForMode(worker, mode){
   if(mode === 'chofer' || mode === 'choferSurquero'){
     _dayFlow.choferScanned = true;
     _dayFlow.choferWorkerId = worker.id;
-    // Copiar hora a hEnt global de Parámetros (si está vacío)
+    // V20_91_04 FIX: SIEMPRE sobrescribir hEnt con la hora del chofer (no solo si está vacío).
+    // El chofer es la fuente de verdad de la hora de entrada del día. Antes el `!hE.value`
+    // dejaba pegada la hora del chofer del día anterior cuando se iniciaba un nuevo día.
     var hE = gEl('hEnt');
-    if(hE && !hE.value) hE.value = hhmm;
+    if(hE) hE.value = hhmm;
   }
   if(mode === 'surquero' || mode === 'choferSurquero'){
     _dayFlow.surqueroScanned = true;
@@ -2814,9 +2816,10 @@ function confirmCheckOutDia(){
   }
   _dayFlow.checkOutDone = true;
   _dayFlow.checkOutTime = hhmm;
-  // Copiar a hSal global si está vacío
+  // V20_91_04 FIX: SIEMPRE sobrescribir hSal con la hora de cierre del día.
+  // Antes el `!hS.value` dejaba pegada la hora de cierre del día anterior.
   var hS = gEl('hSal');
-  if(hS && !hS.value) hS.value = hhmm;
+  if(hS) hS.value = hhmm;
   toast('🏁 Día cerrado a las ' + hhmm);
   if(typeof autoSave === 'function') autoSave();
   // V20_91_02: refrescar chips de todos los workers + bloquear hSal + actualizar botón Cerrar día
@@ -4249,10 +4252,23 @@ if(typeof MutationObserver!=='undefined')(function(){
   obs.observe(document.body,{attributes:true,attributeFilter:['class'],subtree:true,childList:true});
 })();
 
+// V20_91_05: cancelar timeouts previos para evitar parpadeo cuando la cámara
+// detecta repetidamente el mismo QR (cada qrCooldown reinicia el ciclo).
+var _qrStatusTimer = null;
 function setQRStatus(msg, cls){
   var el = gEl('qrStatus');
   el.textContent = msg;
   el.className = 'qrStatus' + (cls ? ' '+cls : '');
+  // Cancelar el cleanup pendiente — el caller decide si programa uno nuevo
+  if(_qrStatusTimer){ clearTimeout(_qrStatusTimer); _qrStatusTimer = null; }
+}
+// V20_91_05: helper para programar limpieza con duración configurable que no se pisa entre llamadas
+function _scheduleQRStatusReset(ms){
+  if(_qrStatusTimer){ clearTimeout(_qrStatusTimer); }
+  _qrStatusTimer = setTimeout(function(){
+    _qrStatusTimer = null;
+    setQRStatus('Apunta la cámara al siguiente QR','');
+  }, ms || 2000);
 }
 
 function updQRCount(){
@@ -4274,7 +4290,7 @@ function onQRSuccess(decoded){
   var parts = decoded.split('|');
   if(parts.length < 3 || parts[0] !== 'EBERRY'){
     setQRStatus('⚠️ QR no válido. Formato incorrecto.','err');
-    setTimeout(function(){ setQRStatus('Apunta la cámara al siguiente QR',''); }, 2000);
+    _scheduleQRStatusReset(4000); // V20_91_05: 4s para errores + cancela timeouts previos
     return;
   }
 
@@ -4287,7 +4303,7 @@ function onQRSuccess(decoded){
     var meLower = ((currentUser && currentUser.name)||'').toLowerCase().trim();
     if(meLower && qrLower !== meLower){
       setQRStatus('⚠️ Esta tarjeta no es la tuya — debes escanear TU propia tarjeta','err');
-      setTimeout(function(){ setQRStatus('Apunta la cámara al siguiente QR',''); }, 3000);
+      _scheduleQRStatusReset(4000);
       return;
     }
   }
@@ -4295,14 +4311,14 @@ function onQRSuccess(decoded){
   // V20_91_01: bloquear escaneo de trabajadores hasta que chofer + surquero estén registrados
   if(_qrMode === 'trabajador' && _dayFlow && !_dayFlow.diaIniciado){
     setQRStatus('⚠️ Primero escanea al chofer y al surquero (Parámetros)','err');
-    setTimeout(function(){ setQRStatus('Apunta la cámara al siguiente QR',''); }, 3000);
+    _scheduleQRStatusReset(4000);
     return;
   }
 
   // Verificar duplicado
   if(nameInArr(workers, qrName)){
     setQRStatus('⚠️ ' + qrName + ' ya está en la lista','err');
-    setTimeout(function(){ setQRStatus('Apunta la cámara al siguiente QR',''); }, 2000);
+    _scheduleQRStatusReset(4000); // V20_91_05: 4s y cancela timeouts viejos para que se lea bien
     return;
   }
 
@@ -4313,7 +4329,7 @@ function onQRSuccess(decoded){
   // Re-verificar duplicado con nombre oficial
   if(wkMatch && nameInArr(workers, officialName)){
     setQRStatus('⚠️ ' + officialName + ' ya está en la lista','err');
-    setTimeout(function(){ setQRStatus('Apunta la cámara al siguiente QR',''); }, 2000);
+    _scheduleQRStatusReset(4000);
     return;
   }
 
@@ -4346,7 +4362,7 @@ function onQRSuccess(decoded){
     qrSessionCount++;
     updQRCount();
     setQRStatus('✓ ' + officialName + ' agregado','ok');
-    setTimeout(function(){ setQRStatus('Apunta la cámara al siguiente QR',''); }, 2000);
+    _scheduleQRStatusReset(2000);
     return;
   }
 
@@ -4578,7 +4594,22 @@ function addAct(wid_){
   var ai=w.acts.length;
   var defName=ACTS.length>0?ACTS[0].es:'';
   var defTipo=ACTS.length>0?ACTS[0].tipo:'';
-  w.acts.push({ai:0,esName:defName,tipo:defTipo,qty:'',ini:'',fin:'',showTime:false,pay:0,finca:gVal('finca')});
+  // V20_91_05: si es la PRIMERA activity Y el worker tiene checkInTime, congelar ini con esa hora.
+  // El surquero NO puede modificar el inicio de la primera activity — viene del check-in del worker.
+  var isFirstAct = (ai === 0);
+  var initIni = '';
+  var lockIni = false;
+  if(isFirstAct && w.checkInTime){
+    initIni = w.checkInTime;
+    lockIni = true;
+  }
+  w.acts.push({
+    ai:0, esName:defName, tipo:defTipo, qty:'',
+    ini: initIni, fin:'',
+    showTime: !!initIni, // abrir reloj si ya tenemos hora del check-in
+    pay:0, finca:gVal('finca'),
+    _iniLocked: lockIni // V20_91_05: marca para readonly del primer shift
+  });
   mkActRow(wid_,ai);
   autoSave();
 }
@@ -7434,7 +7465,11 @@ function renderShifts(wi, ai){
     var sh=a.shifts[s];
     var row=document.createElement('div'); row.className='shift-row';
     var lbl=a.shifts.length>1?'Turno '+(s+1):'';
-    row.innerHTML='<div><label style="margin:0;font-size:10px">🟢 '+(lbl?lbl+' Inicio':'Inicio')+'</label><input type="time" step="1800" value="'+(sh.ini||'')+'" id="shi'+wi+'_'+ai+'_'+s+'"></div><div><label style="margin:0;font-size:10px">🏁 '+(lbl?lbl+' Fin':'Fin')+'</label><input type="time" step="1800" value="'+(sh.fin||'')+'" id="shf'+wi+'_'+ai+'_'+s+'"></div>'+(a.shifts.length>1?'<button class="shift-del" onclick="delShift('+wi+','+ai+','+s+')">✕</button>':'<div></div>');
+    // V20_91_05: readonly del input ini si es primer shift de primer act y _iniLocked (viene del check-in del worker)
+    var iniLocked = !!(a._iniLocked && ai === 0 && s === 0);
+    var iniReadonly = iniLocked ? ' readonly style="background:#eef9ee;cursor:not-allowed" title="🔒 Hora de entrada del check-in (no editable)"' : '';
+    var iniLabelExtra = iniLocked ? ' 🔒' : '';
+    row.innerHTML='<div><label style="margin:0;font-size:10px">🟢 '+(lbl?lbl+' Inicio':'Inicio')+iniLabelExtra+'</label><input type="time" step="1800" value="'+(sh.ini||'')+'" id="shi'+wi+'_'+ai+'_'+s+'"'+iniReadonly+'></div><div><label style="margin:0;font-size:10px">🏁 '+(lbl?lbl+' Fin':'Fin')+'</label><input type="time" step="1800" value="'+(sh.fin||'')+'" id="shf'+wi+'_'+ai+'_'+s+'"></div>'+(a.shifts.length>1?'<button class="shift-del" onclick="delShift('+wi+','+ai+','+s+')">✕</button>':'<div></div>');
     tf.appendChild(row);
     (function(wi2,ai2,si){
       setTimeout(function(){
