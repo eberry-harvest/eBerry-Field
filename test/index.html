@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_91_06';
+window.APP_VERSION = 'V20_91_07';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -5163,9 +5163,20 @@ function chAct(wi,ai,nai){
   var actName=nai>=0&&nai<ACTS.length?ACTS[nai].es:'';
   var actTipo=nai>=0&&nai<ACTS.length?ACTS[nai].tipo:'';
   var prevFinca = w.acts[ai].finca || '';
+  // V20_91_07 FIX: preservar congelamiento de check-in al cambiar actividad.
+  // Antes el reemplazo del objeto borraba `_iniLocked` y reseteaba `ini:''` → el surquero
+  // podía editar la hora de inicio del primer turno aunque el worker tuviera checkInTime congelado.
+  var preservedIni = '';
+  var preservedShowTime = false;
+  var preservedIniLocked = false;
+  if(ai === 0 && w.checkInTime){
+    preservedIni = w.checkInTime;
+    preservedShowTime = true;
+    preservedIniLocked = true;
+  }
   // V20_28: al cambiar actividad, limpiar a.inputs (fix frontend/QA — inputs de act viejo no son válidos para nuevo)
   // V20_76: limpia bloques también al cambiar actividad
-  w.acts[ai]={ai:nai,esName:actName,tipo:actTipo,qty:'',ini:'',fin:'',showTime:false,pay:0,finca:prevFinca,inputs:{},bloques:[{pies:'',surcos:''}]};
+  w.acts[ai]={ai:nai,esName:actName,tipo:actTipo,qty:'',ini:preservedIni,fin:'',showTime:preservedShowTime,pay:0,finca:prevFinca,inputs:{},bloques:[{pies:'',surcos:''}],_iniLocked:preservedIniLocked};
   var old=gEl('ar'+wi+'_'+ai); if(old)old.parentNode.removeChild(old);
   var cont=gEl('ac'+wi); if(!cont)return;
   cont.innerHTML='';
@@ -5173,7 +5184,8 @@ function chAct(wi,ai,nai){
   // Tau: auto-mostrar horario para TODAS las actividades
   w.acts[ai].showTime=true;
   var ex=findTime(nai, wi);
-  if(ex){ var _wi=wi,_ai=ai,_e=ex; setTimeout(function(){ showTm(_wi,_ai,_e.ini,_e.fin); },100); }
+  // V20_91_07: si la primera activity tiene check-in congelado, NO sobrescribir con findTime
+  if(ex && !preservedIniLocked){ var _wi=wi,_ai=ai,_e=ex; setTimeout(function(){ showTm(_wi,_ai,_e.ini,_e.fin); },100); }
   autoSave(); // V17-FIX1: cambiar actividad debe guardar
 }
 
@@ -6008,17 +6020,19 @@ function applyAutoFill(){
     if(inp)  inp.value = currentUser.name;
     if(adminSel) adminSel.style.display='none'; // ✅ siempre oculto para surqueros
     // V20_02-HOTFIX2: rancho del crew con match correcto — SIN llamar onRanchoChange
-    // onRanchoChange hace saveQuiet() que puede corromper datos durante load()
-    var crewBase = currentUser.crew.replace(/\s*\d+$/,'').trim();
+    // V20_91_07 FIX: guard si currentUser.crew es undefined/null/'' para evitar
+    // (a) TypeError de .replace y (b) match accidental con placeholder via indexOf('').
+    var crewBase = currentUser.crew ? currentUser.crew.replace(/\s*\d+$/,'').trim() : '';
     var rEl = gEl('rancho');
-    if(rEl){
+    if(rEl && crewBase){
       var _matched = false;
       for(var _oi=0;_oi<rEl.options.length;_oi++){
         if(rEl.options[_oi].value.toLowerCase()===crewBase.toLowerCase()){ rEl.selectedIndex=_oi; _matched=true; break; }
       }
       if(!_matched){
         for(var _oi2=0;_oi2<rEl.options.length;_oi2++){
-          if(rEl.options[_oi2].value.toLowerCase().indexOf(crewBase.toLowerCase())===0){ rEl.selectedIndex=_oi2; _matched=true; break; }
+          // V20_91_07 FIX: solo opciones con value no vacío (evita matchear el placeholder)
+          if(rEl.options[_oi2].value && rEl.options[_oi2].value.toLowerCase().indexOf(crewBase.toLowerCase())===0){ rEl.selectedIndex=_oi2; _matched=true; break; }
         }
       }
       // Solo re-filtrar ACTS, NO guardar
