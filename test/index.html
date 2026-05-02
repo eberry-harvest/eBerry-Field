@@ -32,7 +32,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_91_21';
+window.APP_VERSION = 'V20_91_23';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -233,6 +233,13 @@ body{font-family:'DM Sans',sans-serif;background:var(--lt);color:var(--dk);paddi
 header{background:var(--g);color:#fff;padding:12px 14px 0;position:sticky;top:0;z-index:200;box-shadow:0 2px 16px rgba(0,0,0,.2)}
 .htop{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
 .logo{font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:2px}
+/* V20_91_23: mini-tarjeta blanca para el logo del header */
+.hdr-logo-card{background:#fff;border-radius:8px;padding:5px 10px;display:inline-flex;align-items:center;box-shadow:0 2px 6px rgba(0,0,0,.18)}
+.hdr-logo-card img{height:36px;width:auto;display:block}
+@media (max-width:480px){
+  .hdr-logo-card{padding:4px 8px}
+  .hdr-logo-card img{height:30px}
+}
 .logo em{color:var(--a);font-style:normal}
 .dpill{background:rgba(255,255,255,.18);border-radius:20px;padding:4px 11px;font-size:13px;font-weight:500}
 .ver-check-btn{background:rgba(255,255,255,.15);border:none;border-radius:50%;width:44px;height:44px;min-width:44px;min-height:44px;color:#fff;font-size:20px;font-weight:700;cursor:pointer;padding:0;display:inline-flex;align-items:center;justify-content:center;transition:background .2s}
@@ -431,9 +438,13 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 body.login-locked{overflow:hidden!important;height:100%!important;touch-action:none}
 html.login-locked{overflow:hidden!important;height:100%!important}
 #loginScreen.hide{display:none}
-.login-logo{font-family:'Bebas Neue',sans-serif;font-size:42px;letter-spacing:3px;color:#fff;margin-bottom:4px}
-.login-logo em{color:var(--a);font-style:normal}
-.login-sub{font-size:11px;color:rgba(255,255,255,.6);letter-spacing:.5px;font-weight:600;margin-bottom:32px}
+/* V20_91_22: logo real eBerry en una "tarjeta blanca" sobre el fondo azul del login */
+.login-logo-box{background:#fff;border-radius:18px;padding:18px 26px;margin-bottom:24px;box-shadow:0 6px 20px rgba(0,0,0,.18);max-width:340px;width:100%;display:flex;align-items:center;justify-content:center}
+.login-logo-box img{width:100%;max-width:280px;height:auto;display:block}
+@media (max-width:380px){
+  .login-logo-box{padding:14px 18px;max-width:280px}
+  .login-logo-box img{max-width:230px}
+}
 .login-card{background:#fff;border-radius:18px;padding:24px 22px;width:100%;max-width:360px;box-shadow:0 8px 32px rgba(0,0,0,.25)}
 .login-title{font-family:'Bebas Neue',sans-serif;font-size:22px;color:var(--g);letter-spacing:1px;margin-bottom:4px}
 .login-hint{font-size:12px;color:var(--gr);margin-bottom:18px}
@@ -708,8 +719,10 @@ html.login-locked{overflow:hidden!important;height:100%!important}
 <header>
   <div class="htop">
     <div>
-      <div class="logo">eBerry <em>Field</em></div>
-      <div style="font-size:9px;color:rgba(255,255,255,.6);letter-spacing:.5px;margin-top:-2px;font-weight:600">HARVEST COMPANY LLC</div>
+      <!-- V20_91_23: logo real eBerry en mini-tarjeta blanca (opción B confirmada por Serafín) -->
+      <div class="hdr-logo-card">
+        <img src="eberry-logo-login.png" srcset="eberry-logo-login.png 1x, eberry-logo-login@2x.png 2x" alt="eBerry Harvest Company">
+      </div>
     </div>
     <div id="adminBadge" style="display:none;background:var(--a);border-radius:20px;padding:4px 12px;font-size:12px;font-weight:700;color:#fff;letter-spacing:1px">🔐 ADMIN</div>
     <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
@@ -739,8 +752,10 @@ html.login-locked{overflow:hidden!important;height:100%!important}
 </header>
 <!-- ── LOGIN SCREEN ── -->
 <div id="loginScreen">
-  <div class="login-logo">eBerry <em>Field</em></div>
-  <div class="login-sub">HARVEST COMPANY LLC</div>
+  <!-- V20_91_22: logo real de eBerry en tarjeta blanca, reemplaza texto "eBerry Field" + "HARVEST COMPANY LLC" -->
+  <div class="login-logo-box">
+    <img src="eberry-logo-login.png" srcset="eberry-logo-login.png 1x, eberry-logo-login@2x.png 2x" alt="eBerry Harvest Company">
+  </div>
   <div class="login-card">
     <div class="login-title">🔐 Acceso al Sistema</div>
     <div class="login-hint" id="loginHint">Ingresa tu PIN de 4 dígitos</div>
