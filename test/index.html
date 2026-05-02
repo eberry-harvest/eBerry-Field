@@ -9,16 +9,22 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Pennrose">
 <meta name="theme-color" content="#1a2b8c">
-<!-- V20_91_13: Favicon SVG inline para evitar GET /favicon.ico 404 -->
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%AB%90%3C/text%3E%3C/svg%3E">
+<!-- V20_91_21: Iconos reales de eBerry (logo fresa) en vez del emoji 🫐 -->
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
 <link rel="manifest" id="manifestLink">
 <script>
-// V8-C2: Manifest PWA generado como Blob (sin href vacío)
+// V20_91_21: Manifest PWA con iconos reales de eBerry (PNG raster para iOS + Android)
 (function(){
+  var base = (location.pathname.replace(/[^\/]*$/,'')||'./');
   var manifest = {
-    name:'eBerry Field',short_name:'eBerry',start_url:(location.pathname.replace(/[^\/]*$/,'')||'./'),display:'standalone',
-    background_color:'#1a3a5c',theme_color:'#1a3a5c',
-    icons:[{src:'data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🫐</text></svg>',sizes:'any',type:'image/svg+xml'}]
+    name:'eBerry Field', short_name:'eBerry', start_url:base, display:'standalone',
+    background_color:'#ffffff', theme_color:'#1a2b8c',
+    icons:[
+      {src:'icon-192.png', sizes:'192x192', type:'image/png'},
+      {src:'icon-512.png', sizes:'512x512', type:'image/png'},
+      {src:'icon-512.png', sizes:'512x512', type:'image/png', purpose:'maskable'}
+    ]
   };
   var blob = new Blob([JSON.stringify(manifest)],{type:'application/json'});
   document.getElementById('manifestLink').href = URL.createObjectURL(blob);
@@ -26,7 +32,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_91_20';
+window.APP_VERSION = 'V20_91_21';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
