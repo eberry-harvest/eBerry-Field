@@ -32,7 +32,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_91_25';
+window.APP_VERSION = 'V20_91_26';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -2498,36 +2498,49 @@ function loadSheetsData(){
     }
   }
 
-  // Load config — timeout de 3 seg máximo para no retrasar el login
+  // V20_91_26: Load config — timeout aumentado a 10s + procesamiento incluso si llega tarde.
+  // Bug previo: timeout de 3s + race condition en hashPin().then() dejaban PIN default '2026'
+  // activo aunque CONFIG!B3 estuviera actualizado. Si Apps Script tardaba >3s, se ignoraba la respuesta.
   var configDone = false;
   var configTimeout = setTimeout(function(){
     if(configDone) return;
     configDone = true;
-    // Config no llegó — mantener PIN default del código (2026)
+    console.warn('[V20_91_26] Config timeout (10s) — usando defaults');
     loaded.config = true;
     checkDone();
-  }, 3000);
+  }, 10000);
 
   fetchFromScript('config', function(err, data){
-    if(configDone) return;
+    var alreadyDone = configDone;
     configDone = true;
     clearTimeout(configTimeout);
     if(!err && data){
-      // Apps Script traduce las keys al español — revisamos ambas versiones
       var ok  = data.success || data['éxito'] || data.exito;
       var cfg = data.config  || data['configuración'] || data.configuracion || {};
-      if(ok && cfg && cfg.admin_pin){
-        hashPin(String(cfg.admin_pin).trim()).then(function(h){ ADMIN_PIN_HASH = h; });
-      }
-      // V20_91_25: leer también nom_adm de CONFIG (celda B2) para el alias del admin en PDFs/Sheets
+      // V20_91_26: leer nom_adm sincrónico (sin Promise)
       if(ok && cfg && cfg.nom_adm){
         ADMIN_USER_NAME = String(cfg.nom_adm).trim();
-        console.log('[V20_91_25] ADMIN_USER_NAME desde CONFIG:', ADMIN_USER_NAME);
+        console.log('[V20_91_26] ADMIN_USER_NAME desde CONFIG:', ADMIN_USER_NAME);
+      }
+      // V20_91_26: hashPin es async, aguardar el .then() ANTES de marcar loaded.config=true.
+      // Sin esto, el login podía suceder con ADMIN_PIN_HASH default antes de que el nuevo se aplique.
+      if(ok && cfg && cfg.admin_pin){
+        var rawPin = String(cfg.admin_pin).trim();
+        hashPin(rawPin).then(function(h){
+          ADMIN_PIN_HASH = h;
+          console.log('[V20_91_26] ADMIN_PIN_HASH actualizado desde CONFIG (PIN ya no es el default)');
+          if(!alreadyDone){ loaded.config = true; checkDone(); }
+          // Si llegó tarde (después del timeout) ya no hay checkDone pero el hash queda actualizado
+          // para futuros logins en la misma sesión.
+        }).catch(function(e){
+          console.warn('[V20_91_26] hashPin del config falló:', e);
+          if(!alreadyDone){ loaded.config = true; checkDone(); }
+        });
+        return; // Importante: NO marcar loaded.config aquí — esperamos el hashPin
       }
     }
-    
-    loaded.config = true;
-    checkDone();
+    // Sin admin_pin en respuesta: marcar como hecho con default
+    if(!alreadyDone){ loaded.config = true; checkDone(); }
   });
 
   // Load workers from Apps Script
