@@ -70,52 +70,64 @@ var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwjC6Gjcb3_VRmjnV
 function show(id, html){ document.getElementById(id).innerHTML = html; }
 
 function probarConfig(){
-  show('resultado', '<p>⏳ Llamando al backend...</p>');
+  show('resultado', '<p>⏳ Llamando al backend (XHR)...</p>');
   var url = APPS_SCRIPT_URL + '?action=config&_t=' + Date.now() + '&_r=' + Math.random().toString(36).slice(2,8);
   var startedAt = Date.now();
-  fetch(url, { cache: 'no-store', headers: { 'Cache-Control': 'no-cache, no-store', 'Pragma': 'no-cache' } })
-    .then(function(r){ return r.text().then(function(txt){ return { status: r.status, txt: txt }; }); })
-    .then(function(res){
-      var elapsed = Date.now() - startedAt;
-      var html = '<p>⏱️ Tardó <b>' + elapsed + 'ms</b> · HTTP <b>' + res.status + '</b></p>';
-      html += '<p><b>URL llamada:</b></p><pre>' + url + '</pre>';
-      html += '<p><b>Respuesta cruda:</b></p><pre>' + escapeHtml(res.txt) + '</pre>';
-      try {
-        var data = JSON.parse(res.txt);
-        if(data.success){
-          html += '<p class="ok">✅ Backend OK</p>';
-          var cfg = data.config || data['configuración'] || data.configuracion || {};
-          html += '<p><b>Config recibida:</b></p><pre>' + JSON.stringify(cfg, null, 2) + '</pre>';
-          if(cfg.admin_pin){
-            html += '<p class="ok">🔑 PIN encontrado: <b>' + cfg.admin_pin + '</b></p>';
-            html += '<p>👉 Si la app sigue aceptando 2026, significa que el PIN nuevo (' + cfg.admin_pin + ') NO se está aplicando en la app.</p>';
-            // Calcular hash automáticamente
-            return hashPin(String(cfg.admin_pin)).then(function(h){
-              html += '<p><b>Hash SHA-256 del PIN nuevo:</b></p><pre>' + h + '</pre>';
-              html += '<p class="' + (h === '158a323a7ba44870f23d96f1516dd70aa48e9a72db4ebb026b0a89e212a208ab' ? 'err' : 'ok') + '">' +
-                      (h === '158a323a7ba44870f23d96f1516dd70aa48e9a72db4ebb026b0a89e212a208ab' ?
-                        '⚠️ Tu PIN "' + cfg.admin_pin + '" tiene el MISMO hash que "2026" (o coincidencia rara)' :
-                        '✅ El hash es distinto al de 2026 — el sistema SÍ debería rechazar el PIN viejo cuando se actualice') + '</p>';
-              show('resultado', html);
-            });
-          } else {
-            html += '<p class="err">❌ NO hay admin_pin en la respuesta. ¿La pestaña CONFIG existe? ¿Tiene admin_pin en columna A?</p>';
+  // Usar XMLHttpRequest simple (igual que la app principal) para evitar preflight CORS de fetch
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', url, true);
+  xhr.timeout = 15000;
+  xhr.onload = function(){
+    var elapsed = Date.now() - startedAt;
+    var html = '<p>⏱️ Tardó <b>' + elapsed + 'ms</b> · HTTP <b>' + xhr.status + '</b></p>';
+    html += '<p><b>URL llamada:</b></p><pre>' + url + '</pre>';
+    html += '<p><b>Respuesta cruda:</b></p><pre>' + escapeHtml(xhr.responseText || '(vacía)') + '</pre>';
+    if(xhr.status !== 200){
+      html += '<p class="err">❌ HTTP ' + xhr.status + ' — el backend no respondió OK</p>';
+      show('resultado', html);
+      return;
+    }
+    try {
+      var data = JSON.parse(xhr.responseText);
+      if(data.success){
+        html += '<p class="ok">✅ Backend OK</p>';
+        var cfg = data.config || data['configuración'] || data.configuracion || {};
+        html += '<p><b>Config recibida:</b></p><pre>' + JSON.stringify(cfg, null, 2) + '</pre>';
+        if(cfg.admin_pin){
+          html += '<p class="ok">🔑 PIN encontrado: <b>' + cfg.admin_pin + '</b></p>';
+          if(cfg.nom_adm) html += '<p class="ok">👤 nom_adm: <b>' + cfg.nom_adm + '</b></p>';
+          hashPin(String(cfg.admin_pin)).then(function(h){
+            html += '<p><b>Hash SHA-256 del PIN nuevo:</b></p><pre>' + h + '</pre>';
+            var esViejo = (h === '158a323a7ba44870f23d96f1516dd70aa48e9a72db4ebb026b0a89e212a208ab');
+            html += '<p class="' + (esViejo ? 'err' : 'ok') + '">' +
+                    (esViejo ?
+                      '⚠️ Tu PIN "' + cfg.admin_pin + '" tiene el MISMO hash que "2026" — ¿pusiste 2026 de nuevo?' :
+                      '✅ Hash distinto al de 2026 — el sistema SÍ debería rechazar el viejo') + '</p>';
             show('resultado', html);
-          }
+          });
         } else {
-          html += '<p class="err">❌ Backend reportó error: ' + (data.error || data['éxito'] === false ? 'success=false' : 'desconocido') + '</p>';
+          html += '<p class="err">❌ NO hay admin_pin en la respuesta. Revisar pestaña CONFIG.</p>';
           show('resultado', html);
         }
-      } catch(e){
-        html += '<p class="err">❌ La respuesta NO es JSON válido. ¿El deploy de Apps Script es correcto?</p>';
-        html += '<p>Error parse: ' + e.message + '</p>';
+      } else {
+        html += '<p class="err">❌ Backend reportó success=false. Error: ' + (data.error || 'desconocido') + '</p>';
         show('resultado', html);
       }
-    })
-    .catch(function(err){
-      var elapsed = Date.now() - startedAt;
-      show('resultado', '<p class="err">❌ Falló el fetch (' + elapsed + 'ms): ' + err.message + '</p><p>¿Tienes internet? ¿El URL del Apps Script es correcto?</p>');
-    });
+    } catch(e){
+      html += '<p class="err">❌ La respuesta NO es JSON válido (puede ser HTML de login de Google).</p>';
+      html += '<p>Error parse: ' + e.message + '</p>';
+      html += '<p><b>Probable causa:</b> el deploy de Apps Script NO está configurado como "Anyone" — está pidiendo login de Google y devuelve HTML en vez de JSON.</p>';
+      show('resultado', html);
+    }
+  };
+  xhr.onerror = function(){
+    var elapsed = Date.now() - startedAt;
+    show('resultado', '<p class="err">❌ Error de red (' + elapsed + 'ms). Causas posibles:</p><ul><li>Sin internet</li><li>URL del Apps Script incorrecto</li><li>Deploy del Apps Script está deshabilitado</li></ul><p>URL probada:</p><pre>' + url + '</pre>');
+  };
+  xhr.ontimeout = function(){
+    show('resultado', '<p class="err">⏱️ Timeout (15s) — el backend no respondió a tiempo</p>');
+  };
+  xhr.send();
 }
 
 function probarHash(){
