@@ -32,7 +32,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_91_26';
+window.APP_VERSION = 'V20_91_27';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -2434,9 +2434,14 @@ var SHEET_TABS = {
 // ── FETCH DATA FROM APPS SCRIPT (no CORS issues) ──
 function fetchFromScript(action, callback, _retries){
   _retries = _retries||0;
-  var url = APPS_SCRIPT_URL + '?action=' + action;
+  // V20_91_27 FIX: cache-busting con timestamp + Cache-Control headers.
+  // Bug: el navegador móvil cacheaba la respuesta GET de Apps Script — Serafín cambiaba el PIN
+  // en CONFIG!B3 pero la app seguía leyendo el cache viejo. Sin esto el PIN nunca se actualizaba.
+  var url = APPS_SCRIPT_URL + '?action=' + action + '&_t=' + Date.now() + '&_r=' + Math.random().toString(36).slice(2,8);
   var xhr = new XMLHttpRequest();
   xhr.open('GET', url, true);
+  xhr.setRequestHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  xhr.setRequestHeader('Pragma', 'no-cache');
   xhr.timeout = 15000; // 15s timeout (Zeta: evita XHR colgado en campo)
   xhr.onload = function(){
     if(xhr.status === 200){
