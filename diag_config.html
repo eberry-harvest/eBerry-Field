@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Diagnóstico CONFIG — eBerry</title>
+<style>
+  body { font-family: 'Segoe UI', Arial, sans-serif; background: #1a2b8c; color: #fff; margin: 0; padding: 14px; min-height: 100vh; }
+  h1 { font-size: 20px; margin: 0 0 12px; }
+  .card { background: #fff; color: #222; border-radius: 12px; padding: 16px; margin-bottom: 12px; }
+  .card h2 { margin: 0 0 8px; font-size: 16px; color: #1a2b8c; }
+  .row { display: flex; gap: 8px; margin: 8px 0; flex-wrap: wrap; }
+  button { padding: 12px 18px; font-size: 14px; font-weight: 700; border: 0; border-radius: 8px; cursor: pointer; flex: 1; min-width: 130px; }
+  .btn-primary { background: #5eba45; color: #fff; }
+  .btn-secondary { background: #2196F3; color: #fff; }
+  .btn-test { background: #e67e22; color: #fff; }
+  pre { background: #f4f6ff; padding: 10px; border-radius: 6px; font-size: 12px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; max-height: 280px; overflow-y: auto; margin: 6px 0; }
+  .ok { color: #1a7a4a; font-weight: 700; }
+  .err { color: #c0392b; font-weight: 700; }
+  label { display: block; margin: 6px 0 2px; font-size: 13px; font-weight: 600; }
+  input { width: 100%; padding: 10px; font-size: 16px; border: 1.5px solid #c8d0f0; border-radius: 6px; box-sizing: border-box; }
+  .hash { font-family: monospace; font-size: 11px; background: #f4f6ff; padding: 6px; border-radius: 4px; word-break: break-all; }
+</style>
+</head>
+<body>
+
+<h1>🔬 Diagnóstico CONFIG — eBerry</h1>
+
+<div class="card">
+  <h2>1️⃣ Probar respuesta de Apps Script</h2>
+  <p style="font-size:13px;color:#666;margin:4px 0">Esto llama directo al backend con el mismo URL que usa la app.</p>
+  <div class="row">
+    <button class="btn-primary" onclick="probarConfig()">📡 Probar action=config</button>
+  </div>
+  <div id="resultado"></div>
+</div>
+
+<div class="card">
+  <h2>2️⃣ Comparar hash de PIN</h2>
+  <p style="font-size:13px;color:#666;margin:4px 0">Mete un PIN y mira su hash. Si el hash del PIN del Sheet ≠ "158a..." (que es 2026), el sistema sí debería usar el nuevo.</p>
+  <label>PIN a probar:</label>
+  <input type="text" id="pinInput" placeholder="ej: 2027" maxlength="6" inputmode="numeric">
+  <div class="row">
+    <button class="btn-secondary" onclick="probarHash()">🔢 Calcular SHA-256</button>
+  </div>
+  <div id="resultadoHash"></div>
+  <div style="margin-top:10px;font-size:11px;color:#666">
+    <b>Hash conocido de "2026":</b><br>
+    <code class="hash">158a323a7ba44870f23d96f1516dd70aa48e9a72db4ebb026b0a89e212a208ab</code>
+  </div>
+</div>
+
+<div class="card">
+  <h2>3️⃣ Forzar limpieza total del navegador</h2>
+  <p style="font-size:13px;color:#666;margin:4px 0">Borra Service Worker + cache + localStorage de la app.</p>
+  <div class="row">
+    <button class="btn-test" onclick="limpiarTodo()">🗑️ Limpiar SW + cache + localStorage</button>
+  </div>
+  <div id="resultadoLimpieza"></div>
+</div>
+
+<div class="card">
+  <h2>📋 Datos del entorno</h2>
+  <pre id="entorno"></pre>
+</div>
+
+<script>
+var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwjC6Gjcb3_VRmjnVDPIRptpxM8__BRa_bi2q7MJcmY0MOcXRPdS4JVqvfyKHHK6G7m/exec';
+
+function show(id, html){ document.getElementById(id).innerHTML = html; }
+
+function probarConfig(){
+  show('resultado', '<p>⏳ Llamando al backend (XHR)...</p>');
+  var url = APPS_SCRIPT_URL + '?action=config&_t=' + Date.now() + '&_r=' + Math.random().toString(36).slice(2,8);
+  var startedAt = Date.now();
+  // Usar XMLHttpRequest simple (igual que la app principal) para evitar preflight CORS de fetch
+  var xhr = new XMLHttpRequest();
+  xhr.open('GET', url, true);
+  xhr.timeout = 15000;
+  xhr.onload = function(){
+    var elapsed = Date.now() - startedAt;
+    var html = '<p>⏱️ Tardó <b>' + elapsed + 'ms</b> · HTTP <b>' + xhr.status + '</b></p>';
+    html += '<p><b>URL llamada:</b></p><pre>' + url + '</pre>';
+    html += '<p><b>Respuesta cruda:</b></p><pre>' + escapeHtml(xhr.responseText || '(vacía)') + '</pre>';
+    if(xhr.status !== 200){
+      html += '<p class="err">❌ HTTP ' + xhr.status + ' — el backend no respondió OK</p>';
+      show('resultado', html);
+      return;
+    }
+    try {
+      var data = JSON.parse(xhr.responseText);
+      if(data.success){
+        html += '<p class="ok">✅ Backend OK</p>';
+        var cfg = data.config || data['configuración'] || data.configuracion || {};
+        html += '<p><b>Config recibida:</b></p><pre>' + JSON.stringify(cfg, null, 2) + '</pre>';
+        if(cfg.admin_pin){
+          html += '<p class="ok">🔑 PIN encontrado: <b>' + cfg.admin_pin + '</b></p>';
+          if(cfg.nom_adm) html += '<p class="ok">👤 nom_adm: <b>' + cfg.nom_adm + '</b></p>';
+          hashPin(String(cfg.admin_pin)).then(function(h){
+            html += '<p><b>Hash SHA-256 del PIN nuevo:</b></p><pre>' + h + '</pre>';
+            var esViejo = (h === '158a323a7ba44870f23d96f1516dd70aa48e9a72db4ebb026b0a89e212a208ab');
+            html += '<p class="' + (esViejo ? 'err' : 'ok') + '">' +
+                    (esViejo ?
+                      '⚠️ Tu PIN "' + cfg.admin_pin + '" tiene el MISMO hash que "2026" — ¿pusiste 2026 de nuevo?' :
+                      '✅ Hash distinto al de 2026 — el sistema SÍ debería rechazar el viejo') + '</p>';
+            show('resultado', html);
+          });
+        } else {
+          html += '<p class="err">❌ NO hay admin_pin en la respuesta. Revisar pestaña CONFIG.</p>';
+          show('resultado', html);
+        }
+      } else {
+        html += '<p class="err">❌ Backend reportó success=false. Error: ' + (data.error || 'desconocido') + '</p>';
+        show('resultado', html);
+      }
+    } catch(e){
+      html += '<p class="err">❌ La respuesta NO es JSON válido (puede ser HTML de login de Google).</p>';
+      html += '<p>Error parse: ' + e.message + '</p>';
+      html += '<p><b>Probable causa:</b> el deploy de Apps Script NO está configurado como "Anyone" — está pidiendo login de Google y devuelve HTML en vez de JSON.</p>';
+      show('resultado', html);
+    }
+  };
+  xhr.onerror = function(){
+    var elapsed = Date.now() - startedAt;
+    show('resultado', '<p class="err">❌ Error de red (' + elapsed + 'ms). Causas posibles:</p><ul><li>Sin internet</li><li>URL del Apps Script incorrecto</li><li>Deploy del Apps Script está deshabilitado</li></ul><p>URL probada:</p><pre>' + url + '</pre>');
+  };
+  xhr.ontimeout = function(){
+    show('resultado', '<p class="err">⏱️ Timeout (15s) — el backend no respondió a tiempo</p>');
+  };
+  xhr.send();
+}
+
+function probarHash(){
+  var pin = document.getElementById('pinInput').value.trim();
+  if(!pin){ show('resultadoHash', '<p class="err">Mete un PIN</p>'); return; }
+  hashPin(pin).then(function(h){
+    var esIgual = (h === '158a323a7ba44870f23d96f1516dd70aa48e9a72db4ebb026b0a89e212a208ab');
+    var html = '<p><b>SHA-256("' + pin + '"):</b></p><pre>' + h + '</pre>';
+    if(esIgual){
+      html += '<p class="err">⚠️ Este hash es IGUAL al hash de "2026" — alguien lo está usando como default.</p>';
+    } else {
+      html += '<p class="ok">✅ Hash único — distinto al de "2026"</p>';
+    }
+    show('resultadoHash', html);
+  });
+}
+
+function hashPin(pin){
+  if(!window.crypto || !window.crypto.subtle){
+    return Promise.resolve('SHA-256 no disponible en este navegador');
+  }
+  return crypto.subtle.digest('SHA-256', new TextEncoder().encode(String(pin)))
+    .then(function(buf){
+      return Array.from(new Uint8Array(buf)).map(function(b){return ('0'+b.toString(16)).slice(-2)}).join('');
+    });
+}
+
+function limpiarTodo(){
+  show('resultadoLimpieza', '<p>⏳ Limpiando...</p>');
+  var pasos = [];
+  // 1. Service Workers
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.getRegistrations().then(function(regs){
+      var nSW = regs.length;
+      regs.forEach(function(r){ r.unregister(); });
+      pasos.push('🧹 ' + nSW + ' Service Worker(s) eliminados');
+      // 2. Caches
+      if('caches' in window){
+        caches.keys().then(function(names){
+          var nCache = names.length;
+          return Promise.all(names.map(function(n){ return caches.delete(n); }));
+        }).then(function(){
+          pasos.push('🧹 Cache API limpiado');
+          finalize();
+        });
+      } else {
+        finalize();
+      }
+    });
+  } else {
+    finalize();
+  }
+  function finalize(){
+    // 3. localStorage
+    try {
+      var n = localStorage.length;
+      localStorage.clear();
+      pasos.push('🧹 localStorage limpio (' + n + ' keys borradas)');
+    } catch(e){ pasos.push('⚠️ No se pudo limpiar localStorage'); }
+    // 4. sessionStorage
+    try { sessionStorage.clear(); pasos.push('🧹 sessionStorage limpio'); } catch(e){}
+    show('resultadoLimpieza', '<p class="ok">✅ Limpieza completa</p><pre>' + pasos.join('\n') + '</pre><p><b>Ahora cierra el navegador y vuelve a abrir la app.</b></p>');
+  }
+}
+
+// Mostrar info del entorno
+(function(){
+  var info = [];
+  info.push('User-Agent: ' + navigator.userAgent);
+  info.push('Online: ' + navigator.onLine);
+  info.push('Service Worker support: ' + ('serviceWorker' in navigator));
+  info.push('Crypto.subtle: ' + (!!(window.crypto && window.crypto.subtle)));
+  info.push('localStorage support: ' + (typeof localStorage !== 'undefined'));
+  info.push('Fecha/hora: ' + new Date().toString());
+  document.getElementById('entorno').textContent = info.join('\n');
+})();
+
+function escapeHtml(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+
+</body>
+</html>
