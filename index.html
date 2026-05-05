@@ -32,7 +32,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_94';
+window.APP_VERSION = 'V20_97';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -1271,10 +1271,10 @@ body.readOnly [onclick*="openNewDay"]{display:none !important}
     </select>
     <div class="r2">
       <div><label>Fecha</label><input type="date" id="fecha" data-save onchange="onFechaChange()"></div>
-      <div><label># Bus</label><input type="text" id="numBus" data-save placeholder="951"></div>
+      <div><label># Bus</label><input type="text" id="numBus" inputmode="numeric" pattern="[0-9]*" data-save placeholder="951"></div>
     </div>
     <div class="r2">
-      <div><label># Camioneta</label><input type="text" id="numCam" data-save placeholder="Opt."></div>
+      <div><label># Camioneta</label><input type="text" id="numCam" inputmode="numeric" pattern="[0-9]*" data-save placeholder="Opt."></div>
       <div><label>Surquero</label>
         <div id="surqueroDisplay" style="padding:11px 12px;border:1.5px solid var(--bd);border-radius:8px;font-size:15px;background:#f0f0f0;color:var(--dk);font-weight:600">—</div>
         <select id="surqueroAdminSel" style="display:none" onchange="onAdminSurqueroChange(this.value)">
@@ -2769,25 +2769,51 @@ function _renderIniciarDia(){
   if(btnDual){ btnDual.disabled = false; btnDual.style.opacity = '1'; btnDual.style.display=''; }
 
   // Construir status (chips estáticos)
+  // V20_96: chip ahora acepta `undoFn` opcional (nombre de función onclick) para mostrar
+  // linkcito "↶ Deshacer" — descubribilidad rápida cuando el surquero presiona Chofer
+  // por error siendo busero+surquero, o cuando se equivocó de QR. Solo se muestra si NO
+  // hay día cerrado (check en el call site).
   var html = '';
-  function _chip(emoji, label, time){
-    return '<div style="padding:11px 12px;border:1.5px solid var(--g);border-radius:8px;background:#eef9ee;color:var(--dk);font-weight:600;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between"><span>'+emoji+' '+label+' — '+time+'</span><span style="font-size:14px">🔒</span></div>';
+  function _chip(emoji, label, time, undoFn){
+    var undoBtn = undoFn
+      ? '<button onclick="'+undoFn+'()" style="margin-left:8px;background:#fff;color:#cc2222;border:1px solid #cc2222;border-radius:10px;padding:2px 8px;font-size:11px;font-weight:700;cursor:pointer">↶ Deshacer</button>'
+      : '';
+    return '<div style="padding:11px 12px;border:1.5px solid var(--g);border-radius:8px;background:#eef9ee;color:var(--dk);font-weight:600;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between"><span>'+emoji+' '+label+' — '+time+'</span><span style="display:flex;align-items:center"><span style="font-size:14px">🔒</span>'+undoBtn+'</span></div>';
   }
+  // V20_96: solo permitir Deshacer si el día NO está cerrado (después es histórico)
+  var _canUndo = !(_dayFlow && _dayFlow.checkOutDone);
   if(_dayFlow.choferScanned && _dayFlow.choferWorkerId != null){
     var wCh = getW(_dayFlow.choferWorkerId);
     if(wCh){
       var lbl = (wCh.role === 'choferSurquero') ? 'Chofer y Surquero: ' + esc(wCh.name) : 'Chofer: ' + esc(wCh.name);
-      html += _chip('✅', lbl, wCh.checkInTime || '—');
+      html += _chip('✅', lbl, wCh.checkInTime || '—', _canUndo ? '_undoChoferScan' : null);
     }
     if(btnChofer) btnChofer.style.display = 'none';
     if(btnDual) btnDual.style.display = 'none';
   }
   if(_dayFlow.surqueroScanned && _dayFlow.surqueroWorkerId != null && _dayFlow.surqueroWorkerId !== _dayFlow.choferWorkerId){
     var wSq = getW(_dayFlow.surqueroWorkerId);
-    if(wSq){ html += _chip('✅', 'Surquero: ' + esc(wSq.name), wSq.checkInTime || '—'); }
+    if(wSq){ html += _chip('✅', 'Surquero: ' + esc(wSq.name), wSq.checkInTime || '—', _canUndo ? '_undoSurqueroScan' : null); }
     if(btnSurq) btnSurq.style.display = 'none';
   }
   status.innerHTML = html;
+}
+
+// V20_96: deshacer chofer escaneado por error (atajo a rmWorker desde Iniciar Día).
+// rmWorker ya limpia _dayFlow.choferScanned/choferWorkerId/diaIniciado desde V20_91_02.
+function _undoChoferScan(){
+  if(!_dayFlow || !_dayFlow.choferWorkerId){ toast('⚠️ No hay chofer escaneado'); return; }
+  if(_dayFlow.checkOutDone){ toast('⚠️ Día ya cerrado'); return; }
+  var ok = confirm('¿Deshacer el escaneo del chofer?\n\nSe eliminará al worker de la lista y podrás escanear de nuevo (ej. Chofer y Surquero combinado).');
+  if(!ok) return;
+  rmWorker(_dayFlow.choferWorkerId);
+}
+function _undoSurqueroScan(){
+  if(!_dayFlow || !_dayFlow.surqueroWorkerId){ toast('⚠️ No hay surquero escaneado'); return; }
+  if(_dayFlow.checkOutDone){ toast('⚠️ Día ya cerrado'); return; }
+  var ok = confirm('¿Deshacer el escaneo del surquero?\n\nSe eliminará al worker de la lista y podrás escanear de nuevo.');
+  if(!ok) return;
+  rmWorker(_dayFlow.surqueroWorkerId);
 }
 
 // V20_91_01: aplica check-in al worker recién agregado según el modo de escaneo.
@@ -4219,7 +4245,7 @@ function renderActInputs(actCard, act, wi, ai){
     var cell=document.createElement('div'); cell.className='actInputCell';
     var lblEl=document.createElement('label'); lblEl.className='actInputLabel'; lblEl.textContent=spec.label;
     var inp=document.createElement('input');
-    inp.type='number'; inp.step='0.01'; inp.min='0'; inp.inputMode='decimal';
+    inp.type='number'; inp.step='0.01'; inp.min='0'; inp.inputMode='decimal'; inp.setAttribute('pattern','[0-9]*\\.?[0-9]*');
     inp.placeholder=spec.label;
     inp.id='mot_'+wi+'_'+ai+'_'+spec.column;
     inp.className='actInputBox';
@@ -4488,6 +4514,13 @@ var qrSessionCount = 0;
 var qrCooldown = false; // evita escaneos duplicados
 var qrActive = false;   // true mientras el scanner está abierto — modales saben que deben regresar al scanner
 var _qrStartTimer = null; // V20_85: handle del setTimeout de startQR — cancelarlo en stopQR para evitar startup tardío
+// V20_96: recycle de cámara cada 5 escaneos para evitar MediaStream detached en Android.
+// La cámara queda en blanco después de N escaneos porque html5-qrcode reusa la misma instancia
+// y Chrome Android suelta el MediaStream sin avisar. Reciclamos manualmente y un watchdog
+// verifica que el video tenga frames.
+var _qrScanCount = 0;
+var _qrRecycleEvery = 5;
+var _qrWatchdogTimer = null;
 
 function startQR(){
   var ov = gEl('qrOv');
@@ -4517,6 +4550,25 @@ function startQR(){
       console.error('QR Camera error:', err);
     });
   }, 300);
+
+  // V20_96: watchdog cada 10s — si el video del scanner está sin frames (readyState<2),
+  // recicla la cámara automáticamente. Cubre el caso en que la cámara muere entre escaneos
+  // sin haber alcanzado el límite de _qrRecycleEvery.
+  if(_qrWatchdogTimer) clearInterval(_qrWatchdogTimer);
+  _qrWatchdogTimer = setInterval(function(){
+    if(!qrActive){ clearInterval(_qrWatchdogTimer); _qrWatchdogTimer = null; return; }
+    try{
+      var vid = document.querySelector('#qrReader video');
+      if(!vid) return;
+      if(qrScanner && qrScanner.getState() === 2 && vid.readyState < 2){
+        console.warn('[V20_96] Watchdog detectó cámara sin frames — reciclando');
+        _qrScanCount = 0;
+        _recycleQRCamera();
+      }
+    }catch(e){
+      console.warn('[V20_96] watchdog error:', e);
+    }
+  }, 10000);
 }
 
 function pauseQR(){
@@ -4529,6 +4581,14 @@ var _qrResuming = false;
 function resumeQR(){
   if(!qrActive) return;
   if(_qrResuming) return;
+  // V20_96: si llegamos al límite de escaneos, en vez de resume normal, reciclamos la cámara.
+  // Esto evita que Chrome Android deje el MediaStream colgado tras N escaneos consecutivos.
+  if(_qrScanCount >= _qrRecycleEvery){
+    _qrScanCount = 0;
+    console.warn('[V20_96] Reciclando cámara QR tras', _qrRecycleEvery, 'escaneos');
+    _recycleQRCamera();
+    return;
+  }
   _qrResuming = true;
   // V20_91_06 FIX: NO sobrescribir mensaje de error activo. El MutationObserver detectaba
   // el cambio de textContent en setQRStatus(error) → disparaba resumeQR a los 150ms →
@@ -4558,6 +4618,9 @@ function stopQR(){
   // 1) Cancelar startup pendiente para que no cree el scanner después del cierre
   if(_qrStartTimer){ clearTimeout(_qrStartTimer); _qrStartTimer = null; }
   if(_qrResuming){ _qrResuming = false; }
+  // V20_96: cleanup del watchdog y reset del contador de escaneos
+  if(_qrWatchdogTimer){ clearInterval(_qrWatchdogTimer); _qrWatchdogTimer = null; }
+  _qrScanCount = 0;
   // 2) Cerrar overlay PRIMERO (UX inmediata, no esperar a la cámara)
   gEl('qrOv').classList.remove('on');
   // 3) Detener scanner solo si está realmente escaneando (state===2)
@@ -4574,6 +4637,40 @@ function stopQR(){
         qrScanner = null;
       }
     } catch(e){ qrScanner = null; }
+  }
+}
+
+// V20_96: recreate Html5Qrcode para liberar MediaStream colgado en Android.
+// Después de N escaneos seguidos (o cuando el watchdog detecta cámara muerta), se hace
+// stop+clear+new instance manteniendo el modal abierto. Sin esto la cámara queda en
+// blanco tras 5 escaneos en Chrome Android.
+function _recycleQRCamera(){
+  if(!qrActive) return;
+  try{
+    if(qrScanner && qrScanner.getState() === 2){
+      qrScanner.stop().catch(function(e){ console.warn('[V20_96] stop error en recycle:', e); }).then(function(){
+        try{ qrScanner.clear(); }catch(_e){}
+        qrScanner = null;
+        setTimeout(function(){
+          if(!qrActive) return;
+          try{
+            qrScanner = new Html5Qrcode("qrReader");
+            qrScanner.start({facingMode:'environment'},
+              {fps:10, qrbox:{width:240, height:240}},
+              onQRSuccess,
+              function(){}
+            ).catch(function(err){
+              console.warn('[V20_96] start error en recycle:', err);
+              setQRStatus('⚠️ Error al reciclar cámara — cierre y reabra el QR','err');
+            });
+          }catch(e){
+            console.warn('[V20_96] excepción al recrear scanner:', e);
+          }
+        }, 400);
+      });
+    }
+  }catch(e){
+    console.warn('[V20_96] excepción en _recycleQRCamera:', e);
   }
 }
 
@@ -4632,6 +4729,9 @@ function onQRSuccess(decoded){
   qrCooldown = true;
   setTimeout(function(){ qrCooldown = false; }, 2500);
 
+  // V20_96: contador de escaneos para recycle de cámara (ver _recycleQRCamera + watchdog)
+  _qrScanCount++;
+
   // Formato esperado: EBERRY|NombreCompleto|NumEmpleado
   var parts = decoded.split('|');
   if(parts.length < 3 || parts[0] !== 'EBERRY'){
@@ -4684,66 +4784,10 @@ function onQRSuccess(decoded){
     }
   }
 
-  // V20_91_01: validar surquero — su tarjeta debe coincidir con currentUser.name
-  // V20_91_08 FIX: extender validación a modo choferSurquero (chofer Y surquero misma persona)
-  // Lógica: si la persona escaneada va a ser surquero (sea solo o combinado con chofer), DEBE ser quien inició sesión.
-  if(_qrMode === 'surquero' || _qrMode === 'choferSurquero'){
-    var qrLower = (qrName||'').toLowerCase().trim();
-    var meLower = ((currentUser && currentUser.name)||'').toLowerCase().trim();
-    if(meLower && qrLower !== meLower){
-      var _modeMsg = (_qrMode === 'choferSurquero')
-        ? '⚠️ Para "Chofer y Surquero" solo TÚ puedes ser registrado — escanea TU tarjeta'
-        : '⚠️ Esta tarjeta no es la tuya — debes escanear TU propia tarjeta';
-      setQRStatus(_modeMsg,'err');
-      _scheduleQRStatusReset(4000);
-      return;
-    }
-  }
-
-  // V20_91_01: bloquear escaneo de trabajadores hasta que chofer + surquero estén registrados
-  // V20_91_29: admin con adminBypass exento (puede capturar workers sin chofer/surquero)
-  if(_qrMode === 'trabajador' && _dayFlow && !_dayFlow.diaIniciado && !_dayFlow.adminBypass){
-    setQRStatus('⚠️ Primero escanea al chofer y al surquero (Parámetros)','err');
-    _scheduleQRStatusReset(4000);
-    return;
-  }
-  // V20_91_09: bloquear escaneo si el día ya fue cerrado
-  if(_qrMode === 'trabajador' && _dayFlow && _dayFlow.checkOutDone){
-    setQRStatus('⚠️ Día cerrado a las ' + (_dayFlow.checkOutTime||'') + ' — no se pueden agregar más trabajadores','err');
-    _scheduleQRStatusReset(4000);
-    return;
-  }
-
-  // Verificar duplicado
-  if(nameInArr(workers, qrName)){
-    setQRStatus('⚠️ ' + qrName + ' ya está en la lista','err');
-    _scheduleQRStatusReset(4000); // V20_91_05: 4s y cancela timeouts viejos para que se lea bien
-    return;
-  }
-
-  // Buscar en ALL_WORKERS por empNum
-  var wkMatch=findInArr(ALL_WORKERS,qrEmpNum,'empNum'); // V12-FIX1
-  var officialName = wkMatch ? wkMatch.name : qrName;
-
-  // Re-verificar duplicado con nombre oficial
-  if(wkMatch && nameInArr(workers, officialName)){
-    setQRStatus('⚠️ ' + officialName + ' ya está en la lista','err');
-    _scheduleQRStatusReset(4000);
-    return;
-  }
-
-  // Validar contrato IOE — usar modal real
-  var ioeCheck = checkContrato(officialName);
-  if(ioeCheck){
-    pauseQR();
-    showIoeBlock(ioeCheck, officialName);
-    return;
-  }
-
-  // V20_91_19: branch manualConfirm movido al INICIO de onQRSuccess (después del parsing).
-  // El branch viejo aquí estaba después de checkContrato que rechazaba al surquero.
-
-  // V20_91_20: 3 branches nuevos de check-out multi-estado.
+  // V20_96 FIX: branches co* MOVIDOS ARRIBA del check de duplicado. Antes el surquero/chofer/cuadrilla
+  // escaneaba para cerrar día y el check `nameInArr(workers, qrName)` lo rechazaba con "ya está en la lista"
+  // — nunca llegaba a la lógica de cierre.
+  // V20_91_20: 3 branches de check-out multi-estado.
   // coCuadrilla = QR del surquero autoriza cerrar a trabajadores con role==='trabajador'
   // coChofer    = QR del chofer cierra al chofer (worker.id === _dayFlow.choferWorkerId)
   // coSurq      = QR del surquero cierra al surquero (y al chofer si modo combinado)
@@ -4876,6 +4920,68 @@ function onQRSuccess(decoded){
       return;
     }
   }
+
+  // V20_91_01: validar surquero — su tarjeta debe coincidir con currentUser.name
+  // V20_91_08 FIX: extender validación a modo choferSurquero (chofer Y surquero misma persona)
+  // Lógica: si la persona escaneada va a ser surquero (sea solo o combinado con chofer), DEBE ser quien inició sesión.
+  if(_qrMode === 'surquero' || _qrMode === 'choferSurquero'){
+    var qrLower = (qrName||'').toLowerCase().trim();
+    var meLower = ((currentUser && currentUser.name)||'').toLowerCase().trim();
+    if(meLower && qrLower !== meLower){
+      var _modeMsg = (_qrMode === 'choferSurquero')
+        ? '⚠️ Para "Chofer y Surquero" solo TÚ puedes ser registrado — escanea TU tarjeta'
+        : '⚠️ Esta tarjeta no es la tuya — debes escanear TU propia tarjeta';
+      setQRStatus(_modeMsg,'err');
+      _scheduleQRStatusReset(4000);
+      return;
+    }
+  }
+
+  // V20_91_01: bloquear escaneo de trabajadores hasta que chofer + surquero estén registrados
+  // V20_91_29: admin con adminBypass exento (puede capturar workers sin chofer/surquero)
+  if(_qrMode === 'trabajador' && _dayFlow && !_dayFlow.diaIniciado && !_dayFlow.adminBypass){
+    setQRStatus('⚠️ Primero escanea al chofer y al surquero (Parámetros)','err');
+    _scheduleQRStatusReset(4000);
+    return;
+  }
+  // V20_91_09: bloquear escaneo si el día ya fue cerrado
+  if(_qrMode === 'trabajador' && _dayFlow && _dayFlow.checkOutDone){
+    setQRStatus('⚠️ Día cerrado a las ' + (_dayFlow.checkOutTime||'') + ' — no se pueden agregar más trabajadores','err');
+    _scheduleQRStatusReset(4000);
+    return;
+  }
+
+  // Verificar duplicado
+  if(nameInArr(workers, qrName)){
+    setQRStatus('⚠️ ' + qrName + ' ya está en la lista','err');
+    _scheduleQRStatusReset(4000); // V20_91_05: 4s y cancela timeouts viejos para que se lea bien
+    return;
+  }
+
+  // Buscar en ALL_WORKERS por empNum
+  var wkMatch=findInArr(ALL_WORKERS,qrEmpNum,'empNum'); // V12-FIX1
+  var officialName = wkMatch ? wkMatch.name : qrName;
+
+  // Re-verificar duplicado con nombre oficial
+  if(wkMatch && nameInArr(workers, officialName)){
+    setQRStatus('⚠️ ' + officialName + ' ya está en la lista','err');
+    _scheduleQRStatusReset(4000);
+    return;
+  }
+
+  // Validar contrato IOE — usar modal real
+  var ioeCheck = checkContrato(officialName);
+  if(ioeCheck){
+    pauseQR();
+    showIoeBlock(ioeCheck, officialName);
+    return;
+  }
+
+  // V20_91_19: branch manualConfirm movido al INICIO de onQRSuccess (después del parsing).
+  // El branch viejo aquí estaba después de checkContrato que rechazaba al surquero.
+  // V20_96 FIX: branches co* MOVIDOS ARRIBA del check de duplicado (justo después de manualConfirm).
+  // Antes el surquero/chofer/cuadrilla escaneaba para cerrar día y el check `nameInArr(workers, qrName)`
+  // lo rechazaba con "ya está en la lista" — nunca llegaba a la lógica de cierre.
 
   // V20_91_01: para chofer/surquero/dual → siempre mostrar modal de confirmación con texto contextual
   if(_qrMode === 'chofer' || _qrMode === 'surquero' || _qrMode === 'choferSurquero'){
@@ -5295,7 +5401,7 @@ function mkActRow(wid_,ai,_cont){
         var qr=document.createElement('div'); qr.className='qr'; qr.id='qr'+wid_+'_'+ai;
         var lbl2=act.tipo==='Caja'?'Cajas':act.tipo==='$'?'Monto $':'Piezas';
         qr.style.gridTemplateColumns='1fr';
-        qr.innerHTML='<div><label style="margin:0;font-size:10px">'+lbl2+'</label><input type="number" id="qty'+wid_+'_'+ai+'" min="0" step="'+(act.tipo==='$'?'0.5':'1')+'" value="'+(a.qty||'')+'" placeholder="0"></div>';
+        qr.innerHTML='<div><label style="margin:0;font-size:10px">'+lbl2+'</label><input type="number" inputmode="decimal" pattern="[0-9]*\\.?[0-9]*" id="qty'+wid_+'_'+ai+'" min="0" step="'+(act.tipo==='$'?'0.5':'1')+'" value="'+(a.qty||'')+'" placeholder="0"></div>';
         div.appendChild(qr);
         var _wi=wid_,_ai=ai;
         setTimeout(function(){
@@ -5328,13 +5434,13 @@ function renderIndSurcos(wi,ai){
   var h='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">'
     +'<div>'
     +'<label style="font-size:10px;font-weight:700;color:var(--gr)">TOTAL PIES</label>'
-    +'<input type="text" inputmode="decimal" id="indPies_'+wi+'_'+ai+'" value="'+(a.indPies||'')+'" placeholder="Ej: 8164"'
+    +'<input type="text" inputmode="decimal" pattern="[0-9]*\\.?[0-9]*" id="indPies_'+wi+'_'+ai+'" value="'+(a.indPies||'')+'" placeholder="Ej: 8164"'
     +' data-wi="'+wi+'" data-ai="'+ai+'" data-f="pies" oninput="onIndField(this)"'
     +' style="font-size:18px;font-weight:700;padding:10px;width:100%;margin-top:3px;border:2px solid var(--g);border-radius:8px;color:var(--g);font-family:\'DM Sans\',sans-serif">'
     +'</div>'
     +'<div>'
     +'<label style="font-size:10px;font-weight:700;color:var(--gr)">ANCHO DE CAMA</label>'
-    +'<input type="text" inputmode="decimal" id="indAncho_'+wi+'_'+ai+'" value="'+(a.indAncho||'')+'" placeholder="Ej: 5.67"'
+    +'<input type="text" inputmode="decimal" pattern="[0-9]*\\.?[0-9]*" id="indAncho_'+wi+'_'+ai+'" value="'+(a.indAncho||'')+'" placeholder="Ej: 5.67"'
     +' data-wi="'+wi+'" data-ai="'+ai+'" data-f="ancho" oninput="onIndField(this)"'
     +' style="font-size:18px;font-weight:700;padding:10px;width:100%;margin-top:3px;border:2px solid var(--b);border-radius:8px;color:var(--b);font-family:\'DM Sans\',sans-serif">'
     +'</div></div>';
@@ -5358,20 +5464,22 @@ function renderIndSurcos(wi,ai){
 }
 
 // V4: handler unificado para Total Pies y Ancho de cama
+// V20_98 FIX B: ya NO llama renderIndSurcos (que reescribía cont.innerHTML y destruía el input activo → rebote teclado).
+// Ahora solo persiste los valores y actualiza a.qty/a.indAcres + dispara recalc para refrescar el resumen del worker.
 function onIndField(inp){
   var wi=parseInt(inp.dataset.wi), ai=parseInt(inp.dataset.ai);
   var f=inp.dataset.f; // 'pies' o 'ancho'
   var w=getW(wi); if(!w||!w.acts[ai]) return;
-  if(f==='pies') w.acts[ai].indPies=inp.value.trim();
-  else if(f==='ancho') w.acts[ai].indAncho=inp.value.trim();
-  var _wi=wi, _ai=ai, _f=f, _cp=inp.selectionStart;
-  renderIndSurcos(_wi,_ai);
+  var a=w.acts[ai];
+  if(f==='pies') a.indPies=inp.value.trim();
+  else if(f==='ancho') a.indAncho=inp.value.trim();
+  // Recalcular qty (puertas) e indAcres en memoria (sin tocar DOM más allá de los badges)
+  var _pies=parseFloat(a.indPies)||0;
+  var _ancho=parseFloat(a.indAncho)||0;
+  a.qty=_pies/100;
+  a.indAcres=(_pies>0&&_ancho>0)?(_pies*_ancho)/43560:0;
+  recalc(wi,ai);
   autoSave();
-  setTimeout(function(){
-    var elId=(_f==='pies'?'indPies_':'indAncho_')+_wi+'_'+_ai;
-    var el=gEl(elId);
-    if(el){ el.focus(); if(typeof _cp==='number') try{el.setSelectionRange(_cp,_cp);}catch(e){} }
-  },0);
 }
 
 // V7: sanitizar qty como número antes de guardar
@@ -5403,9 +5511,9 @@ function renderIndBloques(div, act, wid_, ai){
       + '</div>'
       + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
       + '<div><label style="font-size:10px;font-weight:600">PIES</label>'
-      + '<input type="number" inputmode="decimal" value="'+(b.pies||'')+'" placeholder="0" data-wid="'+wid_+'" data-ai="'+ai+'" data-bi="'+bi+'" data-bf="pies" oninput="onIndBloqueField(this)" style="width:100%;padding:8px;border:1.5px solid var(--bd);border-radius:6px;font-size:14px"></div>'
+      + '<input type="number" inputmode="decimal" pattern="[0-9]*\\.?[0-9]*" value="'+(b.pies||'')+'" placeholder="0" data-wid="'+wid_+'" data-ai="'+ai+'" data-bi="'+bi+'" data-bf="pies" oninput="onIndBloqueField(this)" style="width:100%;padding:8px;border:1.5px solid var(--bd);border-radius:6px;font-size:14px"></div>'
       + '<div><label style="font-size:10px;font-weight:600">SURCOS</label>'
-      + '<input type="number" inputmode="decimal" value="'+(b.surcos||'')+'" placeholder="0" data-wid="'+wid_+'" data-ai="'+ai+'" data-bi="'+bi+'" data-bf="surcos" oninput="onIndBloqueField(this)" style="width:100%;padding:8px;border:1.5px solid var(--bd);border-radius:6px;font-size:14px"></div>'
+      + '<input type="number" inputmode="decimal" pattern="[0-9]*\\.?[0-9]*" value="'+(b.surcos||'')+'" placeholder="0" data-wid="'+wid_+'" data-ai="'+ai+'" data-bi="'+bi+'" data-bf="surcos" oninput="onIndBloqueField(this)" style="width:100%;padding:8px;border:1.5px solid var(--bd);border-radius:6px;font-size:14px"></div>'
       + '</div>';
     wrap.appendChild(card);
   }
@@ -8349,6 +8457,37 @@ function submitViaIframe(url, payload, onDone, timeoutMs, onTimeout, frameId){
   }
 }
 
+// V20_95: re-hidratar contractRate del worker antes de armar payload.
+// Si por race condition (login) o normalización de nombre w.contractRate quedó en 0,
+// hacer último intento con normalización de acentos/espacios contra ALL_WORKERS.
+function _normNombre95(s){
+  return (s||'').toString()
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g,'')
+    .replace(/\s+/g,' ').trim();
+}
+function _hidratarContractRate95(w){
+  if(!w) return 0;
+  var cr = parseFloat(w.contractRate);
+  if(cr > 0 && isFinite(cr)) return cr;
+  if(typeof ALL_WORKERS === 'undefined' || !ALL_WORKERS || !ALL_WORKERS.length) return 0;
+  var target = _normNombre95(w.name);
+  if(!target) return 0;
+  for(var i=0; i<ALL_WORKERS.length; i++){
+    var aw = ALL_WORKERS[i];
+    if(!aw) continue;
+    if(_normNombre95(aw.name) === target){
+      var c2 = parseFloat(aw.contractRate);
+      if(c2 > 0 && isFinite(c2)){
+        w.contractRate = c2;
+        console.warn('[V20_95] contractRate re-hidratado para', w.name, '→', c2);
+        return c2;
+      }
+    }
+  }
+  return 0;
+}
+
 function sendToSheets() {
   if (!workers.length && !ausencias.length) { toast('⚠️ No hay trabajadores ni ausencias'); return; }
   if (!gVal('fecha'))  { toast('⚠️ Ingresa la fecha primero'); return; }
@@ -8374,6 +8513,31 @@ function sendToSheets() {
           _hr.missing.slice(0,15).join('\n• ') +
           (_hr.missing.length>15 ? '\n• ... y '+(_hr.missing.length-15)+' más' : '') +
           '\n\nNo puedes enviar a Sheets hasta que TODOS tengan horario de inicio Y fin.');
+    return;
+  }
+
+  // V20_95: validar contractRate para todo worker con actividad tipo Hora antes de enviar.
+  // Sin esto, workers con contractRate=0 mandan act.p ($14) en vez del rate real ($16.23).
+  var _missingCR95 = [];
+  for(var _wcr=0; _wcr<workers.length; _wcr++){
+    var _wcrW = workers[_wcr];
+    if(!_wcrW || !_wcrW.acts) continue;
+    // hidratar primero (intenta recuperar contractRate desde ALL_WORKERS)
+    _hidratarContractRate95(_wcrW);
+    var _hasHora95 = false;
+    for(var _wcrA=0; _wcrA<_wcrW.acts.length; _wcrA++){
+      var _wcrAct = ALL_ACTS[_wcrW.acts[_wcrA].ai] || _wcrW.acts[_wcrA];
+      if(isHourAct(_wcrAct)){ _hasHora95 = true; break; }
+    }
+    if(_hasHora95){
+      var _cr95 = parseFloat(_wcrW.contractRate)||0;
+      if(!(_cr95 > 0 && isFinite(_cr95))){
+        _missingCR95.push(esc(_wcrW.name||'?'));
+      }
+    }
+  }
+  if(_missingCR95.length){
+    alert('⚠️ FALTA CONTRACT RATE\n\nLos siguientes trabajadores tienen actividad por HORA pero NO tienen Contract Rate (col G del MASTER ACTIVOS):\n\n• ' + _missingCR95.join('\n• ') + '\n\nNo se puede enviar — Cindy recibiría $14 (precio del catálogo) en vez del rate real de cada uno.\n\nRevisa col G del MASTER ACTIVOS de estos trabajadores.');
     return;
   }
 
@@ -8420,9 +8584,11 @@ function sendToSheets() {
       var a   = w.acts[j];
       var act = ACTS[a.ai];
       if (!act) continue;
-      var totalH = act.hr ? totalShiftHours(a) : 0;
+      // V20_95 FIX: usar isHourAct (cubre tipo='Hora' aun si act.hr false). Antes act.hr directo causaba caer a act.p $14 cuando MASTER mapeo de hr falló.
+      var totalH = isHourAct(act) ? totalShiftHours(a) : 0;
       // Tau: solo Hours usa contractRate; todo lo demás usa act.p
-      var uPrice = act.hr ? getHRate(w, act) : act.p;
+      // V20_95 FIX: usar isHourAct (cubre tipo='Hora' aun si act.hr false). Antes act.hr directo causaba caer a act.p $14 cuando MASTER mapeo de hr falló.
+      var uPrice = isHourAct(act) ? getHRate(w, act) : act.p;
       // V12: incluir horarios para FIELD_DROP cols 16-19
       // ini/fin son por actividad; lonche (lIni/lFin) es global de Parámetros
       wOut.acts.push({
@@ -8860,7 +9026,7 @@ function renderGrpActs(){
       var _pPue = _ancRen ? _pAN * _ancRen : 0;
       varsHtml = '<div style="margin-bottom:10px">'
         + '<label style="font-size:10px;font-weight:700;color:var(--gr)">TOTAL ACRES</label>'
-        + '<input type="text" inputmode="decimal" value="'+_pA+'" placeholder="Ej: 5.26"'
+        + '<input type="text" inputmode="decimal" pattern="[0-9]*\\.?[0-9]*" value="'+_pA+'" placeholder="Ej: 5.26"'
         + ' data-gi="'+gi+'" data-v="pennAcres" oninput="setGrpVar(this)"'
         + ' style="font-size:18px;font-weight:700;padding:10px;width:100%;margin-top:3px;border:2px solid var(--b);border-radius:8px;color:var(--b);font-family:\'DM Sans\',sans-serif">'
         + '</div>'
@@ -8911,23 +9077,23 @@ function renderGrpActs(){
           // Fila 1: Largo × Cant
           +'<div style="display:grid;grid-template-columns:1fr auto 1fr;gap:4px;align-items:end;margin-bottom:6px">'
           +'<div><label style="font-size:9px">Largo surco</label>'
-          +'<input type="text" inputmode="decimal" value="'+(sf.largo||'')+'" placeholder="pies"'
+          +'<input type="text" inputmode="decimal" pattern="[0-9]*\\.?[0-9]*" value="'+(sf.largo||'')+'" placeholder="pies"'
           +' data-gi="'+gi+'" data-fi="'+fi+'" data-sf="largo" oninput="onSurcoSmart(this)"'
           +(disLargo?' disabled style="font-size:15px;padding:8px;width:100%;'+disStyle+'"':' style="font-size:15px;padding:8px;width:100%"')+'></div>'
           +'<span style="font-size:14px;font-weight:700;color:var(--gr);padding-bottom:10px">×</span>'
           +'<div><label style="font-size:9px">Cant. surcos</label>'
-          +'<input type="text" inputmode="decimal" value="'+(sf.num||'')+'" placeholder="#"'
+          +'<input type="text" inputmode="numeric" pattern="[0-9]*" value="'+(sf.num||'')+'" placeholder="#"'
           +' data-gi="'+gi+'" data-fi="'+fi+'" data-sf="num" oninput="onSurcoSmart(this)"'
           +(disNum?' disabled style="font-size:15px;padding:8px;width:100%;'+disStyle+'"':' style="font-size:15px;padding:8px;width:100%"')+'></div>'
           +'</div>'
           // Fila 2: Total Pies | Total Acres
           +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">'
           +'<div><label style="font-size:9px">Total Pies</label>'
-          +'<input type="text" inputmode="decimal" value="'+(sf.totalPies||'')+'" placeholder="pies lineales"'
+          +'<input type="text" inputmode="decimal" pattern="[0-9]*\\.?[0-9]*" value="'+(sf.totalPies||'')+'" placeholder="pies lineales"'
           +' data-gi="'+gi+'" data-fi="'+fi+'" data-sf="totalPies" oninput="onSurcoSmart(this)"'
           +(disPies?' disabled style="font-size:15px;padding:8px;width:100%;font-weight:700;color:var(--g);'+disStyle+'"':' style="font-size:15px;padding:8px;width:100%;font-weight:700;color:var(--g)"')+'></div>'
           +'<div><label style="font-size:9px">Total Acres</label>'
-          +'<input type="text" inputmode="decimal" value="'+(sf.totalAcres||'')+'" placeholder="acres"'
+          +'<input type="text" inputmode="decimal" pattern="[0-9]*\\.?[0-9]*" value="'+(sf.totalAcres||'')+'" placeholder="acres"'
           +' data-gi="'+gi+'" data-fi="'+fi+'" data-sf="totalAcres" oninput="onSurcoSmart(this)"'
           +(disAcres?' disabled style="font-size:15px;padding:8px;width:100%;font-weight:700;color:var(--b);'+disStyle+'"':' style="font-size:15px;padding:8px;width:100%;font-weight:700;color:var(--b)"')+'></div>'
           +'</div>'
@@ -8980,7 +9146,7 @@ function renderGrpActs(){
               return '<div style="background:#eef;border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:11px;color:#334;display:flex;justify-content:space-between"><span>🌱 Factor de acres</span><b>'+_fact+' (de MASTER)</b></div>';
             }
             return '<div style="margin-bottom:6px"><label style="font-size:10px">🌱 Ancho de cama (para pago — ej: 5.67 DeWitt, 83 Mecca)</label>'
-              +'<input type="text" inputmode="decimal" value="'+anchoCama+'" placeholder="ej: 5.67"'
+              +'<input type="text" inputmode="decimal" pattern="[0-9]*\\.?[0-9]*" value="'+anchoCama+'" placeholder="ej: 5.67"'
               +' data-gi="'+gi+'" data-v="anchoCama" oninput="setGrpVar(this)"'
               +' style="font-size:16px;padding:9px 10px;width:100%"></div>';
           })()
@@ -8991,9 +9157,9 @@ function renderGrpActs(){
       var totalC = g.vars.totalC||''; var precioC = g.vars.precioC||act.p||0.80;
       varsHtml = '<div class="r2" style="margin-bottom:8px">'
         +'<div><label style="font-size:10px">Total cajas</label>'
-        +'<input type="number" min="0" step="1" value="'+totalC+'" placeholder="0" data-gi="'+gi+'" data-v="totalC" onchange="setGrpVar(this)" style="font-size:16px;padding:10px 11px"></div>'
+        +'<input type="number" inputmode="numeric" pattern="[0-9]*" min="0" step="1" value="'+totalC+'" placeholder="0" data-gi="'+gi+'" data-v="totalC" onchange="setGrpVar(this)" style="font-size:16px;padding:10px 11px"></div>'
         +'<div><label style="font-size:10px">$/caja</label>'
-        +'<input type="number" min="0" step="0.01" value="'+precioC+'" data-gi="'+gi+'" data-v="precioC" onchange="setGrpVar(this)" style="font-size:16px;padding:10px 11px"></div>'
+        +'<input type="number" inputmode="decimal" pattern="[0-9]*\\.?[0-9]*" min="0" step="0.01" value="'+precioC+'" data-gi="'+gi+'" data-v="precioC" onchange="setGrpVar(this)" style="font-size:16px;padding:10px 11px"></div>'
         +'</div>'
         +'<div class="r2" style="margin-bottom:8px">'
         +'<div><label style="font-size:10px">🟢 Entrada</label>'
@@ -9019,7 +9185,7 @@ function renderGrpActs(){
     } else {
       var totalP = g.vars.totalP||'';
       varsHtml = '<div style="margin-bottom:8px"><label style="font-size:10px">Cantidad total ('+act.tipo+')</label>'
-        +'<input type="number" min="0" step="1" value="'+totalP+'" placeholder="0" data-gi="'+gi+'" data-v="totalP" onchange="setGrpVar(this)" style="font-size:16px;padding:10px 11px;width:100%"></div>'
+        +'<input type="number" inputmode="decimal" pattern="[0-9]*\\.?[0-9]*" min="0" step="1" value="'+totalP+'" placeholder="0" data-gi="'+gi+'" data-v="totalP" onchange="setGrpVar(this)" style="font-size:16px;padding:10px 11px;width:100%"></div>'
         +'<div class="r2" style="margin-bottom:8px">'
         +'<div><label style="font-size:10px">🟢 Entrada</label>'
         +'<input type="time" step="1800" value="'+(g.vars.ini||'')+'"'
@@ -9214,16 +9380,37 @@ function onSurcoSmart(inp){
       row.mode=''; row.largo=''; row.num=''; row.totalPies='';
     }
   }
-  // Re-render para actualizar disabled states — restaurar foco después
-  var _gi=gi, _fi=fi, _sf=sf, _cursorPos=inp.selectionStart;
-  renderGrpActs();
-  // V6-C5: calcGrpAct(_gi) eliminado — renderGrpActs() ya lo llama internamente
+  // V20_98 FIX B: NO renderGrpActs() — actualizar SOLO inputs hermanos y totales para no destruir el input activo (rebote teclado mobile).
+  // Trade-off: estados disabled de la UI no se refrescan al instante (se refrescan en siguiente re-render completo, ej: addSurcoFila/calcGrpAct).
+  try {
+    // Actualizar valores de los 3 inputs hermanos de la misma fila (NUNCA tocar el input activo "inp")
+    var sibFields=['largo','num','totalPies','totalAcres'];
+    for(var _sx=0; _sx<sibFields.length; _sx++){
+      var _sxn=sibFields[_sx];
+      if(_sxn===sf) continue; // saltar el input activo
+      var _sib=document.querySelector('[data-gi="'+gi+'"][data-fi="'+fi+'"][data-sf="'+_sxn+'"]');
+      if(_sib && _sib!==document.activeElement){ _sib.value = (row[_sxn]!=null?row[_sxn]:''); }
+    }
+    // Recalcular grand totals del grupal entero (sumar todas las filas)
+    var grandPies=0, grandAcres=0;
+    var _surTot=grpActs[gi].vars.surcos||[];
+    for(var _gt=0; _gt<_surTot.length; _gt++){
+      grandPies  += parseFloat(_surTot[_gt].totalPies)||0;
+      grandAcres += parseFloat(_surTot[_gt].totalAcres)||0;
+    }
+    var _gAct=GRUPAL_ACTS[grpActs[gi].gai]||null;
+    var _ancTot=(_gAct && isPennrose5Act(_gAct))?getActAncho(_gAct):(parseFloat(grpActs[gi].vars.anchoCama)||0);
+    var _puerTot=(grandAcres>0&&_ancTot>0)?grandAcres*_ancTot:grandPies/100;
+    var _eM=gEl('gaMetrosVal'+gi); if(_eM) _eM.textContent=grandPies.toFixed(1)+' ft';
+    var _eP=gEl('gaPuertasVal'+gi); if(_eP) _eP.textContent=_puerTot.toFixed(2);
+    var _eA=gEl('gaAcresVal'+gi); if(_eA) _eA.textContent=grandAcres.toFixed(3);
+    var _eMC=gEl('gaMetros'+gi); if(_eMC) _eMC.style.display=(grandPies>0?'flex':'none');
+    var _ePC=gEl('gaPuertas'+gi); if(_ePC) _ePC.style.display=(_puerTot>0?'flex':'none');
+    var _eAC=gEl('gaAcres'+gi); if(_eAC) _eAC.style.display=(grandAcres>0?'flex':'none');
+    // Recalcular la tarjeta de pago de participantes (no destruye los inputs)
+    calcGrpAct(gi);
+  } catch(_eFB){ console.warn('[V20_98 FIX B onSurcoSmart]', _eFB); }
   autoSave();
-  // Restaurar foco en el input que estaba editando
-  setTimeout(function(){
-    var el=document.querySelector('[data-gi="'+_gi+'"][data-fi="'+_fi+'"][data-sf="'+_sf+'"]');
-    if(el){ el.focus(); if(typeof _cursorPos==='number') try{el.setSelectionRange(_cursorPos,_cursorPos);}catch(e){} }
-  },0);
 }
 
 // ── Funciones de filas de surcos (tipo 'puertas') ──
