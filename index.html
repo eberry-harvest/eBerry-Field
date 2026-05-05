@@ -35,7 +35,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_101';
+window.APP_VERSION = 'V20_102';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -716,11 +716,156 @@ html.login-locked{overflow:hidden!important;height:100%!important}
   .resp-grid-arch{grid-template-columns:repeat(3,1fr)}
 }
 
+/* V20_102: Drawer Lateral */
+.tab-burger{
+  background:rgba(255,255,255,.18);
+  border:1px solid rgba(255,255,255,.25);
+  border-radius:8px;
+  color:#fff;
+  font-size:18px;
+  cursor:pointer;
+  padding:6px 12px;
+  margin-right:4px;
+  min-width:44px;
+  min-height:44px;
+}
+.tab-burger:active{transform:scale(0.95)}
+
+.drawer-overlay{
+  position:fixed;
+  top:0;left:0;right:0;bottom:0;
+  background:rgba(0,0,0,.4);
+  z-index:9998;
+  opacity:0;
+  pointer-events:none;
+  transition:opacity 0.25s ease-out;
+}
+.drawer-overlay.show{opacity:1;pointer-events:auto}
+
+.drawer-panel{
+  position:fixed;
+  top:0;left:0;bottom:0;
+  width:280px;
+  background:#fff;
+  z-index:9999;
+  box-shadow:4px 0 20px rgba(0,0,0,.25);
+  transform:translateX(-100%);
+  transition:transform 0.28s cubic-bezier(.25,.46,.45,.94);
+  display:flex;
+  flex-direction:column;
+}
+.drawer-panel.show{transform:translateX(0)}
+
+.drawer-head{
+  background:linear-gradient(135deg,#1a2b8c 0%,#2c3fb0 100%);
+  color:#fff;
+  padding:16px 18px;
+  position:relative;
+}
+.drawer-head .close-x{
+  position:absolute;
+  top:10px;
+  right:12px;
+  background:rgba(255,255,255,.2);
+  border:none;
+  color:#fff;
+  border-radius:50%;
+  width:30px;
+  height:30px;
+  font-size:16px;
+  cursor:pointer;
+  min-width:30px;
+}
+.drawer-head .brand{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin-bottom:14px;
+}
+.drawer-head .brand-logo{
+  background:#fff;
+  border-radius:6px;
+  padding:4px 10px;
+  color:#1a2b8c;
+  font-weight:800;
+  font-size:15px;
+  letter-spacing:1px;
+}
+.drawer-head .info-block{
+  display:flex;
+  flex-direction:column;
+  gap:4px;
+  font-size:13px;
+}
+.drawer-head .info-block .label{
+  font-size:10px;
+  text-transform:uppercase;
+  letter-spacing:1px;
+  color:rgba(255,255,255,.65);
+}
+.drawer-head .info-block .value{font-weight:700}
+
+.drawer-tabs{
+  flex:1;
+  overflow-y:auto;
+  padding:6px 0;
+}
+.drawer-tab{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:14px 18px;
+  color:#333;
+  border-bottom:1px solid #eee;
+  cursor:pointer;
+  font-size:14px;
+  font-weight:600;
+  transition:background 0.15s,padding-left 0.15s;
+  text-decoration:none;
+  min-height:44px;
+}
+.drawer-tab:hover{
+  background:#f3f4f6;
+  padding-left:22px;
+}
+.drawer-tab.act{
+  background:linear-gradient(90deg,#1a2b8c 0%,#2c3fb0 100%);
+  color:#fff;
+  border-left:4px solid #5eba45;
+}
+.drawer-tab .tab-num{
+  display:inline-block;
+  width:24px;
+  height:24px;
+  text-align:center;
+  line-height:24px;
+  background:rgba(0,0,0,.06);
+  border-radius:50%;
+  font-size:11px;
+  font-weight:800;
+  flex-shrink:0;
+}
+.drawer-tab.act .tab-num{
+  background:rgba(255,255,255,.25);
+  color:#fff;
+}
+
+.drawer-foot{
+  border-top:1px solid #eee;
+  padding:10px 18px;
+  background:#f9fafb;
+  font-size:11px;
+  color:#888;
+  text-align:center;
+}
+
 </style>
 </head>
 <body>
 <header>
   <div class="htop">
+    <!-- V20_102: botón hamburger para abrir drawer -->
+    <button class="tab-burger" onclick="openDrawer()" aria-label="Abrir menú">☰</button>
     <div>
       <!-- V20_91_23: logo real eBerry en mini-tarjeta blanca (opción B confirmada por Serafín) -->
       <div class="hdr-logo-card">
@@ -741,6 +886,8 @@ html.login-locked{overflow:hidden!important;height:100%!important}
       <button id="logoutBtn" onclick="logoutUser()" style="display:none;background:rgba(204,34,34,.75);border:none;border-radius:20px;padding:4px 10px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">🚪 Salir</button>
     </div>
   </div>
+  <!-- V20_102: tabs horizontales reemplazadas por drawer lateral -->
+  <!--
   <div class="tabs">
     <button class="tab act" onclick="go(0)">① Parámetros</button>
     <button class="tab" onclick="go(1)">② Análisis</button>
@@ -752,7 +899,40 @@ html.login-locked{overflow:hidden!important;height:100%!important}
     <button class="tab" onclick="go(7)">⑧ Semanal</button>
     <button class="tab" onclick="go(8)">⑨ Archivos</button>
   </div>
+  -->
 </header>
+<!-- V20_102: Drawer Lateral -->
+<div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()"></div>
+<div class="drawer-panel" id="drawerPanel">
+  <div class="drawer-head">
+    <button class="close-x" onclick="closeDrawer()" aria-label="Cerrar menú">✕</button>
+    <div class="brand">
+      <div class="brand-logo">eBerry</div>
+    </div>
+    <div class="info-block">
+      <span class="label">Surquero</span>
+      <span class="value" id="drawerSurquero">—</span>
+    </div>
+    <div class="info-block" style="margin-top:8px">
+      <span class="label">Rancho activo</span>
+      <span class="value" id="drawerRancho">—</span>
+    </div>
+  </div>
+  <div class="drawer-tabs">
+    <a class="drawer-tab" data-pg="0" onclick="pickDrawerTab(0)"><span class="tab-num">①</span> Parámetros</a>
+    <a class="drawer-tab" data-pg="1" onclick="pickDrawerTab(1)"><span class="tab-num">②</span> Análisis</a>
+    <a class="drawer-tab" data-pg="2" onclick="pickDrawerTab(2)"><span class="tab-num">③</span> Trabajadores</a>
+    <a class="drawer-tab" data-pg="3" onclick="pickDrawerTab(3)"><span class="tab-num">④</span> Act. Grupales</a>
+    <a class="drawer-tab" data-pg="4" onclick="pickDrawerTab(4)"><span class="tab-num">⑤</span> Resumen</a>
+    <a class="drawer-tab" data-pg="5" onclick="pickDrawerTab(5)"><span class="tab-num">⑥</span> Ausencias</a>
+    <a class="drawer-tab" data-pg="6" onclick="pickDrawerTab(6)"><span class="tab-num">⑦</span> Invoice</a>
+    <a class="drawer-tab" data-pg="7" onclick="pickDrawerTab(7)"><span class="tab-num">⑧</span> Semanal</a>
+    <a class="drawer-tab" data-pg="8" onclick="pickDrawerTab(8)"><span class="tab-num">⑨</span> Archivos</a>
+  </div>
+  <div class="drawer-foot">
+    eBerry Field · V20_102 · Mayo 2026
+  </div>
+</div>
 <!-- ── LOGIN SCREEN ── -->
 <div id="loginScreen">
   <!-- V20_91_22: logo real de eBerry en tarjeta blanca, reemplaza texto "eBerry Field" + "HARVEST COMPANY LLC" -->
@@ -1594,10 +1774,13 @@ body.readOnly [onclick*="openNewDay"]{display:none !important}
       <input type="text" id="srch" placeholder="🔍 Buscar o escribir nombre..." autocomplete="off" oninput="onAC(this.value)" onblur="closeAC()">
     </div>
   </div>
+  <!-- V20_102: botones prev/next eliminados (drawer maneja navegación). Funciones JS preservadas. -->
+  <!--
   <div class="nav">
     <button class="np" id="np" onclick="prev()">← Atrás</button>
     <button class="nn" id="nn" onclick="next()">Siguiente →</button>
   </div>
+  -->
 </div>
 
 <script>
@@ -6952,18 +7135,65 @@ function go(n){
   gEl('addbar').classList.toggle('on',n===2);
   var ausBar=gEl('ausBar'); if(ausBar) ausBar.style.display=(n===5?'block':'none');
   pg=n; updNav(); window.scrollTo(0,0);
+  // V20_102: refrescar drawer si está abierto / mantener pestaña activa actualizada
+  if(typeof refreshDrawerContext === 'function') refreshDrawerContext();
+}
+
+// V20_102: Drawer Lateral — handlers
+function openDrawer(){
+  var ov = document.getElementById('drawerOverlay');
+  var pn = document.getElementById('drawerPanel');
+  if(!ov || !pn) return;
+  refreshDrawerContext();
+  ov.classList.add('show');
+  pn.classList.add('show');
+}
+function closeDrawer(){
+  var ov = document.getElementById('drawerOverlay');
+  var pn = document.getElementById('drawerPanel');
+  if(!ov || !pn) return;
+  ov.classList.remove('show');
+  pn.classList.remove('show');
+}
+function pickDrawerTab(n){
+  if(typeof go === 'function') go(n);
+  closeDrawer();
+}
+function refreshDrawerContext(){
+  // Actualizar surquero + rancho activo en el drawer
+  var sq = document.getElementById('drawerSurquero');
+  var rc = document.getElementById('drawerRancho');
+  if(sq){
+    var nm = '—';
+    if(typeof currentUser !== 'undefined' && currentUser && currentUser.name) nm = currentUser.name;
+    sq.textContent = nm;
+  }
+  if(rc){
+    var rn = '—';
+    try { if(typeof gVal === 'function') rn = gVal('rancho') || '—'; } catch(e){}
+    rc.textContent = rn;
+  }
+  // Marcar pestaña activa según pg
+  var dtabs = document.querySelectorAll('.drawer-tab');
+  var curPg = (typeof pg !== 'undefined') ? pg : 0;
+  for(var i=0;i<dtabs.length;i++){
+    var tp = parseInt(dtabs[i].getAttribute('data-pg'));
+    if(tp === curPg) dtabs[i].classList.add('act');
+    else dtabs[i].classList.remove('act');
+  }
 }
 function next(){ if(pg<8)go(pg+1); } // V20_59: extender al ⑨ Archivos
 function prev(){ if(pg>0)go(pg-1); }
 function updNav(){
-  gEl('np').style.display=pg===0?'none':'';
-  var nn=gEl('nn');
+  // V20_102: prev/next eliminados (drawer maneja navegación). Guard defensivo si los botones existen.
+  var np = gEl('np');
+  var nn = gEl('nn');
+  if(!np || !nn) return; // botones removidos
+  np.style.display=pg===0?'none':'';
   if(pg===1){ nn.textContent='💾 Guardar'; nn.onclick=save; }
   else if(pg===5){ nn.textContent='💾 Guardar'; nn.onclick=save; }
   else if(pg===7){ nn.textContent='💾 Guardar'; nn.onclick=save; }
   // V20_65: pg=2 (Trabajadores) y pg=3 (Grupales) son donde el surquero pasa la mayor parte del tiempo.
-  // Antes solo decía "Siguiente →" → no había forma manual de guardar sin navegar.
-  // Ahora "💾 + Siguiente →" recuerda visualmente que el botón también guarda (vía nextSave).
   else if(pg===2 || pg===3){ nn.textContent='💾 + Siguiente →'; nn.onclick=nextSave; }
   else { nn.textContent='Siguiente →'; nn.onclick=next; }
 }
