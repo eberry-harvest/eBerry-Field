@@ -15,15 +15,18 @@
 <link rel="manifest" id="manifestLink">
 <script>
 // V20_91_21: Manifest PWA con iconos reales de eBerry (PNG raster para iOS + Android)
+// V20_98: URLs absolutas para evitar warnings 'URL is invalid' contra el blob: URL.
+// Las rutas relativas se resuelven contra el blob URL del manifest en vez de la página.
 (function(){
-  var base = (location.pathname.replace(/[^\/]*$/,'')||'./');
+  var base = (location.pathname.replace(/[^\/]*$/,'')||'/');
+  var absBase = location.origin + base;
   var manifest = {
-    name:'eBerry Field', short_name:'eBerry', start_url:base, display:'standalone',
+    name:'eBerry Field', short_name:'eBerry', start_url: absBase, display:'standalone',
     background_color:'#ffffff', theme_color:'#1a2b8c',
     icons:[
-      {src:'icon-192.png', sizes:'192x192', type:'image/png'},
-      {src:'icon-512.png', sizes:'512x512', type:'image/png'},
-      {src:'icon-512.png', sizes:'512x512', type:'image/png', purpose:'maskable'}
+      {src: absBase + 'icon-192.png', sizes:'192x192', type:'image/png'},
+      {src: absBase + 'icon-512.png', sizes:'512x512', type:'image/png'},
+      {src: absBase + 'icon-512.png', sizes:'512x512', type:'image/png', purpose:'maskable'}
     ]
   };
   var blob = new Blob([JSON.stringify(manifest)],{type:'application/json'});
@@ -32,7 +35,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_97';
+window.APP_VERSION = 'V20_98';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -4522,6 +4525,49 @@ var _qrScanCount = 0;
 var _qrRecycleEvery = 5;
 var _qrWatchdogTimer = null;
 
+// V20_98: flag global para evitar dobles llamadas durante transición de Html5Qrcode.
+// Html5Qrcode no permite start()/clear() mientras está en estados internos PAUSED/STARTING/STOPPING.
+// Tirar errores: "Cannot transition to a new state, already under transition" y
+// "Cannot clear while scan is ongoing, close it first."
+var _qrTransitioning = false;
+
+// V20_98: helper que devuelve Promise — espera a que el scanner deje de estar en transición
+function _qrWaitStable(maxWaitMs){
+  return new Promise(function(resolve){
+    var deadline = Date.now() + (maxWaitMs || 3000);
+    function check(){
+      if(!_qrTransitioning) return resolve(true);
+      if(Date.now() > deadline){
+        console.warn('[V20_98] _qrWaitStable timeout — forzando resolve');
+        _qrTransitioning = false; // safety: liberar el flag
+        return resolve(false);
+      }
+      setTimeout(check, 50);
+    }
+    check();
+  });
+}
+
+// V20_98: parar el scanner y esperar correctamente que la Promise resuelva
+function _qrStopSafe(){
+  return new Promise(function(resolve){
+    if(!qrScanner){ resolve(); return; }
+    var st;
+    try { st = qrScanner.getState(); } catch(_e){ resolve(); return; }
+    // Estados Html5QrcodeScannerState: 1=NOT_STARTED, 2=SCANNING, 3=PAUSED
+    if(st !== 2 && st !== 3){ resolve(); return; }
+    _qrTransitioning = true;
+    qrScanner.stop().then(function(){
+      _qrTransitioning = false;
+      resolve();
+    }).catch(function(e){
+      console.warn('[V20_98] _qrStopSafe error:', e);
+      _qrTransitioning = false;
+      resolve();
+    });
+  });
+}
+
 function startQR(){
   var ov = gEl('qrOv');
   ov.classList.add('on');
@@ -4574,7 +4620,15 @@ function startQR(){
 function pauseQR(){
   // Pausa la cámara sin cerrar el overlay (para mostrar modales encima)
   if(!qrActive) return; // V20_85: simetría con resumeQR — no pausar si ya se cerró
-  if(qrScanner){ qrScanner.stop().catch(function(){}); }
+  if(qrScanner){
+    // V20_98: marcar transición durante stop para que resumeQR/recycle no choquen
+    _qrTransitioning = true;
+    qrScanner.stop().then(function(){
+      _qrTransitioning = false;
+    }).catch(function(){
+      _qrTransitioning = false;
+    });
+  }
 }
 // V20_02-FIX: guard anti-concurrencia en resumeQR
 var _qrResuming = false;
@@ -4587,6 +4641,13 @@ function resumeQR(){
     _qrScanCount = 0;
     console.warn('[V20_96] Reciclando cámara QR tras', _qrRecycleEvery, 'escaneos');
     _recycleQRCamera();
+    return;
+  }
+  // V20_98: si ya está en transición, posponer en vez de chocar con
+  // "Cannot transition to a new state, already under transition"
+  if(_qrTransitioning){
+    console.warn('[V20_98] resumeQR: en transición, posponiendo 500ms');
+    setTimeout(resumeQR, 500);
     return;
   }
   _qrResuming = true;
@@ -4602,11 +4663,17 @@ function resumeQR(){
   setTimeout(function(){
     _qrResuming = false;
     if(qrScanner && qrActive){
+      _qrTransitioning = true; // V20_98: marcar transición durante start
       qrScanner.start(
         { facingMode: "environment" },
         { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 },
         onQRSuccess, function(){}
-      ).catch(function(err){ setQRStatus('⚠️ Error al reanudar cámara','err'); });
+      ).then(function(){
+        _qrTransitioning = false; // V20_98: liberar tras start exitoso
+      }).catch(function(err){
+        _qrTransitioning = false; // V20_98: liberar también en error
+        setQRStatus('⚠️ Error al reanudar cámara','err');
+      });
     }
   }, 500);
 }
@@ -4623,55 +4690,62 @@ function stopQR(){
   _qrScanCount = 0;
   // 2) Cerrar overlay PRIMERO (UX inmediata, no esperar a la cámara)
   gEl('qrOv').classList.remove('on');
-  // 3) Detener scanner solo si está realmente escaneando (state===2)
+  // 3) V20_98: usar _qrStopSafe que maneja el flag _qrTransitioning correctamente.
+  // Antes (V20_85): try/catch con stop().then(clear) — pero si stop fallaba el catch
+  // dejaba el scanner sin clear ni state limpio. _qrStopSafe espera la Promise correctamente.
   if(qrScanner){
-    try {
-      var st = (qrScanner.getState && qrScanner.getState());
-      if(st === 2){ // SCANNING
-        qrScanner.stop().then(function(){
-          try{ qrScanner.clear(); }catch(e){}
-          qrScanner = null;
-        }).catch(function(){ qrScanner = null; });
-      } else {
-        try{ qrScanner.clear(); }catch(e){}
-        qrScanner = null;
+    _qrStopSafe().then(function(){
+      if(qrScanner){
+        try{ qrScanner.clear(); }catch(e){ console.warn('[V20_98] stopQR clear error:', e); }
       }
-    } catch(e){ qrScanner = null; }
+      qrScanner = null;
+    }).catch(function(){ qrScanner = null; });
   }
 }
 
-// V20_96: recreate Html5Qrcode para liberar MediaStream colgado en Android.
-// Después de N escaneos seguidos (o cuando el watchdog detecta cámara muerta), se hace
-// stop+clear+new instance manteniendo el modal abierto. Sin esto la cámara queda en
-// blanco tras 5 escaneos en Chrome Android.
+// V20_98: recreate Html5Qrcode con cadena correcta de promesas — evita
+// "Cannot transition to a new state, already under transition" y
+// "Cannot clear while scan is ongoing, close it first."
+// Antes (V20_96): el .then() después del stop llamaba clear() pero el catch silenciaba
+// el error y disparaba el .then() igual aunque stop no hubiera completado → clear ejecutaba
+// con scan ongoing. Y no había guard contra doble entrada en transición.
 function _recycleQRCamera(){
   if(!qrActive) return;
-  try{
-    if(qrScanner && qrScanner.getState() === 2){
-      qrScanner.stop().catch(function(e){ console.warn('[V20_96] stop error en recycle:', e); }).then(function(){
-        try{ qrScanner.clear(); }catch(_e){}
-        qrScanner = null;
-        setTimeout(function(){
-          if(!qrActive) return;
-          try{
-            qrScanner = new Html5Qrcode("qrReader");
-            qrScanner.start({facingMode:'environment'},
-              {fps:10, qrbox:{width:240, height:240}},
-              onQRSuccess,
-              function(){}
-            ).catch(function(err){
-              console.warn('[V20_96] start error en recycle:', err);
-              setQRStatus('⚠️ Error al reciclar cámara — cierre y reabra el QR','err');
-            });
-          }catch(e){
-            console.warn('[V20_96] excepción al recrear scanner:', e);
-          }
-        }, 400);
-      });
-    }
-  }catch(e){
-    console.warn('[V20_96] excepción en _recycleQRCamera:', e);
+  if(_qrTransitioning){
+    console.warn('[V20_98] _recycleQRCamera: ya en transición, omitiendo');
+    return;
   }
+  _qrTransitioning = true;
+  console.warn('[V20_98] Reciclando cámara QR');
+  _qrStopSafe().then(function(){
+    // stop completó — ahora clear es seguro
+    if(qrScanner){
+      try{ qrScanner.clear(); }catch(e){ console.warn('[V20_98] clear error post-stop:', e); }
+    }
+    qrScanner = null;
+    return new Promise(function(r){ setTimeout(r, 400); });
+  }).then(function(){
+    if(!qrActive){ _qrTransitioning = false; return; }
+    try{
+      qrScanner = new Html5Qrcode("qrReader");
+      _qrTransitioning = true; // start es transición
+      return qrScanner.start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: { width: 240, height: 240 } },
+        onQRSuccess,
+        function(){}
+      );
+    }catch(e){
+      console.warn('[V20_98] excepción al recrear scanner:', e);
+      _qrTransitioning = false;
+    }
+  }).then(function(){
+    _qrTransitioning = false;
+  }).catch(function(err){
+    console.warn('[V20_98] start error en recycle:', err);
+    _qrTransitioning = false;
+    setQRStatus('⚠️ Error al reciclar cámara — cierre y reabra el QR','err');
+  });
 }
 
 // V10: Pausa QR automática — observa TODOS los overlays, incluyendo dinámicos
