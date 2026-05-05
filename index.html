@@ -35,7 +35,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_98';
+window.APP_VERSION = 'V20_99';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -7641,10 +7641,23 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
         if(wActName4===col4Name && wActTipo4===(col4.tipo||'') && wActFinca4===col4Finca){
           var act2=wks[w2].acts[a2];
           if(!unitPr){
-            // V20_38: usar _unitPrice preservado del worker cuando ACTS[ai] no existe (admin ve otro rancho)
-            if(act2.unitPrice) unitPr='$'+parseFloat(act2.unitPrice).toFixed(2);
-            else if(act2._unitPrice) unitPr='$'+parseFloat(act2._unitPrice).toFixed(2);
-            else if(ACTS[col4.ai]&&ACTS[col4.ai].p) unitPr='$'+parseFloat(ACTS[col4.ai].p).toFixed(2);
+            // V20_99 FIX: si la columna es Hora, mostrar contractRate del primer worker representativo (puede variar entre workers)
+            if(col4.hr && wks.length){
+              var _crFirst = 0;
+              for(var _wf=0; _wf<wks.length; _wf++){
+                var _wfh = parseFloat(wks[_wf].contractRate);
+                if(_wfh > 0 && isFinite(_wfh)){ _crFirst = _wfh; break; }
+              }
+              if(_crFirst > 0) unitPr='$'+_crFirst.toFixed(2)+'/hr';
+              else if(act2.unitPrice) unitPr='$'+parseFloat(act2.unitPrice).toFixed(2);
+              else if(act2._unitPrice) unitPr='$'+parseFloat(act2._unitPrice).toFixed(2);
+              else if(ACTS[col4.ai]&&ACTS[col4.ai].p) unitPr='$'+parseFloat(ACTS[col4.ai].p).toFixed(2);
+            } else {
+              // V20_38: usar _unitPrice preservado del worker cuando ACTS[ai] no existe (admin ve otro rancho)
+              if(act2.unitPrice) unitPr='$'+parseFloat(act2.unitPrice).toFixed(2);
+              else if(act2._unitPrice) unitPr='$'+parseFloat(act2._unitPrice).toFixed(2);
+              else if(ACTS[col4.ai]&&ACTS[col4.ai].p) unitPr='$'+parseFloat(ACTS[col4.ai].p).toFixed(2);
+            }
           }
           if(!laborLbl && act2.finca) laborLbl=act2.finca;
           if(unitPr&&laborLbl) break;
@@ -7652,7 +7665,20 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
       }
       if(unitPr && laborLbl) break;
     }
-    if(!unitPr&&ACTS[col4.ai]&&ACTS[col4.ai].p) unitPr='$'+parseFloat(ACTS[col4.ai].p).toFixed(2);
+    // V20_99 FIX: fallback final también respeta Hora con contractRate
+    if(!unitPr){
+      if(col4.hr && wks.length){
+        var _crFirst2 = 0;
+        for(var _wf2=0; _wf2<wks.length; _wf2++){
+          var _wfh2 = parseFloat(wks[_wf2].contractRate);
+          if(_wfh2 > 0 && isFinite(_wfh2)){ _crFirst2 = _wfh2; break; }
+        }
+        if(_crFirst2 > 0) unitPr='$'+_crFirst2.toFixed(2)+'/hr';
+        else if(ACTS[col4.ai]&&ACTS[col4.ai].p) unitPr='$'+parseFloat(ACTS[col4.ai].p).toFixed(2);
+      } else if(ACTS[col4.ai]&&ACTS[col4.ai].p) {
+        unitPr='$'+parseFloat(ACTS[col4.ai].p).toFixed(2);
+      }
+    }
     var _csp=_NS>1?' colspan="'+_NS+'"':'';
     // V20_81: detectar VarDoor con factor (col P) → emitir TOTAL como "X.XXXX acres / X puertas"
     // Paridad con grupales puertas (L6324-6331). Aplica a single-shift (totLbl) y multi-shift (rama nueva).
@@ -8761,11 +8787,13 @@ function sendToSheets() {
         payload.workers.push(found);
       }
 
+      // V20_99 FIX: para grupales tipo Hora cada participante usa SU contractRate, no el precio del catálogo
+      var uPriceGrp = (ct === 'hora') ? (getHRate(w, act) || unitP) : unitP;
       found.acts.push({
         actEs:      act.es,
         actEn:      act.en || act.es,
         tipo:       ct === 'hora' ? 'Hora' : (act.tipo || ct.charAt(0).toUpperCase() + ct.slice(1)),
-        unitPrice:  unitP,
+        unitPrice:  uPriceGrp,
         qty:        Math.round(qtyPerPerson * 100) / 100,
         totalHours: ct === 'hora' ? qtyPerPerson : '',
         finca:      g.vars.labor || gVal('finca'),
@@ -12589,6 +12617,8 @@ function generateSemPDF(){
   // Gamma2-V9: Columnas múltiples por día si hay horarios distintos entre workers
   var unitPrice = selAct ? (parseFloat(selAct.p)||0) : 0;
   var tipoLabel = isHour ? 'hr' : ((selAct&&selAct.tipo)||'pza');
+  // V20_99 FIX: en semanal Hora, mostrar contractRate del worker representativo en su fila (no precio del catálogo)
+  var _isHourSem = selAct && (typeof isHourAct === 'function' ? isHourAct(selAct) : !!selAct.hr);
 
   // ── Paso 1: Recopilar datos + horarios por worker por día ──
   var workerData = [];
@@ -12690,10 +12720,19 @@ function generateSemPDF(){
   html += '<td style="'+metaStyle+';background:#0f1a3d;color:#fff;font-weight:900;border-top:3px solid #1a2b8c">'+smartNum(grandTotal)+'</td></tr>';
 
   // Fila Pago Unit.
+  // V20_99 FIX: en semanal Hora, mostrar contractRate del primer worker con rate>0 (representativo) en lugar del precio del catálogo
+  var _semUnitDisplay = unitPrice;
+  if(_isHourSem){
+    for(var _wsf=0; _wsf<workers.length; _wsf++){
+      var _crSF = parseFloat(workers[_wsf].contractRate)||0;
+      if(_crSF > 0 && isFinite(_crSF)){ _semUnitDisplay = _crSF; break; }
+    }
+  }
+  var _semUnitSuffix = _isHourSem ? '/hr' : '';
   html += '<tr style="background:#fff"><td style="'+metaEmpty+'"></td><td style="'+metaEmpty+'"></td>'
     +'<td style="'+metaLabel+';color:#000">Pago Unit.</td>';
   for(var c=0;c<dayCols.length;c++){
-    html += '<td style="'+metaStyle+';color:#c0392b;font-weight:700">$'+unitPrice.toFixed(2)+'</td>';
+    html += '<td style="'+metaStyle+';color:#c0392b;font-weight:700">$'+_semUnitDisplay.toFixed(2)+_semUnitSuffix+'</td>';
   }
   html += '<td style="'+metaEmpty+'"></td></tr>';
 
@@ -12798,6 +12837,29 @@ function sendSemToSheets(){
   var surqueroName = gVal('surquero') || '';
   if(currentUser && currentUser.isAdmin) surqueroName = ADMIN_USER_NAME;
 
+  // V20_99: hidratar contractRate de cada worker antes de armar payload semanal
+  for(var _whi=0; _whi<workers.length; _whi++){
+    if(typeof _hidratarContractRate95 === 'function') _hidratarContractRate95(workers[_whi]);
+  }
+
+  // V20_99: validador pre-envío semanal — si actividad es Hora, todos los workers deben tener contractRate
+  var _isHourSem99 = selAct && (typeof isHourAct === 'function' ? isHourAct(selAct) : !!selAct.hr);
+  if(_isHourSem99){
+    var _missingCRSem99 = [];
+    for(var _wsi=0; _wsi<workers.length; _wsi++){
+      var _wkSem = workers[_wsi];
+      if(!_wkSem) continue;
+      var _crSem = parseFloat(_wkSem.contractRate)||0;
+      if(!(_crSem > 0 && isFinite(_crSem))){
+        _missingCRSem99.push((typeof esc==='function'?esc(_wkSem.name):_wkSem.name)||'?');
+      }
+    }
+    if(_missingCRSem99.length){
+      alert('⚠️ FALTA CONTRACT RATE — SEMANAL\n\nLa actividad seleccionada es por HORA. Los siguientes trabajadores NO tienen Contract Rate (col G del MASTER ACTIVOS):\n\n• ' + _missingCRSem99.join('\n• ') + '\n\nNo se puede enviar — Cindy recibiría $14 (precio del catálogo) en vez del rate real de cada uno.\n\nRevisa col G del MASTER ACTIVOS de estos trabajadores.');
+      return;
+    }
+  }
+
   var payload = {
     action: 'semanal',
     weekStart: weekStart,
@@ -12807,13 +12869,19 @@ function sendSemToSheets(){
     actEs: selAct ? selAct.es : '',
     actEn: selAct ? (selAct.en||selAct.es) : '',
     tipo: isHour ? 'Hora' : (selAct?selAct.tipo:''),
+    // V20_99 FIX: cuando es Hora, payload.unitPrice queda como fallback. Cada worker manda su contractRate per-row (FieldSync v5.27 lo lee).
     unitPrice: selAct ? selAct.p : 0,
     workers: []
   };
 
   for(var w=0;w<workers.length;w++){
     var wk = workers[w];
-    var row = {name:wk.name, empNum:wk.empNum||'', days:[]};
+    var row = {
+      name: wk.name,
+      empNum: wk.empNum||'',
+      contractRate: parseFloat(wk.contractRate)||0,  // V20_99 FIX: per-worker para Hora
+      days: []
+    };
     var anyData = false;
 
     for(var d=0;d<7;d++){
