@@ -35,7 +35,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_99';
+window.APP_VERSION = 'V20_101';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -1502,7 +1502,9 @@ body.readOnly [onclick*="openNewDay"]{display:none !important}
       </div>
       <div style="flex:1;min-width:120px">
         <label style="font-size:11px;font-weight:700;color:var(--dk)">FINCA / LABOR</label>
-        <input type="text" id="semFinca" placeholder="Labor" oninput="saveSemData()" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:8px;font-size:14px">
+        <!-- V20_101 MANZANITA 2: semFinca slot dinámico (dropdown si hay catálogo, input libre fallback) -->
+        <div id="semFincaSlot"></div>
+        <input type="hidden" id="semFinca" data-save>
       </div>
     </div>
   </div>
@@ -2619,6 +2621,8 @@ function loadSheetsData(){
         if(cached) FINCAS_POR_RANCHO = JSON.parse(cached);
       } catch(e){}
     }
+    // V20_101 MANZANITA 2: refrescar dropdown finca semanal con catálogo recién cargado
+    try { if(typeof renderSemFinca === 'function') renderSemFinca(); } catch(e){}
   });
 }
 
@@ -4412,6 +4416,49 @@ function renderParamsFinca(){
     hidden.value = ''; // limpiar finca residual
   }
 }
+
+// V20_101 MANZANITA 2: renderiza semFinca como dropdown si hay catálogo, input libre fallback
+function renderSemFinca(){
+  var slot = gEl('semFincaSlot');
+  if(!slot) return;
+  var rancho = (gVal('semRancho')||'').toLowerCase();
+  var hidden = gEl('semFinca');
+  var prevVal = (hidden ? hidden.value : '') || '';
+  var fincas = (typeof FINCAS_POR_RANCHO!=='undefined' && rancho && FINCAS_POR_RANCHO[rancho]) ? FINCAS_POR_RANCHO[rancho] : null;
+  if(fincas && fincas.length){
+    // dropdown cerrado
+    var html = '<select id="semFincaSel" onchange="onSemFincaChange()" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:8px;font-size:14px">';
+    html += '<option value="">— Selecciona finca —</option>';
+    var found = false;
+    for(var i=0; i<fincas.length; i++){
+      var sel = (prevVal === fincas[i]) ? ' selected' : '';
+      if(sel) found = true;
+      html += '<option value="'+esc(fincas[i])+'"'+sel+'>'+esc(fincas[i])+'</option>';
+    }
+    // si valor previo no está en catálogo, agregar opción legacy
+    if(prevVal && !found){
+      html += '<option value="'+esc(prevVal)+'" selected>⚠️ '+esc(prevVal)+' (legacy)</option>';
+    }
+    html += '</select>';
+    slot.innerHTML = html;
+  } else {
+    // fallback input libre
+    slot.innerHTML = '<input type="text" id="semFincaText" value="'+esc(prevVal)+'" oninput="onSemFincaChange()" placeholder="Labor" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:8px;font-size:14px">';
+  }
+}
+
+// V20_101 MANZANITA 2: handler unificado para dropdown y input libre semFinca
+function onSemFincaChange(){
+  var sel = gEl('semFincaSel');
+  var txt = gEl('semFincaText');
+  var hidden = gEl('semFinca');
+  if(hidden){
+    if(sel) hidden.value = sel.value || '';
+    else if(txt) hidden.value = txt.value || '';
+  }
+  if(typeof saveSemData === 'function') saveSemData();
+}
+
 function updBanner(){
   var h=nh(gVal('hEnt'),gVal('hSal'));
   // V18: banner en 12h AM/PM
@@ -8636,6 +8683,35 @@ function sendToSheets() {
       }
     }
   }
+  // V20_101 MANZANITA 1: extender validador a participantes solo-grupales con CR=0 en grupales tipo Hora
+  if(typeof grpActs !== 'undefined' && grpActs && grpActs.length){
+    for(var _gi95=0; _gi95<grpActs.length; _gi95++){
+      var _g95 = grpActs[_gi95];
+      if(!_g95 || !_g95.participantes || !_g95.participantes.length) continue;
+      var _gAct95 = (typeof GRUPAL_ACTS!=='undefined' && GRUPAL_ACTS[_g95.gai]) ? GRUPAL_ACTS[_g95.gai] : null;
+      if(!_gAct95) continue;
+      var _gCt95 = (typeof grpCalcType==='function') ? grpCalcType(_gAct95) : '';
+      if(_gCt95 !== 'hora') continue; // solo grupales tipo Hora
+      // iterar participantes y validar contractRate (puede haber participantes solo-grupales no en workers[])
+      for(var _gpi=0; _gpi<_g95.participantes.length; _gpi++){
+        var _pid = _g95.participantes[_gpi];
+        var _pw = null;
+        if(typeof getW==='function') _pw = getW(_pid);
+        if(!_pw){ // fallback: buscar en workers[] por id
+          for(var _kw=0; _kw<workers.length; _kw++){ if(workers[_kw] && workers[_kw].id===_pid){ _pw = workers[_kw]; break; } }
+        }
+        if(!_pw) continue;
+        // hidratar primero por si race condition
+        if(typeof _hidratarContractRate95==='function') _hidratarContractRate95(_pw);
+        var _crP = parseFloat(_pw.contractRate)||0;
+        if(!(_crP > 0 && isFinite(_crP))){
+          var _nm = (typeof esc==='function'?esc(_pw.name):_pw.name)||'?';
+          // evitar duplicado si ya está en _missingCR95
+          if(_missingCR95.indexOf(_nm) === -1) _missingCR95.push(_nm);
+        }
+      }
+    }
+  }
   if(_missingCR95.length){
     alert('⚠️ FALTA CONTRACT RATE\n\nLos siguientes trabajadores tienen actividad por HORA pero NO tienen Contract Rate (col G del MASTER ACTIVOS):\n\n• ' + _missingCR95.join('\n• ') + '\n\nNo se puede enviar — Cindy recibiría $14 (precio del catálogo) en vez del rate real de cada uno.\n\nRevisa col G del MASTER ACTIVOS de estos trabajadores.');
     return;
@@ -8724,7 +8800,9 @@ function sendToSheets() {
         unitPrice:  0,
         qty:        '',
         totalHours: '',
-        motivo:     mot
+        motivo:     mot,
+        // V20_100 FIX: ausencias ahora también mandan finca (estaba ausente del payload).
+        finca:      gVal('finca') || ''
       }]
     });
     ausSent++;
@@ -8796,7 +8874,8 @@ function sendToSheets() {
         unitPrice:  uPriceGrp,
         qty:        Math.round(qtyPerPerson * 100) / 100,
         totalHours: ct === 'hora' ? qtyPerPerson : '',
-        finca:      g.vars.labor || gVal('finca'),
+        // V20_100 FIX: era 'g.vars.labor' (typo nunca asignado), correcto es 'g.vars.finca'. Por esto la finca no llegaba a FIELD_DROP de grupales aunque el PDF sí la mostraba.
+        finca:      g.vars.finca || gVal('finca'),
         hEnt:       g.vars.ini || '',   // V12-BUG2: horarios grupales (antes no se enviaban)
         hSal:       g.vars.fin || '',
         hLIni:      gVal('lIni') || '',
@@ -10276,6 +10355,8 @@ function refreshDataBackground(){
     }
     // V20_42: refrescar dropdown de finca en Parámetros con el catálogo recién cargado
     try { if(typeof renderParamsFinca === 'function') renderParamsFinca(); } catch(e){}
+    // V20_101 MANZANITA 2: refrescar también el dropdown de finca semanal
+    try { if(typeof renderSemFinca === 'function') renderSemFinca(); } catch(e){}
   });
 }
 
@@ -12087,6 +12168,9 @@ function initSemTab(){
 
   // Paso 2: AHORA sí restaurar datos guardados (semActivity ya tiene opciones)
   loadSemData();
+
+  // V20_101 MANZANITA 2: tras restaurar el hidden value, renderizar el slot visible
+  try { renderSemFinca(); } catch(e){ console.warn('V20_101 renderSemFinca fallo:', e); }
 }
 
 // Gamma2-V5: Mostrar TODAS las actividades individuales del rancho (no solo Hora)
@@ -12128,6 +12212,9 @@ function onSemRanchoChange(){
     noOpt.textContent = '⚠️ No hay actividades individuales para ' + rancho;
     sel.appendChild(noOpt);
   }
+
+  // V20_101 MANZANITA 2: refrescar slot finca con catálogo del rancho recién seleccionado
+  try { renderSemFinca(); } catch(e){ console.warn('V20_101 renderSemFinca fallo:', e); }
 }
 
 function onSemWeekChange(){
@@ -12489,6 +12576,8 @@ function loadSemData(){
           gEl('semActivity').value = d.actIdx || '';
           gEl('semRancho').value = d.rancho || '';
           gEl('semFinca').value = d.finca || '';
+          // V20_101 MANZANITA 2: refrescar slot tras restaurar el hidden
+          try { if(typeof renderSemFinca === 'function') renderSemFinca(); } catch(e){}
           buildSemTable();
           return;
         }
@@ -12505,6 +12594,8 @@ function loadSemData(){
           gEl('semActivity').value = d.actIdx || '';
           gEl('semRancho').value = d.rancho || '';
           gEl('semFinca').value = d.finca || '';
+          // V20_101 MANZANITA 2: refrescar slot tras restaurar el hidden
+          try { if(typeof renderSemFinca === 'function') renderSemFinca(); } catch(e){}
           buildSemTable();
           return;
         }
