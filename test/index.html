@@ -34,7 +34,7 @@
 </script>
 <script>
 // V50 (port V20_23): estandarización de colores PDF
-window.APP_VERSION = 'V112';
+window.APP_VERSION = 'V114';
 (function(){
   // V86 (port V20_77): AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Si _ackedVersion === APP_VERSION cargado, ese ack ya cumplió → limpiar para que próximas updates lleguen.
@@ -1400,9 +1400,7 @@ body { padding-bottom: 90px; }
       <!-- V101_29: bypass admin para reportes retroactivos -->
       <button id="btnAdminBypass" class="btn" onclick="activarAdminBypass()" style="display:none;background:#e67e22;color:#fff;width:100%;min-height:50px;margin-top:8px;border:2px dashed #c0392b;border-radius:8px;font-weight:700">🔧 Modo admin — registro retroactivo</button>
       <!-- V112: agregar a lápiz cuando trabajador no tiene QR físico -->
-      <button id="btnLapizChofer" class="btn" onclick="abrirLapizChofer()" style="display:none;background:#fff;color:#1a2b8c;border:2px dashed #1a2b8c;width:100%;min-height:50px;margin-top:8px;border-radius:8px;font-weight:700">✏️ Agregar Chofer a lápiz</button>
-      <button id="btnLapizSurquero" class="btn" onclick="abrirLapizSurquero()" style="display:none;background:#fff;color:#5eba45;border:2px dashed #5eba45;width:100%;min-height:50px;margin-top:8px;border-radius:8px;font-weight:700">✏️ Agregar Surquero a lápiz</button>
-      <button id="btnLapizCombinado" class="btn" onclick="abrirLapizCombinado()" style="display:none;background:#fff;color:#27ae60;border:2px dashed #27ae60;width:100%;min-height:50px;margin-top:8px;border-radius:8px;font-weight:700">✏️ Chofer y Surquero a lápiz</button>
+      <!-- V114 FASE A (paridad V20_105): 3 botones a lápiz eliminados — redundantes con "Escribir nombre" del bottom-sheet -->
     </div>
     <div id="iniciarDiaStatus"></div>
   </div>
@@ -2677,6 +2675,16 @@ function loadSheetsData(){
         console.log('✅ ALL_ACTS cargó correctamente: ' + ALL_ACTS.length + ' actividades, ' + ALL_WORKERS.length + ' workers');
         _hideFallbackBanner(); // Delta2: quitar banner si existía
       }
+      // V113 FASE 2A (paridad V20_104): validar Variable cargada al final del login
+      try {
+        var _missingVar = _validateActsHaveVariable();
+        if(_missingVar.length){
+          console.warn('[V113] MASTER incompleto:', _missingVar);
+          setTimeout(function(){
+            if(typeof toast === 'function') toast('⚠️ MASTER incompleto: ' + _missingVar.length + ' tasks sin Variable');
+          }, 800);
+        }
+      } catch(e){ console.warn('[V113 FASE 2A] validación:', e); }
       showLogin();
     }
   }
@@ -2796,6 +2804,30 @@ function loadSheetsData(){
 
 // V56 (port V20_29): Catálogo de fincas por rancho (desde Master Sheet)
 var FINCAS_POR_RANCHO = {};
+
+// V113 FASE 2A (paridad V20_104): validar que cada task del MASTER tenga col G Variable
+// con valor reconocido (VarQty/VarPsc/VarBox/VarDoor). Tasks sin Variable se loggean y
+// se muestra toast — NO bloquea login (deja al admin/surquero ver el problema).
+function _validateActsHaveVariable(){
+  var missing = [];
+  var validVars = ['varqty','varpsc','varbox','vardoor'];
+  var checkArr = function(arr, label){
+    if(!arr) return;
+    for(var i=0; i<arr.length; i++){
+      var a = arr[i];
+      if(!a || !a.es) continue;
+      var t = (a.tipo||'').toLowerCase();
+      if(t === 'hora' || t === '$' || t === 'monto') continue;
+      var v = (a.variable||'').toLowerCase().trim();
+      if(!v || validVars.indexOf(v) < 0){
+        missing.push(label + ': ' + (a.es||'?') + ' (rancho ' + (a.farm||'?') + ')');
+      }
+    }
+  };
+  checkArr(typeof ALL_ACTS !== 'undefined' ? ALL_ACTS : null, 'Individual');
+  checkArr(typeof GRUPAL_ACTS !== 'undefined' ? GRUPAL_ACTS : null, 'Grupal');
+  return missing;
+}
 
 // Build LIDERES list from ALL_WORKERS where lider column = "Surquero"
 function buildLideres(){
@@ -3574,19 +3606,13 @@ function _renderIniciarDia(){
   var btnSurq = gEl('btnScanSurquero');
   var btnDual = gEl('btnScanChoferSurquero');
   var btnBypass = gEl('btnAdminBypass');
-  // V112: botones a lápiz paralelos a los QR (paridad V20_103)
-  var btnLapizCh = gEl('btnLapizChofer');
-  var btnLapizSq = gEl('btnLapizSurquero');
-  var btnLapizCb = gEl('btnLapizCombinado');
+  // V114 FASE A (paridad V20_105): 3 botones a lápiz eliminados (redundantes con "Escribir nombre")
   // V101_29: si admin activó bypass, ocultar todos los botones de inicio
   if(_dayFlow.adminBypass){
     if(btnChofer) btnChofer.style.display = 'none';
     if(btnSurq)   btnSurq.style.display = 'none';
     if(btnDual)   btnDual.style.display = 'none';
     if(btnBypass) btnBypass.style.display = 'none';
-    if(btnLapizCh) btnLapizCh.style.display = 'none';
-    if(btnLapizSq) btnLapizSq.style.display = 'none';
-    if(btnLapizCb) btnLapizCb.style.display = 'none';
     status.innerHTML = '<div style="padding:11px 12px;border:1.5px dashed #c0392b;border-radius:8px;background:#fff3cd;color:#c0392b;font-weight:700;margin-bottom:8px">🔧 MODO ADMIN — registro retroactivo activo</div>';
     return;
   }
@@ -3595,10 +3621,6 @@ function _renderIniciarDia(){
   if(btnChofer){ btnChofer.disabled = false; btnChofer.style.opacity = '1'; btnChofer.style.display=''; }
   if(btnSurq){ btnSurq.disabled = !_dayFlow.choferScanned; btnSurq.style.opacity = _dayFlow.choferScanned ? '1' : '.5'; btnSurq.style.display=''; }
   if(btnDual){ btnDual.disabled = false; btnDual.style.opacity = '1'; btnDual.style.display=''; }
-  // V112: lápiz visibilidad paralela a QR (paridad V20_103)
-  if(btnLapizCh) btnLapizCh.style.display = '';
-  if(btnLapizSq){ btnLapizSq.style.display = ''; btnLapizSq.disabled = !_dayFlow.choferScanned; btnLapizSq.style.opacity = _dayFlow.choferScanned ? '1' : '.5'; }
-  if(btnLapizCb) btnLapizCb.style.display = '';
   var html = '';
   // V105 FIX (paridad V20_96): chip ahora acepta `undoFn` para mostrar linkcito ↶ Deshacer
   function _chip(emoji, label, time, undoFn){
@@ -3615,9 +3637,7 @@ function _renderIniciarDia(){
     }
     if(btnChofer) btnChofer.style.display = 'none';
     if(btnDual) btnDual.style.display = 'none';
-    // V112: ocultar lápices equivalentes
-    if(btnLapizCh) btnLapizCh.style.display = 'none';
-    if(btnLapizCb) btnLapizCb.style.display = 'none';
+    // V114 FASE A (paridad V20_105): lápices eliminados
   }
   if(_dayFlow.surqueroScanned && _dayFlow.surqueroWorkerId != null && _dayFlow.surqueroWorkerId !== _dayFlow.choferWorkerId){
     var wSq = getW(_dayFlow.surqueroWorkerId);
@@ -3626,8 +3646,7 @@ function _renderIniciarDia(){
       html += _chip('✅', 'Surquero: ' + esc(wSq.name), wSq.checkInTime || '—', undoSq);
     }
     if(btnSurq) btnSurq.style.display = 'none';
-    // V112: ocultar lápiz equivalente
-    if(btnLapizSq) btnLapizSq.style.display = 'none';
+    // V114 FASE A (paridad V20_105): lápiz surquero eliminado
   }
   status.innerHTML = html;
 }
@@ -4983,7 +5002,8 @@ function startQR(){
     if(currentUser.isAdmin){
       _showPinBypass = true;
     } else {
-      var _modesPinOk = ['surquero','choferSurquero','manualConfirm','coCuadrilla','coChofer','coSurq'];
+      // V114 FASE C (paridad V20_105): agregado 'chofer' para tirita PIN
+      var _modesPinOk = ['chofer','surquero','choferSurquero','manualConfirm','coCuadrilla','coChofer','coSurq'];
       if(_modesPinOk.indexOf(_qrMode) >= 0) _showPinBypass = true;
     }
   }
@@ -5815,67 +5835,9 @@ function mkActRow(wid_,ai,_cont){
   if(a.qty||(a.ini&&a.fin)) recalc(wid_,ai);
 }
 
-// ── V4: Sistema individual simplificado — Total Pies + Ancho de cama ──
-// Puertas = pies÷100 → pago = puertas×precio
-// Acres = (pies × anchoCama) ÷ 43560
-function renderIndSurcos(wi,ai){
-  var w=getW(wi); if(!w||!w.acts[ai]) return;
-  var a=w.acts[ai]; var act=ACTS[a.ai]; if(!act) return;
-  var cont=gEl('indSurco_'+wi+'_'+ai); if(!cont) return;
-  // V41 (port V20_14): individual = comportamiento legacy (pies/100). Sin tratamiento Pennrose5Act.
-  var totalPies=parseFloat(a.indPies)||0;
-  var anchoCama=parseFloat(a.indAncho)||0;
-  var puertas=totalPies/100;
-  var acres=(totalPies>0&&anchoCama>0)?(totalPies*anchoCama)/43560:0;
-  var pago=puertas*act.p;
-  var h='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">'
-    +'<div>'
-    +'<label style="font-size:10px;font-weight:700;color:var(--gr)">TOTAL PIES</label>'
-    +'<input type="text" inputmode="decimal" id="indPies_'+wi+'_'+ai+'" value="'+(a.indPies||'')+'" placeholder="Ej: 8164"'
-    +' data-wi="'+wi+'" data-ai="'+ai+'" data-f="pies" oninput="onIndField(this)"'
-    +' style="font-size:18px;font-weight:700;padding:10px;width:100%;margin-top:3px;border:2px solid var(--g);border-radius:8px;color:var(--g);font-family:\'DM Sans\',sans-serif">'
-    +'</div>'
-    +'<div>'
-    +'<label style="font-size:10px;font-weight:700;color:var(--gr)">ANCHO DE CAMA</label>'
-    +'<input type="text" inputmode="decimal" id="indAncho_'+wi+'_'+ai+'" value="'+(a.indAncho||'')+'" placeholder="Ej: 5.67"'
-    +' data-wi="'+wi+'" data-ai="'+ai+'" data-f="ancho" oninput="onIndField(this)"'
-    +' style="font-size:18px;font-weight:700;padding:10px;width:100%;margin-top:3px;border:2px solid var(--b);border-radius:8px;color:var(--b);font-family:\'DM Sans\',sans-serif">'
-    +'</div></div>';
-  if(totalPies>0){
-    h+='<div style="background:var(--dk);border-radius:8px;padding:11px 14px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">'
-      +'<span style="font-size:12px;font-weight:600;color:#fff">PUERTAS (pies÷100)</span>'
-      +'<b style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;color:#fff">'+puertas.toFixed(2)+'</b></div>';
-    if(acres>0){
-      h+='<div style="background:var(--bp);border-radius:8px;padding:11px 14px;margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">'
-        +'<span style="font-size:12px;font-weight:600;color:var(--b)">ACRES (pies×ancho÷43560)</span>'
-        +'<b style="font-family:\'Bebas Neue\',sans-serif;font-size:22px;color:var(--b)">'+acres.toFixed(4)+'</b></div>';
-    }
-    h+='<div style="background:var(--a);border-radius:8px;padding:11px 14px;display:flex;justify-content:space-between;align-items:center">'
-      +'<span style="font-size:12px;font-weight:700;color:#fff">'+puertas.toFixed(2)+' ptas × $'+act.p+'</span>'
-      +'<b style="font-family:\'Bebas Neue\',sans-serif;font-size:24px;color:#fff">$'+pago.toFixed(2)+'</b></div>';
-  }
-  cont.innerHTML=h;
-  a.qty=puertas;
-  a.indAcres=acres;
-  recalc(wi,ai);
-}
-
-// V4: handler unificado para Total Pies y Ancho de cama
-function onIndField(inp){
-  var wi=parseInt(inp.dataset.wi), ai=parseInt(inp.dataset.ai);
-  var f=inp.dataset.f; // 'pies' o 'ancho'
-  var w=getW(wi); if(!w||!w.acts[ai]) return;
-  if(f==='pies') w.acts[ai].indPies=inp.value.trim();
-  else if(f==='ancho') w.acts[ai].indAncho=inp.value.trim();
-  var _wi=wi, _ai=ai, _f=f, _cp=inp.selectionStart;
-  renderIndSurcos(_wi,_ai);
-  autoSave();
-  setTimeout(function(){
-    var elId=(_f==='pies'?'indPies_':'indAncho_')+_wi+'_'+_ai;
-    var el=gEl(elId);
-    if(el){ el.focus(); if(typeof _cp==='number') try{el.setSelectionRange(_cp,_cp);}catch(e){} }
-  },0);
-}
+// V113 FASE 2D (paridad V20_104): renderIndSurcos ELIMINADA — desactivada desde V46/V20_19,
+// reemplazada por renderIndBloques (sistema bloques pies×surcos). Sin callers reales.
+// V113 FASE 2E (paridad V20_104): onIndField ELIMINADA — solo era handler de renderIndSurcos.
 
 // V7: sanitizar qty como número antes de guardar
 // V19-FIX2: guardar número, no string
@@ -9077,7 +9039,17 @@ function sendToSheets(customFrameId) {
         var _ancCalc=getActAncho(act); // V84 (port V20_73)
         qtyPerPerson = (_ancCalc && np) ? (_acP*_ancCalc)/np : 0;
       } else {
-        qtyPerPerson = (metros / 100) / np;
+        // V113 FASE 2B (paridad V20_104): bloquear envío si no hay FactorAcres en MASTER.
+        var _factErr = getActFactorAcres(act);
+        if(!_factErr){
+          console.error('[V113 FASE 2B] grupal sin factor:', act && act.es);
+          if(typeof toast === 'function') toast('❌ Task "' + (act && act.es || '?') + '" sin Variable/FactorAcres — envío cancelado');
+          var _btnErr = gEl('sheetsSendBtn');
+          if(_btnErr){ _btnErr.textContent='📊 Enviar a Payroll Field Master'; _btnErr.disabled=false; _btnErr.style.background='#1a3a5c'; }
+          if(typeof alert === 'function') alert('❌ No se puede enviar — Task "' + (act && act.es || '?') + '" no tiene FactorAcres en MASTER (col P) ni Variable. Avisa al admin.');
+          return;
+        }
+        qtyPerPerson = ((metros / 100) / np);
       }
     } else if (ct === 'cajas') {
       var totalC = parseFloat(g.vars.totalC) || 0;
@@ -9261,40 +9233,34 @@ function getAnchoCamaDefault(act){
 // 'cajas'   = total cajas × precio ÷ personas
 // Omega: detectar si una actividad (individual o grupal) es tipo "puertas/surcos"
 // Aplica a: Amarre de hilo, Colocación de estaca, Colocación de plástico (y variantes en inglés)
+// V113 FASE 2C (paridad V20_104): detección SOLO por col G Variable.
+// Eliminados todos los keywords ('hilo','estaca','amarre','plástico','colocación','tomate',
+// 'stake','staking','wire','drip','plastic','tying'). Comportamiento honesto y data-driven.
+// _readOnlyMode preserva detección por act.calc/act.tipo (payload viejo sin Variable).
 function isActPuertas(act){
   if(!act) return false;
-  // V90 (port V20_81): si la variable del MASTER es VarDoor → automáticamente puertas (acres).
-  // Cubre actividades VarDoor que no contienen keywords ("hilo", "estaca", etc.) en el nombre.
-  if((act.variable||'').toLowerCase()==='vardoor') return true;
-  if(act.calc==='puertas') return true;
-  var es = (act.es||'').toLowerCase();
-  var en = (act.en||'').toLowerCase();
-  // V6-C7: excluir cosechas, pizcas Y podas — "Poda de tomate" NO es puertas
-  if(es.indexOf('cosecha')>=0||es.indexOf('pizca')>=0||es.indexOf('poda')>=0||en.indexOf('harvest')>=0||en.indexOf('pick')>=0||en.indexOf('prun')>=0) return false;
-  // "tomate" solo si va con amarre/hilo (no suelto) — keywords más específicos
-  return es.indexOf('estaca')>=0||es.indexOf('hilo')>=0||es.indexOf('amarre')>=0||es.indexOf('plástico')>=0||es.indexOf('plastico')>=0
-    ||es.indexOf('colocación')>=0||es.indexOf('colocacion')>=0
-    ||(es.indexOf('tomate')>=0&&(es.indexOf('amarre')>=0||es.indexOf('hilo')>=0))
-    ||en.indexOf('stake')>=0||en.indexOf('staking')>=0||en.indexOf('wire')>=0||en.indexOf('drip')>=0||en.indexOf('plastic')>=0||en.indexOf('tying')>=0;
+  if(typeof _readOnlyMode !== 'undefined' && _readOnlyMode && act.calc==='puertas') return true;
+  return (act.variable||'').toLowerCase() === 'vardoor';
 }
 
 // 'hora'    = horas × precio (por persona)
 // 'pieza'   = cantidad ÷ personas × precio
 function grpCalcType(act){
-  if(!act) return 'pieza';
-  var es = (act.es||'').toLowerCase();
-  if(act.calc) return act.calc; // si viene de fallback con calc explícito
-  // V8-C9: excluir cosechas, pizcas y podas — español E inglés
-  var en2 = (act.en||'').toLowerCase();
-  if(es.indexOf('cosecha')>=0||es.indexOf('pizca')>=0||es.indexOf('poda')>=0
-    ||en2.indexOf('harvest')>=0||en2.indexOf('pick')>=0||en2.indexOf('prun')>=0) return 'pieza';
-  if(es.indexOf('estaca')>=0||es.indexOf('hilo')>=0||es.indexOf('amarre')>=0||es.indexOf('plástico')>=0||es.indexOf('plastico')>=0
-    ||es.indexOf('colocación')>=0||es.indexOf('colocacion')>=0
-    ||(es.indexOf('tomate')>=0&&(es.indexOf('amarre')>=0||es.indexOf('hilo')>=0))
-    ||en2.indexOf('drip')>=0||en2.indexOf('wire')>=0||en2.indexOf('plastic')>=0||en2.indexOf('tying')>=0||en2.indexOf('staking')>=0) return 'puertas';
-  if(es.indexOf('caja')>=0||es.indexOf('box')>=0||es.indexOf('empaque')>=0) return 'cajas';
+  if(!act) return null;
+  var v = (act.variable||'').toLowerCase();
+  if(v === 'vardoor') return 'puertas';
+  if(v === 'varbox') return 'cajas';
+  if(v === 'varqty') return 'hora';
+  if(v === 'varpsc') return 'pieza';
   if(act.hr) return 'hora';
-  return 'pieza';
+  // V113 FASE 2C: en modo lectura admin con payload viejo (sin Variable), inferir por tipo
+  if(typeof _readOnlyMode !== 'undefined' && _readOnlyMode){
+    var t = (act.tipo||'').toLowerCase();
+    if(t === 'hora' || t === 'hour') return 'hora';
+    if(t === 'pieces' || t === 'pieza' || t === 'piezas') return 'pieza';
+    if(t === 'boxes' || t === 'cajas') return 'cajas';
+  }
+  return null;
 }
 
 function showGrpPicker(){
@@ -9735,18 +9701,9 @@ function setGrpVar(inp){
 }
 
 // ── Omega: Conversión Pies ↔ Acres por rancho ──
-function isMeccaRanch(){
-  return (gVal('rancho')||'').toLowerCase().indexOf('mecca')>=0;
-}
-// V85 (port V20_76): eliminado caso especial Mecca hardcoded — todo data-driven via col P o anchoCama param.
-function piesToAcresWithAC(pies, anchoCama){
-  if(anchoCama && parseFloat(anchoCama)>0) return (pies/100)/parseFloat(anchoCama);
-  return 0;
-}
-function acresToPiesWithAC(acres, anchoCama){
-  if(anchoCama && parseFloat(anchoCama)>0) return acres*parseFloat(anchoCama)*100;
-  return 0;
-}
+// V113 FASE 2D (paridad V20_104): isMeccaRanch ELIMINADA — sin callers, era detección hardcoded.
+// V113 FASE 2D (paridad V20_104): acresToPiesWithAC ELIMINADA — solo se usaba en onSurcoSmart, math inline.
+// V113 FASE 2E (paridad V20_104): piesToAcresWithAC ELIMINADA — math inline en onSurcoSmart con guard.
 
 // Omega: input inteligente en filas de surcos — auto-fill y auto-disable
 function onSurcoSmart(inp){
@@ -9764,6 +9721,8 @@ function onSurcoSmart(inp){
   var _factSm = _gactSm ? getActFactorAcres(_gactSm) : null;
   var anchoCama = _factSm || grpActs[gi].vars.anchoCama || '';
 
+  // V113 FASE 2E (paridad V20_104): math inline con guard de anchoCama (antes piesToAcresWithAC/acresToPiesWithAC)
+  var _ac = parseFloat(anchoCama)||0;
   if(sf==='largo'||sf==='num'){
     // Modo surco: largo×num → auto-fill totalPies y totalAcres
     var l=parseFloat(row.largo)||0, n=parseFloat(row.num)||0;
@@ -9771,7 +9730,7 @@ function onSurcoSmart(inp){
       row.mode='surco';
       var pies=l*n;
       row.totalPies=pies>0?pies.toFixed(1):'';
-      row.totalAcres=pies>0?piesToAcresWithAC(pies,anchoCama).toFixed(4):'';
+      row.totalAcres=(pies>0 && _ac>0)?((pies/100)/_ac).toFixed(4):'';
     } else {
       row.mode=''; row.totalPies=''; row.totalAcres='';
     }
@@ -9781,7 +9740,7 @@ function onSurcoSmart(inp){
     if(p>0){
       row.mode='pies';
       row.largo=''; row.num='';
-      row.totalAcres=piesToAcresWithAC(p,anchoCama).toFixed(4);
+      row.totalAcres=(_ac>0)?((p/100)/_ac).toFixed(4):'';
     } else {
       row.mode=''; row.largo=''; row.num=''; row.totalAcres='';
     }
@@ -9791,10 +9750,10 @@ function onSurcoSmart(inp){
     if(a>0){
       row.mode='acres';
       row.largo=''; row.num='';
-      var piesCalc=acresToPiesWithAC(a,anchoCama);
+      var piesCalc=(_ac>0)?(a*_ac*100):0;
       row.totalPies=piesCalc>0?piesCalc.toFixed(1):'';
     } else {
-      row.mode=''; row.largo=''; row.num=''; row.totalPies='';
+      row.mode=''; row.totalPies='';
     }
   }
   // Re-render para actualizar disabled states — restaurar foco después
@@ -9931,10 +9890,15 @@ function calcGrpAct(gi){
     } else if(grandAcres>0 && anchoCama>0){
       puertas=grandAcres*anchoCama;
       formulaStr=grandAcres.toFixed(3)+' acres × '+anchoCama+' = <strong>'+puertas.toFixed(2)+' puertas</strong>';
-    } else {
+    } else if(anchoCama>0){
       puertas=grandPies/100;
       var acresStr=grandAcres>0?' ('+grandAcres.toFixed(3)+' acres)':'';
       formulaStr=grandPies.toFixed(0)+' ft'+acresStr+' ÷ 100 = <strong>'+puertas.toFixed(2)+' puertas</strong>';
+    } else {
+      // V113 FASE 2B (paridad V20_104): sin FactorAcres → mensaje visible al surquero
+      console.error('[V113 FASE 2B] calcGrpAct: act sin factor:', act && act.es);
+      puertas=0;
+      formulaStr='⚠️ <strong style="color:#c00">Falta FactorAcres en MASTER</strong> para "'+esc(act.es||'?')+'"';
     }
     if(!puertas||!np){ res.style.display='none'; updGrpPreview(gi); return; }
     var puertasPorPersona=puertas/np;
@@ -9996,7 +9960,18 @@ function grpPayDetail(wid_){
       var _factorGpd = getActFactorAcres(act);
       var anchoCama = _factorGpd || parseFloat(g.vars.anchoCama) || 0;
       var _ancGpd=isPennrose5Act(act)?(getActAncho(act)||0):anchoCama; // V84 (port V20_73)
-      var puertas=(grandAcres>0&&_ancGpd>0)?grandAcres*_ancGpd:grandPies/100;
+      // V113 FASE 2B (paridad V20_104): si no hay factor en MASTER y no es Pennrose5Act → loggear y skip
+      // (no romper detalle visual; envío real ya bloqueado en sendToSheets).
+      var puertas;
+      if(grandAcres>0 && _ancGpd>0){
+        puertas = grandAcres*_ancGpd;
+      } else if(_ancGpd>0){
+        puertas = grandPies/100;
+      } else {
+        console.error('[V113 FASE 2B] grpPayDetail: act sin factor:', act && act.es);
+        if(typeof toast === 'function') toast('❌ Task "' + (act && act.es || '?') + '" sin Variable/FactorAcres');
+        puertas = 0;
+      }
       if(puertas){
         var ppx=puertas/np;
         var pago=ppx*act.p;
@@ -10572,6 +10547,13 @@ function refreshDataBackground(){
         toast('✅ Actividades actualizadas (' + ALL_ACTS.length + ' cargadas)');
         console.log('✅ Delta2: Tasks recuperadas en background (' + ALL_ACTS.length + ' acts)');
       }
+      // V113 FASE 2A (paridad V20_104): validar Variable también en refresh background
+      try {
+        var _missingVarBg = _validateActsHaveVariable();
+        if(_missingVarBg.length){
+          console.warn('[V113] MASTER incompleto (background):', _missingVarBg);
+        }
+      } catch(e){ console.warn('[V113 FASE 2A] validación bg:', e); }
     }
   });
 }
@@ -11790,20 +11772,33 @@ function buildInvoiceAutoData(){
         grandPies+=parseFloat(surcos[si].totalPies)||0;
         grandAcres+=parseFloat(surcos[si].totalAcres)||0;
       }
-      var anchoCama = parseFloat(v.anchoCama) || 0;
+      // V113 FASE 2B (paridad V20_104): leer factor de col P primero (consistente con calcGrpAct/grpPayDetail).
+      var _factInv = getActFactorAcres(gact);
+      var anchoCama = _factInv || parseFloat(v.anchoCama) || 0;
       var puertas = 0;
+      var acres = 0;
+      var blockLabelInv = 'Acres';
+      var fieldValInv = '0.00';
       if(grandAcres>0 && anchoCama>0){
         puertas = grandAcres * anchoCama;
-      } else {
+        acres = grandAcres;
+        fieldValInv = acres.toFixed(2);
+      } else if(anchoCama>0){
         puertas = grandPies / 100;
+        acres = puertas/anchoCama;
+        fieldValInv = acres.toFixed(2);
+      } else {
+        // Sin factor → invoice muestra warning visible (paridad V20_86)
+        console.error('[V113 FASE 2B] buildInvoiceAutoData: act sin factor:', gact && gact.es);
+        blockLabelInv = '⚠️ Falta FactorAcres';
+        fieldValInv = (grandPies/100).toFixed(2) + ' puertas';
       }
-      var acres = anchoCama>0 ? puertas/anchoCama : (grandAcres>0 ? grandAcres : grandPies/43560);
       rows.push({
         product: gact.farm || rancho,
         equipment: gact.es,
         units: ga.participantes.length + ' Personas',
-        field: acres.toFixed(2),
-        blockNum: 'Acres'
+        field: fieldValInv,
+        blockNum: blockLabelInv
       });
     } else if(ct === 'cajas'){
       // Upsilon2: el campo se llama totalC en vars (no totalCajas)
@@ -13553,26 +13548,8 @@ function surqueroBypassQR(){
   });
 }
 
-// V112: agregar chofer/surquero/combinado a lápiz (reutiliza openCheckInSheet, paridad V20_103)
-function abrirLapizChofer(){
-  if(_dayFlow && _dayFlow.choferScanned){ toast('⚠️ Chofer ya escaneado'); return; }
-  _qrMode = 'chofer';
-  if(typeof openCheckInSheet === 'function') openCheckInSheet('chofer');
-  else toast('⚠️ Función no disponible');
-}
-function abrirLapizSurquero(){
-  if(_dayFlow && _dayFlow.surqueroScanned){ toast('⚠️ Surquero ya escaneado'); return; }
-  if(!_dayFlow.choferScanned && !(_dayFlow && _dayFlow.adminBypass)){ toast('⚠️ Primero agrega Chofer'); return; }
-  _qrMode = 'surquero';
-  if(typeof openCheckInSheet === 'function') openCheckInSheet('surquero');
-  else toast('⚠️ Función no disponible');
-}
-function abrirLapizCombinado(){
-  if(_dayFlow && (_dayFlow.choferScanned || _dayFlow.surqueroScanned)){ toast('⚠️ Ya hay chofer o surquero escaneado'); return; }
-  _qrMode = 'choferSurquero';
-  if(typeof openCheckInSheet === 'function') openCheckInSheet('choferSurquero');
-  else toast('⚠️ Función no disponible');
-}
+// V114 FASE A (paridad V20_105): funciones abrirLapiz{Chofer,Surquero,Combinado} eliminadas
+// Sus botones eran redundantes con "Escribir nombre" del bottom-sheet
 
 function adminCanEditTime(){ return !!(currentUser && currentUser.isAdmin && !_readOnlyMode); }
 
@@ -13601,7 +13578,7 @@ function onAdminTimeFocus(inp, label){
     'setGrpVar','addGrpAct','removeGrpAct','delGrpAct','onSurcoSmart','setSurcoVar',
     'addSurcoFila','delSurcoFila','confirmDelSurco','askDelSurcoFila','togGrpPart',
     // INDIVIDUALES
-    'onIndField','onIndBloqueField','addIndBloque','delIndBloque','askDelIndBloque',
+    'onIndBloqueField','addIndBloque','delIndBloque','askDelIndBloque', // V113 FASE 2E: onIndField eliminada
     'onQty','chAct','delAct','askDelAct','onShift','addShift','delShift',
     'onIni','onFin','togTime','rmWorker','askDelWorker','askDelAll',
     // AUSENCIAS
@@ -13620,8 +13597,9 @@ function onAdminTimeFocus(inp, label){
     'onCheckInManualAC','checkInFaceID','_undoWorker',
     // V101_24: peinado admin debe bloquearse en modo lectura
     'testFill','testClear','adminBypassQR','activarAdminBypass',
-    // V112: bypass surquero + a lápiz también deben bloquearse en modo lectura
-    'surqueroBypassQR','abrirLapizChofer','abrirLapizSurquero','abrirLapizCombinado',
+    // V112: bypass surquero también debe bloquearse en modo lectura
+    // V114 FASE A (paridad V20_105): abrirLapiz{Chofer,Surquero,Combinado} eliminadas
+    'surqueroBypassQR',
     // DÍA / NOTAS
     'startNewDay','openNewDay','saveNotaV65','toggleNotaV65','cancelNotaV65',
     // IMPORT / EXPORT
@@ -13714,7 +13692,8 @@ function openCheckInSheet(role){
       } else { cnt.style.display = 'none'; }
     }
     var manualBtn = gEl('cisBtnManual');
-    if(manualBtn) manualBtn.style.display = (r === 'surquero' || r === 'choferSurquero') ? 'none' : '';
+    // V114 FASE B (paridad V20_105): permitir escribir nombre en todos los modos
+    if(manualBtn) manualBtn.style.display = '';
     sheet.classList.add('show');
   }catch(e){ console.warn('openCheckInSheet',e); }
 }
@@ -13792,9 +13771,7 @@ function checkInManualSelect(name){
   try{
     if(!name) return;
     if(typeof alreadyAdded==='function' && alreadyAdded(name)){ toast('⚠️ '+name+' ya está en la lista'); return; }
-    if(_cisRole === 'surquero' || _cisRole === 'choferSurquero'){
-      toast('⚠️ Manual no disponible — usa QR o FaceID'); return;
-    }
+    // V114 FASE B (paridad V20_105): permitido manual en todos los roles
     _pendingManualAdd = name;
     _pendingManualRole = _cisRole || 'trabajador';
     var box = gEl('checkInManualBox'); if(box) box.style.display='none';
