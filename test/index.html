@@ -16,14 +16,16 @@
 <script>
 // V103: Manifest PWA con identidad de TEST (rojo + nombre distinto) para no confundir con producción
 (function(){
-  var base = (location.pathname.replace(/[^\/]*$/,'')||'./');
+  // V107: URLs absolutas para evitar warnings contra el blob: URL
+  var base = (location.pathname.replace(/[^\/]*$/,'')||'/');
+  var absBase = location.origin + base;
   var manifest = {
-    name:'eBerry TEST', short_name:'eBerry test', start_url:base, display:'standalone',
+    name:'eBerry TEST', short_name:'eBerry test', start_url: absBase, display:'standalone',
     background_color:'#ffffff', theme_color:'#cc2222',
     icons:[
-      {src:'icon-192.png', sizes:'192x192', type:'image/png'},
-      {src:'icon-512.png', sizes:'512x512', type:'image/png'},
-      {src:'icon-512.png', sizes:'512x512', type:'image/png', purpose:'maskable'}
+      {src: absBase + 'icon-192.png', sizes:'192x192', type:'image/png'},
+      {src: absBase + 'icon-512.png', sizes:'512x512', type:'image/png'},
+      {src: absBase + 'icon-512.png', sizes:'512x512', type:'image/png', purpose:'maskable'}
     ]
   };
   var blob = new Blob([JSON.stringify(manifest)],{type:'application/json'});
@@ -32,7 +34,7 @@
 </script>
 <script>
 // V50 (port V20_23): estandarización de colores PDF
-window.APP_VERSION = 'V103';
+window.APP_VERSION = 'V112';
 (function(){
   // V86 (port V20_77): AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Si _ackedVersion === APP_VERSION cargado, ese ack ya cumplió → limpiar para que próximas updates lleguen.
@@ -248,6 +250,29 @@ body.readOnly .tabs::after{content:'📖 Solo lectura';position:absolute;top:50%
 .ver-check-btn.spin{animation:verSpin 1s linear infinite}
 @keyframes verSpin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
 .tabs{display:flex;gap:5px;overflow-x:auto;padding-bottom:8px;scrollbar-width:none}
+/* V111: Drawer Lateral — paridad V20_102 */
+.tab-burger{background:rgba(255,255,255,.15);border:none;color:#fff;font-size:22px;line-height:1;padding:6px 12px;min-height:44px;min-width:44px;border-radius:10px;cursor:pointer;font-weight:700;display:inline-flex;align-items:center;justify-content:center;transition:background .18s}
+.tab-burger:hover{background:rgba(255,255,255,.28)}
+.tab-burger:active{transform:scale(.96)}
+.drawer-overlay{position:fixed;inset:0;background:rgba(0,0,0,.45);opacity:0;pointer-events:none;transition:opacity .25s ease;z-index:1500}
+.drawer-overlay.show{opacity:1;pointer-events:auto}
+.drawer-panel{position:fixed;top:0;left:0;width:280px;max-width:85vw;height:100vh;background:#fff;box-shadow:4px 0 24px rgba(0,0,0,.25);transform:translateX(-105%);transition:transform .28s ease;z-index:1600;display:flex;flex-direction:column;overflow:hidden}
+.drawer-panel.show{transform:translateX(0)}
+.drawer-head{background:#1a2b8c;color:#fff;padding:18px 20px 16px 20px;position:relative}
+.drawer-head .close-x{position:absolute;top:10px;right:10px;background:rgba(255,255,255,.18);color:#fff;border:none;width:34px;height:34px;border-radius:50%;font-size:16px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;justify-content:center}
+.drawer-head .close-x:hover{background:rgba(255,255,255,.32)}
+.drawer-head .brand{margin-bottom:14px}
+.drawer-head .brand-logo{font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:2px;font-weight:700;color:#fff}
+.drawer-head .info-block{display:flex;flex-direction:column;gap:2px}
+.drawer-head .info-block .label{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:rgba(255,255,255,.65);font-weight:600}
+.drawer-head .info-block .value{font-size:14px;font-weight:700;color:#fff;word-break:break-word}
+.drawer-tabs{flex:1;overflow-y:auto;padding:8px 0;background:#fff}
+.drawer-tab{display:flex;align-items:center;gap:12px;padding:13px 20px;color:#222;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;border-left:4px solid transparent;text-decoration:none;transition:background .15s,border-color .15s;-webkit-tap-highlight-color:transparent}
+.drawer-tab:hover{background:#f2f4fb}
+.drawer-tab.act{background:#eef1fb;border-left-color:#5eba45;color:#1a2b8c}
+.drawer-tab .tab-num{display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;border-radius:50%;background:#eef1fb;color:#1a2b8c;font-size:13px;font-weight:800;flex-shrink:0}
+.drawer-tab.act .tab-num{background:#1a2b8c;color:#fff}
+.drawer-foot{padding:12px 20px;background:#fafafa;border-top:1px solid #e8e8e8;font-size:11px;color:#888;font-weight:600;text-align:center;letter-spacing:.5px}
 /* V67: pills de ranchos (reemplazan cards colapsables) */
 .ranch-pill{flex-shrink:0;background:#f1f3fa;color:var(--g);border:1.5px dashed var(--bd);border-radius:22px;padding:8px 12px;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer;min-height:44px;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;transition:all .18s;margin-right:6px;margin-bottom:6px}
 .ranch-pill:active{transform:scale(.96)}
@@ -652,6 +677,8 @@ html.login-locked{overflow:hidden!important;height:100%!important}
 <header>
   <div class="htop">
     <div style="display:flex;align-items:center;gap:8px">
+      <!-- V111: hamburger button para drawer lateral -->
+      <button class="tab-burger" onclick="openDrawer()" aria-label="Abrir menú">☰</button>
       <!-- V101_23: logo real eBerry en mini-tarjeta blanca (opción B) -->
       <div class="hdr-logo-card">
         <img src="eberry-logo-login.png" srcset="eberry-logo-login.png 1x, eberry-logo-login@2x.png 2x" alt="eBerry Harvest Company">
@@ -673,19 +700,40 @@ html.login-locked{overflow:hidden!important;height:100%!important}
       <button id="logoutBtn" onclick="logoutUser()" style="display:none;background:rgba(204,34,34,.75);border:none;border-radius:20px;padding:4px 10px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">🚪 Salir</button>
     </div>
   </div>
-  <!-- V67 (Opción B): tabs globales RESTAURADAS arriba, pills de ranchos al lado, lógica multi-rancho mantiene swap de contexto -->
-  <div class="tabs">
-    <button class="tab act" onclick="go(0)">① Parámetros</button>
-    <button class="tab" onclick="go(1)">② Análisis</button>
-    <button class="tab" onclick="go(2)">③ Trabajadores</button>
-    <button class="tab" onclick="go(3)">④ Act. Grupales</button>
-    <button class="tab" onclick="go(4)">⑤ Resumen</button>
-    <button class="tab" onclick="go(5)">⑥ Ausencias</button>
-    <button class="tab" onclick="go(6)">⑦ Invoice</button>
-    <button class="tab" onclick="go(7)">⑧ Semanal</button>
-    <button class="tab" onclick="go(8)">⑨ Archivos</button>
-  </div>
+  <!-- V111: tabs horizontales reemplazadas por drawer lateral (ver botón ☰ en htop) -->
 </header>
+
+<!-- V111: Drawer Lateral (paridad V20_102) -->
+<div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()"></div>
+<div class="drawer-panel" id="drawerPanel">
+  <div class="drawer-head">
+    <button class="close-x" onclick="closeDrawer()" aria-label="Cerrar menú">✕</button>
+    <div class="brand">
+      <div class="brand-logo">eBerry TEST</div>
+    </div>
+    <div class="info-block">
+      <span class="label">Surquero</span>
+      <span class="value" id="drawerSurquero">—</span>
+    </div>
+    <div class="info-block" style="margin-top:8px">
+      <span class="label">Rancho activo</span>
+      <span class="value" id="drawerRancho">—</span>
+    </div>
+  </div>
+  <div class="drawer-tabs">
+    <a class="drawer-tab" data-pg="0" onclick="pickDrawerTab(0)"><span class="tab-num">①</span> Parámetros</a>
+    <a class="drawer-tab" data-pg="1" onclick="pickDrawerTab(1)"><span class="tab-num">②</span> Trabajadores</a>
+    <a class="drawer-tab" data-pg="2" onclick="pickDrawerTab(2)"><span class="tab-num">③</span> Activ. individuales</a>
+    <a class="drawer-tab" data-pg="3" onclick="pickDrawerTab(3)"><span class="tab-num">④</span> Activ. grupales</a>
+    <a class="drawer-tab" data-pg="4" onclick="pickDrawerTab(4)"><span class="tab-num">⑤</span> Resumen</a>
+    <a class="drawer-tab" data-pg="5" onclick="pickDrawerTab(5)"><span class="tab-num">⑥</span> Análisis</a>
+    <a class="drawer-tab" data-pg="6" onclick="pickDrawerTab(6)"><span class="tab-num">⑦</span> Semanal</a>
+    <a class="drawer-tab" data-pg="8" onclick="pickDrawerTab(8)"><span class="tab-num">⑨</span> Archivos</a>
+  </div>
+  <div class="drawer-foot">
+    eBerry TEST · V111 · Mayo 2026
+  </div>
+</div>
 
 <!-- V25: Modal rancho duplicado -->
 <div class="ov" id="ranchDupOv">
@@ -1351,6 +1399,10 @@ body { padding-bottom: 90px; }
       <button id="btnScanChoferSurquero" class="btn bw" onclick="openCheckInSheet('choferSurquero')" style="margin-bottom:4px">🚌+👤 Chofer y Surquero (misma persona)</button>
       <!-- V101_29: bypass admin para reportes retroactivos -->
       <button id="btnAdminBypass" class="btn" onclick="activarAdminBypass()" style="display:none;background:#e67e22;color:#fff;width:100%;min-height:50px;margin-top:8px;border:2px dashed #c0392b;border-radius:8px;font-weight:700">🔧 Modo admin — registro retroactivo</button>
+      <!-- V112: agregar a lápiz cuando trabajador no tiene QR físico -->
+      <button id="btnLapizChofer" class="btn" onclick="abrirLapizChofer()" style="display:none;background:#fff;color:#1a2b8c;border:2px dashed #1a2b8c;width:100%;min-height:50px;margin-top:8px;border-radius:8px;font-weight:700">✏️ Agregar Chofer a lápiz</button>
+      <button id="btnLapizSurquero" class="btn" onclick="abrirLapizSurquero()" style="display:none;background:#fff;color:#5eba45;border:2px dashed #5eba45;width:100%;min-height:50px;margin-top:8px;border-radius:8px;font-weight:700">✏️ Agregar Surquero a lápiz</button>
+      <button id="btnLapizCombinado" class="btn" onclick="abrirLapizCombinado()" style="display:none;background:#fff;color:#27ae60;border:2px dashed #27ae60;width:100%;min-height:50px;margin-top:8px;border-radius:8px;font-weight:700">✏️ Chofer y Surquero a lápiz</button>
     </div>
     <div id="iniciarDiaStatus"></div>
   </div>
@@ -1358,10 +1410,10 @@ body { padding-bottom: 90px; }
     <div class="ct">📋 Parámetros del Día</div>
     <div class="r2">
       <div><label>Fecha</label><input type="date" id="fecha" data-save onchange="onFechaChange()"></div>
-      <div><label># Bus</label><input type="text" id="numBus" data-save placeholder="951"></div>
+      <div><label># Bus</label><input type="text" inputmode="numeric" pattern="[0-9]*" id="numBus" data-save placeholder="951"></div>
     </div>
     <div class="r2">
-      <div><label># Camioneta</label><input type="text" id="numCam" data-save placeholder="Opt."></div>
+      <div><label># Camioneta</label><input type="text" inputmode="numeric" pattern="[0-9]*" id="numCam" data-save placeholder="Opt."></div>
       <div><label>Surquero</label>
         <div id="surqueroDisplay" style="padding:11px 12px;border:1.5px solid var(--bd);border-radius:8px;font-size:15px;background:#f0f0f0;color:var(--dk);font-weight:600">—</div>
         <select id="surqueroAdminSel" style="display:none" onchange="onAdminSurqueroChange(this.value)">
@@ -1630,7 +1682,9 @@ body { padding-bottom: 90px; }
       </div>
       <div style="flex:1;min-width:120px">
         <label style="font-size:11px;font-weight:700;color:var(--dk)">FINCA / LABOR</label>
-        <input type="text" id="semFinca" placeholder="Labor" oninput="saveSemData()" style="width:100%;padding:8px;border:1px solid var(--bd);border-radius:8px;font-size:14px">
+        <!-- V110 MANZANITA 2 (paridad V20_101): slot dinámico -->
+        <div id="semFincaSlot"></div>
+        <input type="hidden" id="semFinca" data-save>
       </div>
     </div>
   </div>
@@ -1708,8 +1762,8 @@ body { padding-bottom: 90px; }
     <div id="qrReader"></div>
     <div class="qrStatus" id="qrStatus">Apunta la cámara al código QR del trabajador</div>
     <div class="qrCount" id="qrCount" style="display:none"></div>
-    <!-- V101_24: bypass admin con PIN -->
-    <button id="adminPinBypassBtn" onclick="adminBypassQR()" style="display:none;width:100%;margin-top:10px;padding:12px;background:#e67e22;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">🔢 Usar PIN admin (sin QR)</button>
+    <!-- V112: tirita naranja extendida a surqueros (paridad V20_103) -->
+    <button id="adminPinBypassBtn" onclick="surqueroBypassQR()" style="display:none;width:100%;margin-top:10px;padding:12px;background:#e67e22;color:#fff;border:none;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">🔢 Usar mi PIN (sin QR)</button>
   </div>
 </div>
 
@@ -2735,6 +2789,8 @@ function loadSheetsData(){
     }
     // V68: refrescar dropdown de finca en Parámetros ahora que llegó el catálogo
     try { if(typeof renderParamsFinca === 'function') renderParamsFinca(); } catch(e){}
+    // V110 MANZANITA 2 (paridad V20_101): refrescar dropdown finca semanal
+    try { if(typeof renderSemFinca === 'function') renderSemFinca(); } catch(e){}
   });
 }
 
@@ -3206,6 +3262,8 @@ function onPillClick(idx){
   }
   // Refrescar la tab actual con los datos del rancho nuevo
   try { go(pg); } catch(e){ console.warn('V72 go(pg) fallo:', e); }
+  // V111: refrescar drawer con el rancho nuevo (si está abierto, queda visible al instante)
+  try { if(typeof refreshDrawerContext==='function') refreshDrawerContext(); } catch(e){}
 }
 
 // V67: sincroniza inputs visibles (rancho, finca, hEnt/hSal/lIni/lFin) en tab Parámetros con los del rancho activo
@@ -3516,12 +3574,19 @@ function _renderIniciarDia(){
   var btnSurq = gEl('btnScanSurquero');
   var btnDual = gEl('btnScanChoferSurquero');
   var btnBypass = gEl('btnAdminBypass');
+  // V112: botones a lápiz paralelos a los QR (paridad V20_103)
+  var btnLapizCh = gEl('btnLapizChofer');
+  var btnLapizSq = gEl('btnLapizSurquero');
+  var btnLapizCb = gEl('btnLapizCombinado');
   // V101_29: si admin activó bypass, ocultar todos los botones de inicio
   if(_dayFlow.adminBypass){
     if(btnChofer) btnChofer.style.display = 'none';
     if(btnSurq)   btnSurq.style.display = 'none';
     if(btnDual)   btnDual.style.display = 'none';
     if(btnBypass) btnBypass.style.display = 'none';
+    if(btnLapizCh) btnLapizCh.style.display = 'none';
+    if(btnLapizSq) btnLapizSq.style.display = 'none';
+    if(btnLapizCb) btnLapizCb.style.display = 'none';
     status.innerHTML = '<div style="padding:11px 12px;border:1.5px dashed #c0392b;border-radius:8px;background:#fff3cd;color:#c0392b;font-weight:700;margin-bottom:8px">🔧 MODO ADMIN — registro retroactivo activo</div>';
     return;
   }
@@ -3530,25 +3595,57 @@ function _renderIniciarDia(){
   if(btnChofer){ btnChofer.disabled = false; btnChofer.style.opacity = '1'; btnChofer.style.display=''; }
   if(btnSurq){ btnSurq.disabled = !_dayFlow.choferScanned; btnSurq.style.opacity = _dayFlow.choferScanned ? '1' : '.5'; btnSurq.style.display=''; }
   if(btnDual){ btnDual.disabled = false; btnDual.style.opacity = '1'; btnDual.style.display=''; }
+  // V112: lápiz visibilidad paralela a QR (paridad V20_103)
+  if(btnLapizCh) btnLapizCh.style.display = '';
+  if(btnLapizSq){ btnLapizSq.style.display = ''; btnLapizSq.disabled = !_dayFlow.choferScanned; btnLapizSq.style.opacity = _dayFlow.choferScanned ? '1' : '.5'; }
+  if(btnLapizCb) btnLapizCb.style.display = '';
   var html = '';
-  function _chip(emoji, label, time){
-    return '<div style="padding:11px 12px;border:1.5px solid var(--g);border-radius:8px;background:#eef9ee;color:var(--dk);font-weight:600;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between"><span>'+emoji+' '+label+' — '+time+'</span><span style="font-size:14px">🔒</span></div>';
+  // V105 FIX (paridad V20_96): chip ahora acepta `undoFn` para mostrar linkcito ↶ Deshacer
+  function _chip(emoji, label, time, undoFn){
+    var undoBtn = undoFn ? '<button onclick="'+undoFn+'()" style="margin-left:8px;background:#fff;color:#cc2222;border:1px solid #cc2222;border-radius:10px;padding:2px 8px;font-size:11px;font-weight:700;cursor:pointer">↶ Deshacer</button>' : '';
+    return '<div style="padding:11px 12px;border:1.5px solid var(--g);border-radius:8px;background:#eef9ee;color:var(--dk);font-weight:600;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px"><span>'+emoji+' '+label+' — '+time+'</span><span style="display:flex;align-items:center;gap:6px"><span style="font-size:14px">🔒</span>'+undoBtn+'</span></div>';
   }
   if(_dayFlow.choferScanned && _dayFlow.choferWorkerId != null){
     var wCh = getW(_dayFlow.choferWorkerId);
     if(wCh){
       var lbl = (wCh.role === 'choferSurquero') ? 'Chofer y Surquero: ' + esc(wCh.name) : 'Chofer: ' + esc(wCh.name);
-      html += _chip('✅', lbl, wCh.checkInTime || '—');
+      // V105 FIX: si día ya cerrado, no mostrar undo
+      var undoCh = (!_dayFlow.checkOutDone) ? '_undoChoferScan' : null;
+      html += _chip('✅', lbl, wCh.checkInTime || '—', undoCh);
     }
     if(btnChofer) btnChofer.style.display = 'none';
     if(btnDual) btnDual.style.display = 'none';
+    // V112: ocultar lápices equivalentes
+    if(btnLapizCh) btnLapizCh.style.display = 'none';
+    if(btnLapizCb) btnLapizCb.style.display = 'none';
   }
   if(_dayFlow.surqueroScanned && _dayFlow.surqueroWorkerId != null && _dayFlow.surqueroWorkerId !== _dayFlow.choferWorkerId){
     var wSq = getW(_dayFlow.surqueroWorkerId);
-    if(wSq){ html += _chip('✅', 'Surquero: ' + esc(wSq.name), wSq.checkInTime || '—'); }
+    if(wSq){
+      var undoSq = (!_dayFlow.checkOutDone) ? '_undoSurqueroScan' : null;
+      html += _chip('✅', 'Surquero: ' + esc(wSq.name), wSq.checkInTime || '—', undoSq);
+    }
     if(btnSurq) btnSurq.style.display = 'none';
+    // V112: ocultar lápiz equivalente
+    if(btnLapizSq) btnLapizSq.style.display = 'none';
   }
   status.innerHTML = html;
+}
+
+// V105 FIX (paridad V20_96): funciones para deshacer escaneo de chofer/surquero
+function _undoChoferScan(){
+  if(!_dayFlow || !_dayFlow.choferWorkerId){ toast('⚠️ No hay chofer escaneado'); return; }
+  if(_dayFlow.checkOutDone){ toast('⚠️ Día ya cerrado'); return; }
+  var ok = confirm('¿Deshacer el escaneo del chofer?\n\nSe eliminará al worker de la lista y podrás escanear de nuevo.');
+  if(!ok) return;
+  rmWorker(_dayFlow.choferWorkerId);
+}
+function _undoSurqueroScan(){
+  if(!_dayFlow || !_dayFlow.surqueroWorkerId){ toast('⚠️ No hay surquero escaneado'); return; }
+  if(_dayFlow.checkOutDone){ toast('⚠️ Día ya cerrado'); return; }
+  var ok = confirm('¿Deshacer el escaneo del surquero?\n\nSe eliminará al worker de la lista y podrás escanear de nuevo.');
+  if(!ok) return;
+  rmWorker(_dayFlow.surqueroWorkerId);
 }
 
 function _applyCheckInForMode(worker, mode){
@@ -4832,6 +4929,47 @@ var qrSessionCount = 0;
 var qrCooldown = false; // evita escaneos duplicados
 var qrActive = false;   // true mientras el scanner está abierto — modales saben que deben regresar al scanner
 var _qrStartTimer = null; // V95 (port V20_85): handle del setTimeout de startQR — cancelarlo en stopQR
+// V105 FIX (paridad V20_96): recycle de cámara cada N escaneos + watchdog para detectar cámara muerta
+var _qrScanCount = 0;
+var _qrRecycleEvery = 5;
+var _qrWatchdogTimer = null;
+
+// V107: flag global para evitar dobles llamadas durante transición
+var _qrTransitioning = false;
+
+function _qrWaitStable(maxWaitMs){
+  return new Promise(function(resolve){
+    var deadline = Date.now() + (maxWaitMs || 3000);
+    function check(){
+      if(!_qrTransitioning) return resolve(true);
+      if(Date.now() > deadline){
+        console.warn('[V107] _qrWaitStable timeout — forzando resolve');
+        _qrTransitioning = false;
+        return resolve(false);
+      }
+      setTimeout(check, 50);
+    }
+    check();
+  });
+}
+
+function _qrStopSafe(){
+  return new Promise(function(resolve){
+    if(!qrScanner){ resolve(); return; }
+    var st;
+    try { st = qrScanner.getState(); } catch(_e){ resolve(); return; }
+    if(st !== 2 && st !== 3){ resolve(); return; }
+    _qrTransitioning = true;
+    qrScanner.stop().then(function(){
+      _qrTransitioning = false;
+      resolve();
+    }).catch(function(e){
+      console.warn('[V107] _qrStopSafe error:', e);
+      _qrTransitioning = false;
+      resolve();
+    });
+  });
+}
 
 function startQR(){
   var ov = gEl('qrOv');
@@ -4839,9 +4977,18 @@ function startQR(){
   qrActive = true;
   qrSessionCount = 0;
   updQRCount();
-  // V101_24: mostrar botón PIN admin si aplica
+  // V112: tirita PIN para admin O surquero, según el modo del QR (paridad V20_103)
+  var _showPinBypass = false;
+  if(currentUser && !_readOnlyMode){
+    if(currentUser.isAdmin){
+      _showPinBypass = true;
+    } else {
+      var _modesPinOk = ['surquero','choferSurquero','manualConfirm','coCuadrilla','coChofer','coSurq'];
+      if(_modesPinOk.indexOf(_qrMode) >= 0) _showPinBypass = true;
+    }
+  }
   var _byp = gEl('adminPinBypassBtn');
-  if(_byp){ _byp.style.display = (currentUser && currentUser.isAdmin && !_readOnlyMode) ? 'block' : 'none'; }
+  if(_byp) _byp.style.display = _showPinBypass ? 'block' : 'none';
   setQRStatus('Apunta la cámara al código QR del trabajador','');
 
   // Pequeño delay para que el DOM se renderice antes de iniciar la cámara
@@ -4861,18 +5008,57 @@ function startQR(){
       console.error('QR Camera error:', err);
     });
   }, 300);
+  // V105 FIX (paridad V20_96): watchdog — si la cámara se queda sin frames (readyState<2)
+  // mientras dice estar SCANNING, reciclamos. Corre cada 10s.
+  if(_qrWatchdogTimer) clearInterval(_qrWatchdogTimer);
+  _qrWatchdogTimer = setInterval(function(){
+    if(!qrActive){ clearInterval(_qrWatchdogTimer); _qrWatchdogTimer=null; return; }
+    try{
+      var vid = document.querySelector('#qrReader video');
+      if(!vid) return;
+      if(qrScanner && qrScanner.getState() === 2 && vid.readyState < 2){
+        console.warn('[V105] Watchdog detectó cámara sin frames — reciclando');
+        _qrScanCount = 0;
+        _recycleQRCamera();
+      }
+    }catch(e){
+      console.warn('[V105] watchdog error:', e);
+    }
+  }, 10000);
 }
 
 function pauseQR(){
   // Pausa la cámara sin cerrar el overlay (para mostrar modales encima)
   if(!qrActive) return; // V95 (port V20_85): simetría con resumeQR
-  if(qrScanner){ qrScanner.stop().catch(function(){}); }
+  // V107 (port V20_98): marcar transición durante stop para evitar dobles llamadas concurrentes
+  if(qrScanner){
+    _qrTransitioning = true;
+    qrScanner.stop().then(function(){
+      _qrTransitioning = false;
+    }).catch(function(){
+      _qrTransitioning = false;
+    });
+  }
 }
 // V32-FIX: guard anti-concurrencia en resumeQR
 var _qrResuming = false;
 function resumeQR(){
   if(!qrActive) return;
   if(_qrResuming) return;
+  // V105 FIX (paridad V20_96): cada N escaneos, reciclar cámara para evitar que muera
+  if(qrActive && _qrScanCount >= _qrRecycleEvery){
+    _qrScanCount = 0;
+    console.warn('[V105] Reciclando cámara QR tras', _qrRecycleEvery, 'escaneos');
+    _recycleQRCamera();
+    return;
+  }
+  // V107 (port V20_98): si hay transición en curso, posponer para evitar
+  // "Cannot transition to a new state, already under transition"
+  if(_qrTransitioning){
+    console.warn('[V107] resumeQR: en transición, posponiendo 500ms');
+    setTimeout(resumeQR, 500);
+    return;
+  }
   _qrResuming = true;
   // V101_06 FIX (port V20_91_06): NO sobrescribir mensaje de error activo —
   // el MutationObserver disparaba resumeQR a los 150ms del setQRStatus(err) y borraba el toast.
@@ -4884,14 +5070,61 @@ function resumeQR(){
   setTimeout(function(){
     _qrResuming = false;
     if(qrScanner && qrActive){
+      // V107 (port V20_98): marcar transición durante start para que otros llamados se pospongan
+      _qrTransitioning = true;
       qrScanner.start(
         { facingMode: "environment" },
         { fps: 10, qrbox: { width: 250, height: 250 }, aspectRatio: 1.0 },
         onQRSuccess, function(){}
-      ).catch(function(err){ setQRStatus('⚠️ Error al reanudar cámara','err'); });
+      ).then(function(){
+        _qrTransitioning = false;
+      }).catch(function(err){
+        _qrTransitioning = false;
+        setQRStatus('⚠️ Error al reanudar cámara','err');
+      });
     }
   }, 500);
 }
+// V107 (port V20_98): recrea el scanner evitando dobles llamadas durante transición.
+// Llamado desde resumeQR cuando _qrScanCount >= _qrRecycleEvery, y desde el watchdog si detecta cámara muerta.
+function _recycleQRCamera(){
+  if(!qrActive) return;
+  if(_qrTransitioning){
+    console.warn('[V107] _recycleQRCamera: ya en transición, omitiendo');
+    return;
+  }
+  _qrTransitioning = true;
+  console.warn('[V107] Reciclando cámara QR');
+  _qrStopSafe().then(function(){
+    if(qrScanner){
+      try{ qrScanner.clear(); }catch(e){ console.warn('[V107] clear error post-stop:', e); }
+    }
+    qrScanner = null;
+    return new Promise(function(r){ setTimeout(r, 400); });
+  }).then(function(){
+    if(!qrActive){ _qrTransitioning = false; return; }
+    try{
+      qrScanner = new Html5Qrcode("qrReader");
+      _qrTransitioning = true;
+      return qrScanner.start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: { width: 240, height: 240 } },
+        onQRSuccess,
+        function(){}
+      );
+    }catch(e){
+      console.warn('[V107] excepción al recrear scanner:', e);
+      _qrTransitioning = false;
+    }
+  }).then(function(){
+    _qrTransitioning = false;
+  }).catch(function(err){
+    console.warn('[V107] start error en recycle:', err);
+    _qrTransitioning = false;
+    setQRStatus('⚠️ Error al reciclar cámara — cierre y reabra el QR','err');
+  });
+}
+
 function stopQR(){
   // V95 (port V20_85): el modal se quedaba trabado al cerrar antes de escanear.
   // Causa: Html5Qrcode.stop() falla durante state STARTING (setTimeout 300ms aún no disparó).
@@ -4899,6 +5132,9 @@ function stopQR(){
   // 1) Cancelar startup pendiente para que no cree el scanner después del cierre
   if(_qrStartTimer){ clearTimeout(_qrStartTimer); _qrStartTimer = null; }
   if(_qrResuming){ _qrResuming = false; }
+  // V105 FIX (paridad V20_96): apagar watchdog y resetear contador al cerrar el scanner
+  if(_qrWatchdogTimer){ clearInterval(_qrWatchdogTimer); _qrWatchdogTimer = null; }
+  _qrScanCount = 0;
   // 2) Cerrar overlay PRIMERO (UX inmediata, no esperar a la cámara)
   gEl('qrOv').classList.remove('on');
   // 3) Detener scanner solo si está realmente escaneando (state===2)
@@ -4969,6 +5205,8 @@ function onQRSuccess(decoded){
   if(qrCooldown) return;
   qrCooldown = true;
   setTimeout(function(){ qrCooldown = false; }, 2500);
+  // V105 FIX (paridad V20_96): contador para recycle de cámara cada N escaneos
+  _qrScanCount++;
 
   var parts = decoded.split('|');
   if(parts.length < 3 || parts[0] !== 'EBERRY'){
@@ -5021,59 +5259,9 @@ function onQRSuccess(decoded){
     }
   }
 
-  // V101_01: validar surquero — su tarjeta debe coincidir con currentUser.name
-  // V101_08 FIX: extender validación a modo choferSurquero (chofer Y surquero misma persona)
-  if(_qrMode === 'surquero' || _qrMode === 'choferSurquero'){
-    var qrLower101 = (qrName||'').toLowerCase().trim();
-    var meLower101 = ((currentUser && currentUser.name)||'').toLowerCase().trim();
-    if(meLower101 && qrLower101 !== meLower101){
-      var _modeMsg101 = (_qrMode === 'choferSurquero')
-        ? '⚠️ Para "Chofer y Surquero" solo TÚ puedes ser registrado — escanea TU tarjeta'
-        : '⚠️ Esta tarjeta no es la tuya — debes escanear TU propia tarjeta';
-      setQRStatus(_modeMsg101,'err');
-      _scheduleQRStatusReset(4000);
-      return;
-    }
-  }
-
-  // V101_01: bloquear escaneo de trabajadores hasta que chofer + surquero estén registrados
-  // V101_29: admin con adminBypass exento
-  if(_qrMode === 'trabajador' && _dayFlow && !_dayFlow.diaIniciado && !_dayFlow.adminBypass){
-    setQRStatus('⚠️ Primero escanea al chofer y al surquero (Parámetros)','err');
-    _scheduleQRStatusReset(4000);
-    return;
-  }
-  // V101_09: bloquear escaneo si día cerrado
-  if(_qrMode === 'trabajador' && _dayFlow && _dayFlow.checkOutDone){
-    setQRStatus('⚠️ Día cerrado a las ' + (_dayFlow.checkOutTime||'') + ' — no se pueden agregar más trabajadores','err');
-    _scheduleQRStatusReset(4000);
-    return;
-  }
-
-  if(nameInArr(workers, qrName)){
-    setQRStatus('⚠️ ' + qrName + ' ya está en la lista','err');
-    _scheduleQRStatusReset(4000);
-    return;
-  }
-
-  var wkMatch=findInArr(ALL_WORKERS,qrEmpNum,'empNum');
-  var officialName = wkMatch ? wkMatch.name : qrName;
-
-  if(wkMatch && nameInArr(workers, officialName)){
-    setQRStatus('⚠️ ' + officialName + ' ya está en la lista','err');
-    _scheduleQRStatusReset(4000);
-    return;
-  }
-
-  var ioeCheck = checkContrato(officialName);
-  if(ioeCheck){
-    pauseQR();
-    showIoeBlock(ioeCheck, officialName);
-    return;
-  }
-
-  // V101_19: branch manualConfirm movido al INICIO de onQRSuccess (después del parsing).
-
+  // V105 FIX (paridad V20_96): branches co* MOVIDOS ARRIBA del check duplicado.
+  // Sin esto el surquero/chofer/cuadrilla no podía cerrar día (su QR caía a "ya está en la lista" porque
+  // su check-in lo había agregado a workers[]).
   // V101_20: 3 branches nuevos check-out multi-estado (cuadrilla→chofer→surquero)
   if(_qrMode === 'coCuadrilla'){
     try {
@@ -5150,6 +5338,60 @@ function onQRSuccess(decoded){
       return;
     } catch(e){ console.warn('[V101_20] coSurq error', e); _qrMode='trabajador'; try{stopQR();}catch(_){} try{toast('⚠️ Error');}catch(_){} return; }
   }
+
+  // V101_01: validar surquero — su tarjeta debe coincidir con currentUser.name
+  // V101_08 FIX: extender validación a modo choferSurquero (chofer Y surquero misma persona)
+  if(_qrMode === 'surquero' || _qrMode === 'choferSurquero'){
+    var qrLower101 = (qrName||'').toLowerCase().trim();
+    var meLower101 = ((currentUser && currentUser.name)||'').toLowerCase().trim();
+    if(meLower101 && qrLower101 !== meLower101){
+      var _modeMsg101 = (_qrMode === 'choferSurquero')
+        ? '⚠️ Para "Chofer y Surquero" solo TÚ puedes ser registrado — escanea TU tarjeta'
+        : '⚠️ Esta tarjeta no es la tuya — debes escanear TU propia tarjeta';
+      setQRStatus(_modeMsg101,'err');
+      _scheduleQRStatusReset(4000);
+      return;
+    }
+  }
+
+  // V101_01: bloquear escaneo de trabajadores hasta que chofer + surquero estén registrados
+  // V101_29: admin con adminBypass exento
+  if(_qrMode === 'trabajador' && _dayFlow && !_dayFlow.diaIniciado && !_dayFlow.adminBypass){
+    setQRStatus('⚠️ Primero escanea al chofer y al surquero (Parámetros)','err');
+    _scheduleQRStatusReset(4000);
+    return;
+  }
+  // V101_09: bloquear escaneo si día cerrado
+  if(_qrMode === 'trabajador' && _dayFlow && _dayFlow.checkOutDone){
+    setQRStatus('⚠️ Día cerrado a las ' + (_dayFlow.checkOutTime||'') + ' — no se pueden agregar más trabajadores','err');
+    _scheduleQRStatusReset(4000);
+    return;
+  }
+
+  if(nameInArr(workers, qrName)){
+    setQRStatus('⚠️ ' + qrName + ' ya está en la lista','err');
+    _scheduleQRStatusReset(4000);
+    return;
+  }
+
+  var wkMatch=findInArr(ALL_WORKERS,qrEmpNum,'empNum');
+  var officialName = wkMatch ? wkMatch.name : qrName;
+
+  if(wkMatch && nameInArr(workers, officialName)){
+    setQRStatus('⚠️ ' + officialName + ' ya está en la lista','err');
+    _scheduleQRStatusReset(4000);
+    return;
+  }
+
+  var ioeCheck = checkContrato(officialName);
+  if(ioeCheck){
+    pauseQR();
+    showIoeBlock(ioeCheck, officialName);
+    return;
+  }
+
+  // V101_19: branch manualConfirm movido al INICIO de onQRSuccess (después del parsing).
+  // V105 FIX: branches co* (coCuadrilla/coChofer/coSurq) movidos al INICIO también.
 
   // V101_01: para chofer/surquero/dual → modal de confirmación contextual
   if(_qrMode === 'chofer' || _qrMode === 'surquero' || _qrMode === 'choferSurquero'){
@@ -5556,7 +5798,7 @@ function mkActRow(wid_,ai,_cont){
         var qr=document.createElement('div'); qr.className='qr'; qr.id='qr'+wid_+'_'+ai;
         var lbl2=act.tipo==='Caja'?'Cajas':act.tipo==='$'?'Monto $':'Piezas';
         qr.style.gridTemplateColumns='1fr';
-        qr.innerHTML='<div><label style="margin:0;font-size:10px">'+lbl2+'</label><input type="number" id="qty'+wid_+'_'+ai+'" min="0" step="'+(act.tipo==='$'?'0.5':'1')+'" value="'+(a.qty||'')+'" placeholder="0"></div>';
+        qr.innerHTML='<div><label style="margin:0;font-size:10px">'+lbl2+'</label><input type="number" inputmode="decimal" pattern="[0-9]*\\.?[0-9]*" id="qty'+wid_+'_'+ai+'" min="0" step="'+(act.tipo==='$'?'0.5':'1')+'" value="'+(a.qty||'')+'" placeholder="0"></div>';
         div.appendChild(qr);
         var _wi=wid_,_ai=ai;
         setTimeout(function(){
@@ -6863,6 +7105,52 @@ function showEmptyState(){
   list.appendChild(ph);
 }
 
+// V111: Drawer Lateral — handlers (paridad V20_102)
+function openDrawer(){
+  var ov = document.getElementById('drawerOverlay');
+  var pn = document.getElementById('drawerPanel');
+  if(!ov || !pn) return;
+  refreshDrawerContext();
+  ov.classList.add('show');
+  pn.classList.add('show');
+}
+function closeDrawer(){
+  var ov = document.getElementById('drawerOverlay');
+  var pn = document.getElementById('drawerPanel');
+  if(!ov || !pn) return;
+  ov.classList.remove('show');
+  pn.classList.remove('show');
+}
+function pickDrawerTab(n){
+  if(typeof go === 'function') go(n);
+  closeDrawer();
+}
+function refreshDrawerContext(){
+  var sq = document.getElementById('drawerSurquero');
+  var rc = document.getElementById('drawerRancho');
+  if(sq){
+    var nm = '—';
+    if(typeof currentUser !== 'undefined' && currentUser && currentUser.name) nm = currentUser.name;
+    sq.textContent = nm;
+  }
+  if(rc){
+    var rn = '—';
+    // V111 multi-rancho: leer del rancho activo (NO del input global #rancho que puede estar oculto)
+    if(typeof _ranchos !== 'undefined' && _ranchos && _ranchos[_activeRanchoIdx]){
+      rn = _ranchos[_activeRanchoIdx].rancho || _ranchos[_activeRanchoIdx].name || '—';
+    } else if(typeof gVal === 'function'){
+      rn = gVal('rancho') || '—';
+    }
+    rc.textContent = rn;
+  }
+  var tabs = document.querySelectorAll('.drawer-tab');
+  var curPg = (typeof pg !== 'undefined') ? pg : 0;
+  tabs.forEach(function(t){
+    var tp = parseInt(t.getAttribute('data-pg'));
+    t.classList.toggle('act', tp === curPg);
+  });
+}
+
 function go(n){
   // V101_01: bloquear pestañas distintas a Parámetros hasta que el día esté iniciado.
   if(n !== 0 && _dayFlow && !_dayFlow.diaIniciado && currentUser && !currentUser.isAdmin){
@@ -6894,6 +7182,8 @@ function go(n){
   var addbarEl = gEl('addbar'); if(addbarEl) addbarEl.classList.toggle('on', n===2);
   var ausBar=gEl('ausBar'); if(ausBar) ausBar.style.display=(n===5?'block':'none');
   pg=n; updNav();
+  // V111: sincronizar drawer (resalta tab activa + refresca surquero/rancho)
+  if(typeof refreshDrawerContext==='function') refreshDrawerContext();
   window.scrollTo(0,0);
 }
 function next(){ if(pg<8)go(pg+1); } // V81 (port V20_59): extender al ⑨ Archivos
@@ -7631,7 +7921,18 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
       }
       if(unitPr && laborLbl) break;
     }
-    if(!unitPr&&ACTS[col4.ai]&&ACTS[col4.ai].p) unitPr='$'+parseFloat(ACTS[col4.ai].p).toFixed(2);
+    // V108 (paridad V20_99): para columnas Hora, mostrar contractRate del primer worker representativo en vez del act.p del catálogo
+    if(col4.hr && wks.length){
+      var _crFirst = 0;
+      for(var _wf=0; _wf<wks.length; _wf++){
+        var _wfh = parseFloat(wks[_wf].contractRate);
+        if(_wfh > 0 && isFinite(_wfh)){ _crFirst = _wfh; break; }
+      }
+      if(_crFirst > 0) unitPr = '$' + _crFirst.toFixed(2) + '/hr';
+      else if(ACTS[col4.ai] && ACTS[col4.ai].p) unitPr = '$' + parseFloat(ACTS[col4.ai].p).toFixed(2);
+    } else if(!unitPr && ACTS[col4.ai] && ACTS[col4.ai].p) {
+      unitPr='$'+parseFloat(ACTS[col4.ai].p).toFixed(2);
+    }
     var _csp=_NS>1?' colspan="'+_NS+'"':'';
     // V90 (port V20_81): detectar VarDoor con factor (col P) → emitir TOTAL como "X.XXXX acres / X puertas"
     var _actC81 = null;
@@ -8549,6 +8850,37 @@ function sendAllRanchosToSheets(){
   _sendNext(0);
 }
 
+// V104: re-hidratar contractRate del worker antes de armar payload.
+// Si por race condition (login) o normalización de nombre w.contractRate quedó en 0,
+// hacer último intento con normalización de acentos/espacios contra ALL_WORKERS.
+function _normNombre95(s){
+  return (s||'').toString()
+    .toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g,'')
+    .replace(/\s+/g,' ').trim();
+}
+function _hidratarContractRate95(w){
+  if(!w) return 0;
+  var cr = parseFloat(w.contractRate);
+  if(cr > 0 && isFinite(cr)) return cr;
+  if(typeof ALL_WORKERS === 'undefined' || !ALL_WORKERS || !ALL_WORKERS.length) return 0;
+  var target = _normNombre95(w.name);
+  if(!target) return 0;
+  for(var i=0; i<ALL_WORKERS.length; i++){
+    var aw = ALL_WORKERS[i];
+    if(!aw) continue;
+    if(_normNombre95(aw.name) === target){
+      var c2 = parseFloat(aw.contractRate);
+      if(c2 > 0 && isFinite(c2)){
+        w.contractRate = c2;
+        console.warn('[V104] contractRate re-hidratado para', w.name, '→', c2);
+        return c2;
+      }
+    }
+  }
+  return 0;
+}
+
 // V24-FIX3: sendToSheets acepta frameId opcional para multi-rancho
 function sendToSheets(customFrameId) {
   if (!workers.length && !ausencias.length) { toast('⚠️ No hay trabajadores ni ausencias'); return; }
@@ -8574,6 +8906,54 @@ function sendToSheets(customFrameId) {
           _hr.missing.slice(0,15).join('\n• ') +
           (_hr.missing.length>15 ? '\n• ... y '+(_hr.missing.length-15)+' más' : '') +
           '\n\nNo puedes enviar a Sheets hasta que TODOS tengan horario.');
+    return;
+  }
+  // V104: validar contractRate para todo worker con actividad tipo Hora antes de enviar.
+  var _missingCR95 = [];
+  for(var _wcr=0; _wcr<workers.length; _wcr++){
+    var _wcrW = workers[_wcr];
+    if(!_wcrW || !_wcrW.acts) continue;
+    _hidratarContractRate95(_wcrW);
+    var _hasHora95 = false;
+    for(var _wcrA=0; _wcrA<_wcrW.acts.length; _wcrA++){
+      var _wcrAct = ALL_ACTS[_wcrW.acts[_wcrA].ai] || _wcrW.acts[_wcrA];
+      if(isHourAct(_wcrAct)){ _hasHora95 = true; break; }
+    }
+    if(_hasHora95){
+      var _cr95 = parseFloat(_wcrW.contractRate)||0;
+      if(!(_cr95 > 0 && isFinite(_cr95))){
+        _missingCR95.push(esc(_wcrW.name||'?'));
+      }
+    }
+  }
+  // V110 MANZANITA 1 (paridad V20_101): validar participantes solo-grupales en grupales Hora
+  if(typeof grpActs !== 'undefined' && grpActs && grpActs.length){
+    for(var _gi95=0; _gi95<grpActs.length; _gi95++){
+      var _g95 = grpActs[_gi95];
+      if(!_g95 || !_g95.participantes || !_g95.participantes.length) continue;
+      var _gAct95 = (typeof GRUPAL_ACTS!=='undefined' && GRUPAL_ACTS[_g95.gai]) ? GRUPAL_ACTS[_g95.gai] : null;
+      if(!_gAct95) continue;
+      var _gCt95 = (typeof grpCalcType==='function') ? grpCalcType(_gAct95) : '';
+      if(_gCt95 !== 'hora') continue;
+      for(var _gpi=0; _gpi<_g95.participantes.length; _gpi++){
+        var _pid = _g95.participantes[_gpi];
+        var _pw = null;
+        if(typeof getW==='function') _pw = getW(_pid);
+        if(!_pw){
+          for(var _kw=0; _kw<workers.length; _kw++){ if(workers[_kw] && workers[_kw].id===_pid){ _pw = workers[_kw]; break; } }
+        }
+        if(!_pw) continue;
+        if(typeof _hidratarContractRate95==='function') _hidratarContractRate95(_pw);
+        var _crP = parseFloat(_pw.contractRate)||0;
+        if(!(_crP > 0 && isFinite(_crP))){
+          var _nm = (typeof esc==='function'?esc(_pw.name):_pw.name)||'?';
+          if(_missingCR95.indexOf(_nm) === -1) _missingCR95.push(_nm);
+        }
+      }
+    }
+  }
+  if(_missingCR95.length){
+    alert('⚠️ FALTA CONTRACT RATE\n\nLos siguientes trabajadores tienen actividad por HORA pero NO tienen Contract Rate (col G del MASTER ACTIVOS):\n\n• ' + _missingCR95.join('\n• ') + '\n\nNo se puede enviar — Cindy recibiría $14 (precio del catálogo) en vez del rate real de cada uno.\n\nRevisa col G del MASTER ACTIVOS de estos trabajadores.');
     return;
   }
   // V23: confirmación visual del rancho al enviar
@@ -8626,9 +9006,10 @@ function sendToSheets(customFrameId) {
       // V26-FIX4: usar resolveAct en vez de ACTS[a.ai] — evita omitir actividades si ACTS fue re-filtrado
       var act = resolveAct(a, false) || (a.ai>=0 && a.ai<ACTS.length ? ACTS[a.ai] : null);
       if (!act) continue;
-      var totalH = act.hr ? totalShiftHours(a) : 0;
+      // V104 FIX: usar isHourAct (cubre tipo='Hora' aun si act.hr false). Bug: act.hr directo causaba mandar act.p $14 a Cindy en vez del contract rate.
+      var totalH = isHourAct(act) ? totalShiftHours(a) : 0;
       // Tau: solo Hours usa contractRate; todo lo demás usa act.p
-      var uPrice = act.hr ? getHRate(w, act) : act.p;
+      var uPrice = isHourAct(act) ? getHRate(w, act) : act.p;
       // V12: incluir horarios para FIELD_DROP cols 16-19
       // ini/fin son por actividad; lonche (lIni/lFin) es global de Parámetros
       wOut.acts.push({
@@ -8664,7 +9045,8 @@ function sendToSheets(customFrameId) {
         unitPrice:  0,
         qty:        '',
         totalHours: '',
-        motivo:     mot
+        motivo:     mot,
+        finca:      gVal('finca') || ''  // V109 FIX (paridad V20_100): ausencias ahora también mandan finca
       }]
     });
     ausSent++;
@@ -8726,14 +9108,16 @@ function sendToSheets(customFrameId) {
         payload.workers.push(found);
       }
 
+      // V108 (paridad V20_99): cada participante grupal Hora usa SU contractRate, no el precio del catálogo
+      var uPriceGrp = (ct === 'hora') ? (getHRate(w, act) || unitP) : unitP;
       found.acts.push({
         actEs:      act.es,
         actEn:      act.en || act.es,
         tipo:       ct === 'hora' ? 'Hora' : (act.tipo || ct.charAt(0).toUpperCase() + ct.slice(1)),
-        unitPrice:  unitP,
+        unitPrice:  uPriceGrp,
         qty:        Math.round(qtyPerPerson * 100) / 100,
         totalHours: ct === 'hora' ? qtyPerPerson : '',
-        finca:      g.vars.labor || gVal('finca'),
+        finca:      g.vars.finca || gVal('finca'),  // V109 FIX (paridad V20_100): era g.vars.labor (typo), correcto es g.vars.finca
         hEnt:       g.vars.ini || '',   // V12-BUG2: horarios grupales (antes no se enviaban)
         hSal:       g.vars.fin || '',
         hLIni:      gVal('lIni') || '',
@@ -9196,9 +9580,9 @@ function renderGrpActs(){
       var totalC = g.vars.totalC||''; var precioC = g.vars.precioC||act.p||0.80;
       varsHtml = '<div class="r2" style="margin-bottom:8px">'
         +'<div><label style="font-size:10px">Total cajas</label>'
-        +'<input type="number" min="0" step="1" value="'+totalC+'" placeholder="0" data-gi="'+gi+'" data-v="totalC" onchange="setGrpVar(this)" style="font-size:16px;padding:10px 11px"></div>'
+        +'<input type="number" inputmode="decimal" pattern="[0-9]*\\.?[0-9]*" min="0" step="1" value="'+totalC+'" placeholder="0" data-gi="'+gi+'" data-v="totalC" onchange="setGrpVar(this)" style="font-size:16px;padding:10px 11px"></div>'
         +'<div><label style="font-size:10px">$/caja</label>'
-        +'<input type="number" min="0" step="0.01" value="'+precioC+'" data-gi="'+gi+'" data-v="precioC" onchange="setGrpVar(this)" style="font-size:16px;padding:10px 11px"></div>'
+        +'<input type="number" inputmode="decimal" pattern="[0-9]*\\.?[0-9]*" min="0" step="0.01" value="'+precioC+'" data-gi="'+gi+'" data-v="precioC" onchange="setGrpVar(this)" style="font-size:16px;padding:10px 11px"></div>'
         +'</div>'
         +'<div class="r2" style="margin-bottom:8px">'
         +'<div><label style="font-size:10px">🟢 Entrada</label>'
@@ -9222,7 +9606,7 @@ function renderGrpActs(){
     } else {
       var totalP = g.vars.totalP||'';
       varsHtml = '<div style="margin-bottom:8px"><label style="font-size:10px">Cantidad total ('+act.tipo+')</label>'
-        +'<input type="number" min="0" step="1" value="'+totalP+'" placeholder="0" data-gi="'+gi+'" data-v="totalP" onchange="setGrpVar(this)" style="font-size:16px;padding:10px 11px;width:100%"></div>'
+        +'<input type="number" inputmode="decimal" pattern="[0-9]*\\.?[0-9]*" min="0" step="1" value="'+totalP+'" placeholder="0" data-gi="'+gi+'" data-v="totalP" onchange="setGrpVar(this)" style="font-size:16px;padding:10px 11px;width:100%"></div>'
         +'<div class="r2" style="margin-bottom:8px">'
         +'<div><label style="font-size:10px">🟢 Entrada</label>'
         +'<input type="time" step="1800" value="'+(g.vars.ini||'')+'"'
@@ -10166,6 +10550,8 @@ function refreshDataBackground(){
       console.log('✅ V68: Fincas (background) cargadas (' + Object.keys(data.fincas).length + ' ranchos)');
     }
     try { if(typeof renderParamsFinca === 'function') renderParamsFinca(); } catch(e){}
+    // V110 MANZANITA 2 (paridad V20_101): refrescar dropdown finca semanal en background
+    try { if(typeof renderSemFinca === 'function') renderSemFinca(); } catch(e){}
   });
   fetchFromScript('tasks', function(err, data){
     if(!err && data && data.success && data.tasks){
@@ -11933,6 +12319,44 @@ var semData = {}; // {weekStart:'2026-03-23', actIdx:0, rancho:'', finca:'', row
 var SEM_DAYS = ['Lun','Mar','Mié','Jue','Vie','Sáb','Dom'];
 var SEM_DAYS_FULL = ['Lunes','Martes','Miércoles','Jueves','Viernes','Sábado','Domingo'];
 
+// V110 MANZANITA 2 (paridad V20_101): renderizar semFinca como dropdown si hay catálogo
+function renderSemFinca(){
+  var slot = gEl('semFincaSlot');
+  if(!slot) return;
+  var rancho = (gVal('semRancho')||'').toLowerCase();
+  var hidden = gEl('semFinca');
+  var prevVal = (hidden ? hidden.value : '') || '';
+  var fincas = (typeof FINCAS_POR_RANCHO!=='undefined' && rancho && FINCAS_POR_RANCHO[rancho]) ? FINCAS_POR_RANCHO[rancho] : null;
+  if(fincas && fincas.length){
+    var html = '<select id="semFincaSel" data-save onchange="onSemFincaChange()" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:16px">';
+    html += '<option value="">— Selecciona finca —</option>';
+    var found = false;
+    for(var i=0; i<fincas.length; i++){
+      var sel = (prevVal === fincas[i]) ? ' selected' : '';
+      if(sel) found = true;
+      html += '<option value="'+esc(fincas[i])+'"'+sel+'>'+esc(fincas[i])+'</option>';
+    }
+    if(prevVal && !found){
+      html += '<option value="'+esc(prevVal)+'" selected>⚠️ '+esc(prevVal)+' (legacy)</option>';
+    }
+    html += '</select>';
+    slot.innerHTML = html;
+  } else {
+    slot.innerHTML = '<input type="text" id="semFincaText" value="'+esc(prevVal)+'" oninput="onSemFincaChange()" placeholder="Finca (texto libre)" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:8px;font-size:16px">';
+  }
+}
+
+function onSemFincaChange(){
+  var sel = gEl('semFincaSel');
+  var txt = gEl('semFincaText');
+  var hidden = gEl('semFinca');
+  if(hidden){
+    if(sel) hidden.value = sel.value || '';
+    else if(txt) hidden.value = txt.value || '';
+  }
+  if(typeof saveSemData === 'function') saveSemData();
+}
+
 function initSemTab(){
   // V12-FIX4: usa getRanchoList() compartido (antes era lógica duplicada de populateRanchoDropdown)
   var ranchoSel = gEl('semRancho');
@@ -11970,6 +12394,8 @@ function initSemTab(){
 
   // Paso 2: AHORA sí restaurar datos guardados (semActivity ya tiene opciones)
   loadSemData();
+  // V110 MANZANITA 2 (paridad V20_101): inicializar dropdown de finca semanal
+  try { renderSemFinca(); } catch(e){}
 }
 
 // Gamma2-V5: Mostrar TODAS las actividades individuales del rancho (no solo Hora)
@@ -11979,6 +12405,8 @@ function onSemRanchoChange(){
   var rancho = gVal('semRancho');
   var sel = gEl('semActivity');
   sel.innerHTML = '<option value="">— Selecciona actividad —</option>';
+  // V110 MANZANITA 2 (paridad V20_101): refrescar dropdown finca al cambiar rancho semanal
+  try { renderSemFinca(); } catch(e){}
 
   if(!rancho) return;
 
@@ -12299,6 +12727,8 @@ function loadSemData(){
           gEl('semActivity').value = d.actIdx || '';
           gEl('semRancho').value = d.rancho || '';
           gEl('semFinca').value = d.finca || '';
+          // V110 MANZANITA 2 (paridad V20_101): refrescar dropdown con valor restaurado
+          try { renderSemFinca(); } catch(e){}
           buildSemTable();
           return;
         }
@@ -12315,6 +12745,8 @@ function loadSemData(){
           gEl('semActivity').value = d.actIdx || '';
           gEl('semRancho').value = d.rancho || '';
           gEl('semFinca').value = d.finca || '';
+          // V110 MANZANITA 2 (paridad V20_101): refrescar dropdown con valor restaurado
+          try { renderSemFinca(); } catch(e){}
           buildSemTable();
           return;
         }
@@ -12426,6 +12858,18 @@ function generateSemPDF(){
 
   // Gamma2-V9: Columnas múltiples por día si hay horarios distintos entre workers
   var unitPrice = selAct ? (parseFloat(selAct.p)||0) : 0;
+  // V108 (paridad V20_99): si la actividad es Hora, usar contractRate del primer worker representativo en la fila Pago Unit.
+  // (la fila META es compartida; el contractRate per-worker viaja en el payload a FieldSync v5.27)
+  if(isHour && workers && workers.length){
+    var _crFirstSem = 0;
+    for(var _wfs=0; _wfs<workers.length; _wfs++){
+      var _wkfs = workers[_wfs];
+      if(!_wkfs) continue;
+      var _crfs = parseFloat(_wkfs.contractRate)||0;
+      if(_crfs > 0 && isFinite(_crfs)){ _crFirstSem = _crfs; break; }
+    }
+    if(_crFirstSem > 0) unitPrice = _crFirstSem;
+  }
   var tipoLabel = isHour ? 'hr' : ((selAct&&selAct.tipo)||'pza');
 
   // ── Paso 1: Recopilar datos + horarios por worker por día ──
@@ -12635,6 +13079,29 @@ function sendSemToSheets(){
   var surqueroName = gVal('surquero') || '';
   if(currentUser && currentUser.isAdmin) surqueroName = ADMIN_USER_NAME;
 
+  // V108 (paridad V20_99): hidratar contractRate de cada worker antes de armar payload semanal
+  for(var _whi=0; _whi<workers.length; _whi++){
+    if(typeof _hidratarContractRate95 === 'function') _hidratarContractRate95(workers[_whi]);
+  }
+
+  // V108 (paridad V20_99): validador pre-envío semanal — si actividad es Hora, todos los workers deben tener contractRate
+  var _isHourSem99 = selAct && (typeof isHourAct === 'function' ? isHourAct(selAct) : !!selAct.hr);
+  if(_isHourSem99){
+    var _missingCRSem99 = [];
+    for(var _wsi=0; _wsi<workers.length; _wsi++){
+      var _wkSem = workers[_wsi];
+      if(!_wkSem) continue;
+      var _crSem = parseFloat(_wkSem.contractRate)||0;
+      if(!(_crSem > 0 && isFinite(_crSem))){
+        _missingCRSem99.push((typeof esc==='function'?esc(_wkSem.name):_wkSem.name)||'?');
+      }
+    }
+    if(_missingCRSem99.length){
+      alert('⚠️ FALTA CONTRACT RATE — SEMANAL\n\nLa actividad seleccionada es por HORA. Los siguientes trabajadores NO tienen Contract Rate (col G del MASTER ACTIVOS):\n\n• ' + _missingCRSem99.join('\n• ') + '\n\nNo se puede enviar — Cindy recibiría $14 en vez del rate real de cada uno.\n\nRevisa col G del MASTER ACTIVOS de estos trabajadores.');
+      return;
+    }
+  }
+
   var payload = {
     action: 'semanal',
     weekStart: weekStart,
@@ -12650,7 +13117,8 @@ function sendSemToSheets(){
 
   for(var w=0;w<workers.length;w++){
     var wk = workers[w];
-    var row = {name:wk.name, empNum:wk.empNum||'', days:[]};
+    // V108 (paridad V20_99): contractRate per-worker para que FieldSync v5.27 use el rate real en Hora
+    var row = {name:wk.name, empNum:wk.empNum||'', contractRate: parseFloat(wk.contractRate)||0, days:[]};
     var anyData = false;
 
     for(var d=0;d<7;d++){
@@ -13042,6 +13510,70 @@ function adminBypassQR(){
   });
 }
 
+// V112: bypass QR con PIN del surquero loggeado (paralelo a adminBypassQR, paridad V20_103)
+function surqueroBypassQR(){
+  if(!currentUser){ toast('⚠️ Inicia sesión primero'); return; }
+  if(_readOnlyMode){ toast('🔒 Modo lectura — no aplica'); return; }
+  if(currentUser.isAdmin){ adminBypassQR(); return; }
+  var pin = prompt('🔢 Tu PIN de surquero para confirmar (sin escanear QR):');
+  if(!pin) return;
+  pin = String(pin).trim();
+  if(typeof LIDERES === 'undefined' || !LIDERES || !LIDERES.length){
+    toast('⚠️ Lista de líderes no cargada');
+    return;
+  }
+  var liderTarget = null;
+  for(var i=0; i<LIDERES.length; i++){
+    if(LIDERES[i] && LIDERES[i].name && currentUser.name &&
+       LIDERES[i].name.toLowerCase().trim() === currentUser.name.toLowerCase().trim()){
+      liderTarget = LIDERES[i];
+      break;
+    }
+  }
+  if(!liderTarget){ toast('⚠️ Surquero no encontrado en LIDERES'); return; }
+  hashPin(pin).then(function(h){
+    var pinOk = false;
+    if(liderTarget.pinHash && h === liderTarget.pinHash) pinOk = true;
+    if(!pinOk && liderTarget.pin && pin === String(liderTarget.pin).trim()) pinOk = true;
+    if(!pinOk){ toast('⚠️ PIN incorrecto'); return; }
+    try{
+      var fakeName = currentUser.name;
+      var fakeEmpNum = currentUser.empNum || '';
+      if((_qrMode === 'chofer' || _qrMode === 'manualConfirm') && _pendingManualAdd){
+        fakeName = _pendingManualAdd.name || fakeName;
+        fakeEmpNum = _pendingManualAdd.empNum || fakeEmpNum;
+      }
+      var fakeDecoded = 'EBERRY|' + fakeName + '|' + fakeEmpNum;
+      console.log('[V112] surqueroBypassQR simulando escaneo:', _qrMode, fakeDecoded);
+      onQRSuccess(fakeDecoded);
+    }catch(e){
+      console.warn('[V112] surqueroBypassQR error', e);
+      toast('⚠️ Error al simular escaneo');
+    }
+  });
+}
+
+// V112: agregar chofer/surquero/combinado a lápiz (reutiliza openCheckInSheet, paridad V20_103)
+function abrirLapizChofer(){
+  if(_dayFlow && _dayFlow.choferScanned){ toast('⚠️ Chofer ya escaneado'); return; }
+  _qrMode = 'chofer';
+  if(typeof openCheckInSheet === 'function') openCheckInSheet('chofer');
+  else toast('⚠️ Función no disponible');
+}
+function abrirLapizSurquero(){
+  if(_dayFlow && _dayFlow.surqueroScanned){ toast('⚠️ Surquero ya escaneado'); return; }
+  if(!_dayFlow.choferScanned && !(_dayFlow && _dayFlow.adminBypass)){ toast('⚠️ Primero agrega Chofer'); return; }
+  _qrMode = 'surquero';
+  if(typeof openCheckInSheet === 'function') openCheckInSheet('surquero');
+  else toast('⚠️ Función no disponible');
+}
+function abrirLapizCombinado(){
+  if(_dayFlow && (_dayFlow.choferScanned || _dayFlow.surqueroScanned)){ toast('⚠️ Ya hay chofer o surquero escaneado'); return; }
+  _qrMode = 'choferSurquero';
+  if(typeof openCheckInSheet === 'function') openCheckInSheet('choferSurquero');
+  else toast('⚠️ Función no disponible');
+}
+
 function adminCanEditTime(){ return !!(currentUser && currentUser.isAdmin && !_readOnlyMode); }
 
 function onAdminTimeFocus(inp, label){
@@ -13088,6 +13620,8 @@ function onAdminTimeFocus(inp, label){
     'onCheckInManualAC','checkInFaceID','_undoWorker',
     // V101_24: peinado admin debe bloquearse en modo lectura
     'testFill','testClear','adminBypassQR','activarAdminBypass',
+    // V112: bypass surquero + a lápiz también deben bloquearse en modo lectura
+    'surqueroBypassQR','abrirLapizChofer','abrirLapizSurquero','abrirLapizCombinado',
     // DÍA / NOTAS
     'startNewDay','openNewDay','saveNotaV65','toggleNotaV65','cancelNotaV65',
     // IMPORT / EXPORT
