@@ -34,7 +34,7 @@
 </script>
 <script>
 // V50 (port V20_23): estandarización de colores PDF
-window.APP_VERSION = 'V116';
+window.APP_VERSION = 'V117';
 (function(){
   // V86 (port V20_77): AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Si _ackedVersion === APP_VERSION cargado, ese ack ya cumplió → limpiar para que próximas updates lleguen.
@@ -13723,8 +13723,8 @@ function openCheckInSheet(role){
       } else { cnt.style.display = 'none'; }
     }
     var manualBtn = gEl('cisBtnManual');
-    // V114 FASE B (paridad V20_105): permitir escribir nombre en todos los modos
-    if(manualBtn) manualBtn.style.display = '';
+    // V117 (paridad V20_108): bloqueo de seguridad — surquero/dual solo por QR/FaceID/PIN
+    if(manualBtn) manualBtn.style.display = (r === 'surquero' || r === 'choferSurquero') ? 'none' : '';
     sheet.classList.add('show');
   }catch(e){ console.warn('openCheckInSheet',e); }
 }
@@ -13802,7 +13802,11 @@ function checkInManualSelect(name){
   try{
     if(!name) return;
     if(typeof alreadyAdded==='function' && alreadyAdded(name)){ toast('⚠️ '+name+' ya está en la lista'); return; }
-    // V114 FASE B (paridad V20_105): permitido manual en todos los roles
+    // V117 (paridad V20_108): bloquear manual para surquero/choferSurquero (seguridad)
+    if(_cisRole === 'surquero' || _cisRole === 'choferSurquero'){
+      toast('⚠️ Surquero solo se identifica con QR, FaceID o tu PIN — no por nombre');
+      return;
+    }
     _pendingManualAdd = name;
     _pendingManualRole = _cisRole || 'trabajador';
     var box = gEl('checkInManualBox'); if(box) box.style.display='none';
