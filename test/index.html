@@ -34,7 +34,7 @@
 </script>
 <script>
 // V50 (port V20_23): estandarización de colores PDF
-window.APP_VERSION = 'V114';
+window.APP_VERSION = 'V116';
 (function(){
   // V86 (port V20_77): AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Si _ackedVersion === APP_VERSION cargado, ese ack ya cumplió → limpiar para que próximas updates lleguen.
@@ -2553,15 +2553,29 @@ function adminForceClose(){
   });
 }
 
+// V115 (paridad V20_106): normalizador robusto de crew
+// Quita acentos, lowercase, colapsa espacios y quita sufijo numérico al final ("Pennrose 2" → "pennrose")
+function normCrew(s){
+  return (s || '').toString()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ').trim()
+    .replace(/\s*\d+$/, '').trim();
+}
+
 function filterDataForCrew(crew){
-  // Normalize crew name for matching (e.g. "Pennrose 2" → "Pennrose")
+  // V115 (paridad V20_106): usar normCrew para matching robusto
+  // Normalize crew name for matching (e.g. "Pennrose 2" → "pennrose")
   var crewBase = crew.replace(/\s*\d+$/, '').trim().toLowerCase();
+  var crewNorm = normCrew(crew);
 
   // Filter workers: exact crew match
   NAMES = [];
   for(var i=0;i<ALL_WORKERS.length;i++){
     var wCrew = (ALL_WORKERS[i].crew||'').toLowerCase();
-    if(wCrew === crew.toLowerCase() || wCrew === crewBase){
+    var wCrewNorm = normCrew(ALL_WORKERS[i].crew);
+    // V115 (paridad V20_106): comparar también con normCrew (acentos/espacios robustos)
+    if(wCrew === crew.toLowerCase() || wCrew === crewBase || wCrewNorm === crewNorm){
       NAMES.push(ALL_WORKERS[i].name);
     }
   }
@@ -5428,6 +5442,14 @@ function onQRSuccess(decoded){
   }
 
   var inCrew = !!findInStrArr(NAMES, officialName);
+  // V115 (paridad V20_106): check defensivo — si NAMES no contiene al worker pero su crew normalizada
+  // coincide con la del surquero loggeado, considerarlo del crew (evita falso positivo "no pertenece")
+  if(!inCrew && wkMatch && currentUser){
+    if(normCrew(wkMatch.crew) === normCrew(currentUser.crew)){
+      inCrew = true;
+      console.log('[V115] crew matcheado por normalización defensiva');
+    }
+  }
   if(inCrew){
     doAddConfirmed(officialName);
     qrSessionCount++;
@@ -12245,6 +12267,15 @@ function handleFaceIDMatch(matched, needsConfirm){
 
   // 3. Check if in current crew (if NAMES is loaded)
   var inCrew = NAMES.length > 0 ? !!findInStrArr(NAMES, officialName) : false;
+
+  // V116 (paridad V20_107): check defensivo paralelo en FaceID
+  var wkMatchEarly = findInArr(ALL_WORKERS, officialName);
+  if(!inCrew && wkMatchEarly && currentUser){
+    if(typeof normCrew === 'function' && normCrew(wkMatchEarly.crew) === normCrew(currentUser.crew)){
+      inCrew = true;
+      console.log('[V116] crew matcheado por normalización defensiva (FaceID)');
+    }
+  }
 
   if(inCrew && !needsConfirm){
     // Auto-add (high confidence + same crew)
