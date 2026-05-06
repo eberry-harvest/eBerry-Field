@@ -34,7 +34,7 @@
 </script>
 <script>
 // V50 (port V20_23): estandarización de colores PDF
-window.APP_VERSION = 'V117';
+window.APP_VERSION = 'V118';
 (function(){
   // V86 (port V20_77): AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Si _ackedVersion === APP_VERSION cargado, ese ack ya cumplió → limpiar para que próximas updates lleguen.
@@ -911,7 +911,8 @@ html.login-locked{overflow:hidden!important;height:100%!important}
       <img id="unkThumb" style="width:80px;height:80px;border-radius:50%;border:3px solid var(--a);object-fit:cover" src="" alt="">
     </div>
     <div class="mbox" style="background:#fff8ec;border:1.5px solid var(--a)">
-      <div class="ml" style="color:var(--a)">Esta persona no está en el grupo habitual</div>
+      <!-- V118 (paridad V20_109): id para título dinámico -->
+      <div class="ml" id="unkTitle" style="color:var(--a)">Esta persona no está en el grupo habitual</div>
       <div class="mv" id="unkN" style="color:var(--a)">—</div>
     </div>
     <div class="mbs">
@@ -5434,6 +5435,8 @@ function onQRSuccess(decoded){
     var modeLabel = (_qrMode === 'chofer') ? 'tu CHOFER del bus'
                   : (_qrMode === 'surquero') ? 'el SURQUERO (tú)'
                   : 'CHOFER + SURQUERO (misma persona)';
+    // V118 (paridad V20_109): título neutro para chofer/surquero/dual
+    var _ut = gEl('unkTitle'); if(_ut) _ut.textContent = 'Confirmar registro';
     gEl('unkS').textContent = '🚌 ¿Confirmas que ' + officialName + ' es ' + modeLabel + '? La hora de check-in se congelará al confirmar.';
     gEl('unkN').textContent = officialName;
     if(typeof showUnkThumb === 'function') showUnkThumb(officialName);
@@ -5462,6 +5465,8 @@ function onQRSuccess(decoded){
   pauseQR();
   var otherCrew = wkMatch ? wkMatch.crew : '';
   pendingUnk = officialName;
+  // V118 (paridad V20_109): título original para trabajador con otherCrew (legítimo)
+  var _ut = gEl('unkTitle'); if(_ut) _ut.textContent = 'Esta persona no está en el grupo habitual';
   if(wkMatch && otherCrew){
     gEl('unkS').textContent='📷 QR: Esta persona pertenece al crew "'+otherCrew+'". ¿Confirmas que deseas agregarlo a este día?';
   } else if(wkMatch){
@@ -5538,10 +5543,18 @@ function doAdd(name){
   var ioeCheck = checkContrato(officialName);
   if(ioeCheck){ showIoeBlock(ioeCheck, officialName); return; }
 
+  // V118 (paridad V20_109): check defensivo paralelo a V115/V116
+  var dbMatch = findInArr(ALL_WORKERS,name);
+  if(!inCrew && dbMatch && currentUser && currentUser.crew){
+    if(typeof normCrew === 'function' && normCrew(dbMatch.crew) === normCrew(currentUser.crew)){
+      inCrew = true;
+      console.log('[V118] crew matcheado por normalización defensiva (doAdd)');
+    }
+  }
   if(inCrew){ doAddConfirmed(officialName); return; }
 
   // Check if in another crew (from ALL_WORKERS) — use official name from DB
-  var dbMatch = findInArr(ALL_WORKERS,name);
+  // V118 (paridad V20_109): dbMatch ya fue calculado arriba para el check defensivo
   var foundInDB = !!dbMatch;
   var otherCrew = dbMatch ? dbMatch.crew : '';
   if(dbMatch) officialName = dbMatch.name;
@@ -5551,6 +5564,8 @@ function doAdd(name){
   if(ioeCheck2){ showIoeBlock(ioeCheck2, officialName); return; }
 
   pendingUnk = officialName; // always use official name
+  // V118 (paridad V20_109): título original para trabajador con otherCrew (legítimo)
+  var _ut = gEl('unkTitle'); if(_ut) _ut.textContent = 'Esta persona no está en el grupo habitual';
   if(foundInDB && otherCrew){
     gEl('unkS').textContent='Esta persona pertenece al crew "'+otherCrew+'". ¿Confirmas que deseas agregarlo a este día?';
   } else if(foundInDB){
@@ -12294,6 +12309,8 @@ function handleFaceIDMatch(matched, needsConfirm){
   var otherCrew = wkMatch ? wkMatch.crew : '';
   pendingUnk = officialName;
 
+  // V118 (paridad V20_109): título original para faceID (legítimo)
+  var _ut = gEl('unkTitle'); if(_ut) _ut.textContent = 'Esta persona no está en el grupo habitual';
   if(needsConfirm){
     gEl('unkS').textContent = '👤 Reconocimiento facial (confianza baja): ¿Es esta persona ' + officialName + '?';
   } else if(wkMatch && otherCrew && !inCrew){
