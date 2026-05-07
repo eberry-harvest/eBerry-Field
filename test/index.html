@@ -34,7 +34,7 @@
 </script>
 <script>
 // V50 (port V20_23): estandarización de colores PDF
-window.APP_VERSION = 'V118';
+window.APP_VERSION = 'V121';
 (function(){
   // V86 (port V20_77): AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Si _ackedVersion === APP_VERSION cargado, ese ack ya cumplió → limpiar para que próximas updates lleguen.
@@ -2953,6 +2953,33 @@ function _loadRanchoCtx(idx){
   estP = r.estP || [];
   hilP = r.hilP || [];
   cajasP = r.cajasP || [];
+  // V119 FASE A (paridad V20_110): resolver gai por nombre al cargar contexto del rancho.
+  // El swap entre ranchos puede cambiar el orden de GRUPAL_ACTS — corregir gai por esName.
+  if(grpActs && grpActs.length && typeof GRUPAL_ACTS !== 'undefined' && GRUPAL_ACTS){
+    for(var _glki=0; _glki<grpActs.length; _glki++){
+      var _glk = grpActs[_glki];
+      if(!_glk) continue;
+      var _glnK = (_glk.esName || _glk._actEs || '').toLowerCase().trim();
+      if(!_glnK) continue;
+      var _glfIdx = -1;
+      for(var _glj=0; _glj<GRUPAL_ACTS.length; _glj++){
+        if(GRUPAL_ACTS[_glj] && (GRUPAL_ACTS[_glj].es||'').toLowerCase().trim() === _glnK){
+          _glfIdx = _glj; break;
+        }
+      }
+      if(_glfIdx >= 0 && _glfIdx !== _glk.gai){
+        _glk.gai = _glfIdx;
+      } else if(_glfIdx === -1 && typeof ALL_GRUPAL !== 'undefined' && ALL_GRUPAL){
+        for(var _glallj=0; _glallj<ALL_GRUPAL.length; _glallj++){
+          if(ALL_GRUPAL[_glallj] && (ALL_GRUPAL[_glallj].es||'').toLowerCase().trim() === _glnK){
+            GRUPAL_ACTS.push(ALL_GRUPAL[_glallj]);
+            _glk.gai = GRUPAL_ACTS.length - 1;
+            break;
+          }
+        }
+      }
+    }
+  }
   // Restaurar campos del form
   var _f = function(id,v){ var e=gEl(id); if(e) e.value=v||''; };
   // V76 FIX: SIEMPRE cargar rancho de _ranchos[idx] — en multi-rancho el rancho fue elegido
@@ -2970,6 +2997,8 @@ function _loadRanchoCtx(idx){
   _f('hilIni',r.hilIni); _f('hilFin',r.hilFin);
   // V101_03: cargar dayFlow del rancho (cada rancho tiene chofer/surquero independientes)
   _dayFlow = r.dayFlow ? r.dayFlow : _initDayFlow();
+  // V120 FIX 4 (paridad V20_111): resync wid tras swap de rancho (multi-rancho)
+  try { _resyncWid(); } catch(_){}
 }
 
 // V78 FIX: re-renderizar TODO el UI del rancho activo (workers + grupales + ausencias).
@@ -4469,8 +4498,13 @@ function _enterReadOnly(payload){
         _vars.anchoCama = 1;
       }
     }
+    // V120 FIX 3 (paridad V20_111): enriquecer grupal con _actEs, _payType, _unitPrice (paralelo a renderGrpActs fallback)
     grpActs.push({
-      gai: gaiIdx, esName: pg.actEs||'',
+      gai: gaiIdx,
+      esName: pg.actEs || '',
+      _actEs: pg.actEs || '',
+      _payType: pg.tipo || '',
+      _unitPrice: parseFloat(pg.unitPrice) || 0,
       participantes: partIds,
       vars: _vars,
       _frozen: true
@@ -4482,6 +4516,9 @@ function _enterReadOnly(payload){
   ausencias = (payload.ausencias||[]).map(function(a){
     return { name:a.name||'', empNum:a.empNum||'', motivo:a.motivo||'', _frozen:true };
   });
+
+  // V120 FIX 4 (paridad V20_111): resync wid tras hidratar workers en modo lectura
+  try { _resyncWid(); } catch(_){}
 
   var topFields = {
     rancho: payload.rancho, fecha: payload.fecha, numBus: payload.numBus,
@@ -5592,6 +5629,8 @@ function showUnkThumb(name){
   }
 }
 function okUnk(){
+  // V120 FIX 2 (paridad V20_111): capturar modo ANTES de doAddConfirmed (que lo resetea)
+  var _modeAtAdd = _qrMode || 'trabajador';
   if(pendingUnk){
     var ioeChk = checkContrato(pendingUnk);
     if(ioeChk){ showIoeBlock(ioeChk, pendingUnk); pendingUnk=null; gEl('unkOv').classList.remove('on'); return; }
@@ -5600,7 +5639,17 @@ function okUnk(){
     pendingUnk=null;
   }
   gEl('unkOv').classList.remove('on');
-  if(qrActive) resumeQR();
+  // V120 FIX 2 (paridad V20_111): cerrar QR completo si el modo era chofer/surquero/dual (uno-shot)
+  var _modeWasOneShot = (_modeAtAdd === 'chofer' || _modeAtAdd === 'surquero' || _modeAtAdd === 'choferSurquero');
+  if(_modeWasOneShot){
+    try{ if(typeof stopQR === 'function') stopQR(); }catch(e){}
+    var _qrOv = gEl('qrOv');
+    if(_qrOv) _qrOv.classList.remove('on');
+    qrActive = false;
+    console.log('[V120 FIX 2] QR cerrado tras chofer/surquero/dual');
+  } else {
+    if(qrActive) resumeQR();
+  }
 }
 function noUnk(){ pendingUnk=null; gEl('unkOv').classList.remove('on'); if(qrActive) resumeQR(); }
 function doAddConfirmed(name){
@@ -6763,20 +6812,40 @@ function _serializeState(){
     }
     wSave.push(ws);
   }
-  return {vals:vals, wSave:wSave};
+  // V119 FASE A (paridad V20_110): persistir esName + datos derivados en grupales
+  // Antes solo guardaba g.gai (índice volátil) → al cambiar GRUPAL_ACTS (filtrado por rancho/login)
+  // los grupales perdían su identidad. Ahora guardamos esName/_payType/_unitPrice como
+  // identidad estable que load() puede resolver por nombre.
+  var gSave = (grpActs || []).map(function(g){
+    var ga = (typeof GRUPAL_ACTS !== 'undefined' && GRUPAL_ACTS && GRUPAL_ACTS[g.gai]) ? GRUPAL_ACTS[g.gai] : null;
+    return {
+      gai: g.gai,
+      esName: ga ? (ga.es||'') : (g.esName || g._actEs || ''),
+      _actEs: ga ? (ga.es||'') : (g._actEs || g.esName || ''),
+      _payType: ga ? (ga.payType || ga.tipo || '') : (g._payType || ''),
+      _unitPrice: ga ? (parseFloat(ga.p)||0) : (parseFloat(g._unitPrice)||0),
+      participantes: g.participantes || [],
+      vars: g.vars || {},
+      open: !!g.open
+    };
+  });
+  return {vals:vals, wSave:wSave, gSave:gSave};
 }
 // V13-FIX3: try/catch separados — si historial falla por storage lleno, estado principal sí se guarda
 // V21: guarda _ranchos[] completo para multi-rancho
-function _persistState(vals, wSave){
+// V119 FASE A: ahora acepta gSave (grupales serializados con esName) — fallback a grpActs si no se pasa
+function _persistState(vals, wSave, gSave){
   // Sincronizar el contexto activo antes de guardar
   _saveRanchoCtx(_activeRanchoIdx);
+  // V119 FASE A: usar gSave (identidad estable) o fallback a grpActs (compat)
+  var gaForSave = gSave || grpActs;
   try {
     // V101_01: incluir _dayFlow (estado del flujo check-in/out del día)
-    localStorage.setItem(getUserKey(),JSON.stringify({v:vals,w:wSave,id:wid,ep:estP,hp:hilP,cp:cajasP,ga:grpActs,aus:ausencias,_ranchos:_ranchos,_activeRanchoIdx:_activeRanchoIdx,df:_dayFlow}));
+    localStorage.setItem(getUserKey(),JSON.stringify({v:vals,w:wSave,id:wid,ep:estP,hp:hilP,cp:cajasP,ga:gaForSave,aus:ausencias,_ranchos:_ranchos,_activeRanchoIdx:_activeRanchoIdx,df:_dayFlow}));
   } catch(e){ console.warn('[eBerry] Error guardando estado:', e.message); return; }
   try {
     var dateKey=getUserHistKey(vals.fecha||new Date().toISOString().split('T')[0]);
-    localStorage.setItem(dateKey,JSON.stringify({v:vals,w:wSave,id:wid,ep:estP,hp:hilP,cp:cajasP,ga:grpActs,aus:ausencias,_ranchos:_ranchos,df:_dayFlow,saved:new Date().toISOString()}));
+    localStorage.setItem(dateKey,JSON.stringify({v:vals,w:wSave,id:wid,ep:estP,hp:hilP,cp:cajasP,ga:gaForSave,aus:ausencias,_ranchos:_ranchos,df:_dayFlow,saved:new Date().toISOString()}));
   } catch(e){ console.warn('[eBerry] localStorage lleno — historial no guardado:', e.message); }
 }
 
@@ -6831,7 +6900,8 @@ function save(){
   if(_readOnlyMode){ toast('🔒 Modo lectura — no se puede guardar'); return; }
   try {
     var s=_serializeState();
-    _persistState(s.vals, s.wSave);
+    // V119 FASE A: pasar s.gSave (grupales con identidad estable)
+    _persistState(s.vals, s.wSave, s.gSave);
     window._autoSaveActive = true; // V81 (port V20_61): activar auto-save tras Guardar manual
     _updateSavePill('saved');
     toast('💾 Guardado — auto-guardado activado');
@@ -6904,6 +6974,38 @@ function load(){
     if(d.w)workers=d.w; if(d.id)wid=d.id;
     if(d.ep)estP=d.ep; if(d.hp)hilP=d.hp; if(d.cp)cajasP=d.cp; if(d.ga)grpActs=d.ga;
     if(d.aus)ausencias=d.aus;
+    // V119 FASE A (paridad V20_110): resolver gai por nombre tras cargar.
+    // Si el orden de GRUPAL_ACTS cambió (filtrado por rancho/login), el gai guardado
+    // puede apuntar a otra grupal. Buscamos por esName y corregimos. Si no está en
+    // GRUPAL_ACTS pero sí en ALL_GRUPAL, la traemos para no perder datos.
+    if(grpActs && grpActs.length && typeof GRUPAL_ACTS !== 'undefined' && GRUPAL_ACTS){
+      for(var _gki=0; _gki<grpActs.length; _gki++){
+        var _gk = grpActs[_gki];
+        if(!_gk) continue;
+        var _nameK = (_gk.esName || _gk._actEs || '').toLowerCase().trim();
+        if(!_nameK) continue;
+        var _foundIdx = -1;
+        for(var _gj=0; _gj<GRUPAL_ACTS.length; _gj++){
+          if(GRUPAL_ACTS[_gj] && (GRUPAL_ACTS[_gj].es||'').toLowerCase().trim() === _nameK){
+            _foundIdx = _gj;
+            break;
+          }
+        }
+        if(_foundIdx >= 0 && _foundIdx !== _gk.gai){
+          console.warn('[V119 FASE A] gai actualizado:', _gk.esName, _gk.gai, '→', _foundIdx);
+          _gk.gai = _foundIdx;
+        } else if(_foundIdx === -1 && typeof ALL_GRUPAL !== 'undefined' && ALL_GRUPAL){
+          for(var _gallj=0; _gallj<ALL_GRUPAL.length; _gallj++){
+            if(ALL_GRUPAL[_gallj] && (ALL_GRUPAL[_gallj].es||'').toLowerCase().trim() === _nameK){
+              GRUPAL_ACTS.push(ALL_GRUPAL[_gallj]);
+              _gk.gai = GRUPAL_ACTS.length - 1;
+              console.warn('[V119 FASE A] grupal recuperada de ALL_GRUPAL:', _gk.esName);
+              break;
+            }
+          }
+        }
+      }
+    }
     // V101_01: restaurar _dayFlow con defaults defensivos
     if(d.df){
       _dayFlow = d.df;
@@ -6941,6 +7043,8 @@ function load(){
       // Migración: formato viejo sin _ranchos → crear ranchos[0] con datos actuales
       _initRanchos();
     }
+    // V120 FIX 4 (paridad V20_111): asegurar unicidad de wid tras restaurar
+    try { _resyncWid(); } catch(_){}
     // Tau: recuperar empNum y contractRate de ALL_WORKERS si faltan (datos legacy)
     for(var ei=0;ei<workers.length;ei++){
       if(!workers[ei].empNum || !workers[ei].contractRate){
@@ -7121,8 +7225,13 @@ function closeDrawer(){
   pn.classList.remove('show');
 }
 function pickDrawerTab(n){
+  // V120 FIX 2 (paridad V20_111): validar que go() haya tenido éxito antes de cerrar drawer.
+  // Si go() retornó early (ej: día no iniciado), no cerrar — usuario ve por qué se atoró.
+  var _pgBefore = (typeof pg !== 'undefined') ? pg : 0;
   if(typeof go === 'function') go(n);
-  closeDrawer();
+  if(pg !== _pgBefore || pg === n){
+    closeDrawer();
+  }
 }
 function refreshDrawerContext(){
   var sq = document.getElementById('drawerSurquero');
@@ -7281,7 +7390,8 @@ function saveQuiet(){
   if(!_autoSaveReady()) return; // V81 (port V20_61)
   try{
     var s=_serializeState();
-    _persistState(s.vals, s.wSave);
+    // V119 FASE A: pasar s.gSave (grupales con identidad estable)
+    _persistState(s.vals, s.wSave, s.gSave);
     _updateSavePill('saved'); // V81 (port V20_61)
     if(_asTimer2)clearTimeout(_asTimer2);
     _asTimer2=setTimeout(function(){ _updateSavePill('auto'); },2000);
@@ -7405,6 +7515,28 @@ function showHistory(){
   gEl('histOv').classList.add('on');
 }
 
+// V120 FIX 4 (paridad V20_111): asegurar unicidad de wid tras restaurar estado.
+// Si load/loadDay/_enterReadOnly trae workers con id duplicado o wid <= max(id), el siguiente
+// alta colisiona el dataset y `togGrpPart` revuelve participantes. Loggea duplicados explícitos.
+function _resyncWid(){
+  if(!Array.isArray(workers) || !workers.length) return;
+  var maxId = 0;
+  var seen = {};
+  for(var i=0; i<workers.length; i++){
+    var w = workers[i];
+    if(!w) continue;
+    if(seen[w.id] != null){
+      console.error('[V120 FIX 4] worker.id DUPLICADO:', w.id, w.name, '↔', seen[w.id]);
+    }
+    seen[w.id] = w.name;
+    if(typeof w.id === 'number' && w.id > maxId) maxId = w.id;
+  }
+  if(wid <= maxId){
+    console.warn('[V120 FIX 4] resync wid:', wid, '→', maxId+1);
+    wid = maxId + 1;
+  }
+}
+
 function loadDay(key){
   var raw=localStorage.getItem(key); if(!raw)return;
   try{
@@ -7412,6 +7544,48 @@ function loadDay(key){
     restoreSaveFields(d.v);
     if(d.w)workers=d.w; if(d.id)wid=d.id;
     if(d.ep)estP=d.ep; if(d.hp)hilP=d.hp; if(d.cp)cajasP=d.cp;
+    // V120 FIX 1 (paridad V20_111): cargar grupales, ausencias y dayFlow
+    if(d.ga) grpActs = d.ga;
+    if(d.aus) ausencias = d.aus;
+    if(d.df){
+      _dayFlow = d.df;
+      if(typeof _dayFlow.choferScanned === 'undefined') _dayFlow.choferScanned = false;
+      if(typeof _dayFlow.surqueroScanned === 'undefined') _dayFlow.surqueroScanned = false;
+      if(typeof _dayFlow.diaIniciado === 'undefined') _dayFlow.diaIniciado = false;
+      if(typeof _dayFlow.checkOutDone === 'undefined') _dayFlow.checkOutDone = false;
+    }
+    // V120 FIX 1 (paridad V20_111): resolver gai por nombre (paralelo a load V20_110 FASE A)
+    if(grpActs && grpActs.length && typeof GRUPAL_ACTS !== 'undefined' && GRUPAL_ACTS){
+      for(var _gki=0; _gki<grpActs.length; _gki++){
+        var _gk = grpActs[_gki];
+        if(!_gk) continue;
+        var _nameK = (_gk.esName || _gk._actEs || '').toLowerCase().trim();
+        if(!_nameK) continue;
+        var _foundIdx = -1;
+        for(var _gj=0; _gj<GRUPAL_ACTS.length; _gj++){
+          if(GRUPAL_ACTS[_gj] && (GRUPAL_ACTS[_gj].es||'').toLowerCase().trim() === _nameK){
+            _foundIdx = _gj;
+            break;
+          }
+        }
+        if(_foundIdx >= 0 && _foundIdx !== _gk.gai){
+          console.warn('[V120 FIX 1] gai actualizado en loadDay:', _gk.esName, _gk.gai, '→', _foundIdx);
+          _gk.gai = _foundIdx;
+        } else if(_foundIdx === -1 && typeof ALL_ACTS !== 'undefined' && ALL_ACTS){
+          for(var _gallj=0; _gallj<ALL_ACTS.length; _gallj++){
+            if(ALL_ACTS[_gallj] && (ALL_ACTS[_gallj].es||'').toLowerCase().trim() === _nameK
+               && (ALL_ACTS[_gallj].modo||'').toLowerCase() === 'grupal'){
+              GRUPAL_ACTS.push(ALL_ACTS[_gallj]);
+              _gk.gai = GRUPAL_ACTS.length - 1;
+              console.warn('[V120 FIX 1] grupal recuperada de ALL_ACTS:', _gk.esName);
+              break;
+            }
+          }
+        }
+      }
+    }
+    // V120 FIX 4 (paridad V20_111): resync wid tras cargar workers
+    try { _resyncWid(); } catch(_){}
     // Tau: recuperar contractRate en datos de historial
     for(var ri=0;ri<workers.length;ri++){
       if(!workers[ri].contractRate){
@@ -7437,6 +7611,11 @@ function loadDay(key){
     gEl('histOv').classList.remove('on');
     toast('✓ Día '+d.v.fecha+' cargado');
     go(0);
+    // V120 FIX 1 (paridad V20_111): re-render grupales y ausencias tras cargar día
+    setTimeout(function(){
+      try{ if(typeof renderGrpActs === 'function') renderGrpActs(); }catch(e){}
+      try{ if(typeof renderAusencias === 'function') renderAusencias(); }catch(e){}
+    }, 100);
   }catch(e){ toast('⚠️ Error al cargar: '+e.message); }
 }
 
@@ -8699,6 +8878,16 @@ function askDelWorker(id){
   }).catch(function(){ toast('❌ Error verificando PIN'); });
 }
 function confirmDel(){
+  // V119 FASE B (paridad V20_110): manejar tipo 'grpAct' antes que el resto.
+  // Importante: removeGrpAct dispara renderGrpActs+updParts+autoSave → primero limpia
+  // el modal y _delPending para evitar race con re-renders.
+  if(_delPending && _delPending.type === 'grpAct'){
+    var _giD = _delPending.gi;
+    _delPending = null;
+    var ovGD = gEl('delOv'); if(ovGD) ovGD.classList.remove('on');
+    removeGrpAct(_giD);
+    return;
+  }
   gEl('delOv').classList.remove('on');
   if(!_delPending)return;
   if(_delPending.type==='act'){ delAct(_delPending.wi, _delPending.ai); }
@@ -9341,6 +9530,39 @@ function addGrpAct(gai){
   renderGrpActs(); autoSave();
 }
 
+// V119 FASE B (paridad V20_110): confirmación con resumen antes de eliminar grupal.
+// Antes el botón "✕ Quitar" llamaba directo a removeGrpAct sin preguntar — accidentes frecuentes
+// con grupales que tenían 10+ participantes y datos de acres/cajas. Ahora pasa por modal #delOv
+// reusando la infraestructura de askDelAct/askDelWorker. Si la grupal está vacía (sin participantes
+// ni qty), se elimina silencioso (no vale la pena el modal).
+function askDelGrpAct(gi){
+  var g = grpActs[gi];
+  if(!g){ return; }
+  var np = (g.participantes && g.participantes.length) ? g.participantes.length : 0;
+  var v = g.vars || {};
+  var hasQty = !!(parseFloat(v.totalC) || parseFloat(v.totalP) || parseFloat(v.pennAcres) || parseFloat(v.largo) || parseFloat(v.totalPies) || parseFloat(v.totalAcres));
+  if(np === 0 && !hasQty){
+    removeGrpAct(gi);
+    return;
+  }
+  var act = (typeof GRUPAL_ACTS !== 'undefined' && GRUPAL_ACTS[g.gai]) ? GRUPAL_ACTS[g.gai] : null;
+  var actName = act ? (act.es || '?') : (g.esName || g._actEs || 'grupal');
+  var detalle = '';
+  if(np) detalle += np + ' participante' + (np>1?'s':'');
+  var ct = (typeof grpCalcType === 'function' && act) ? grpCalcType(act) : '';
+  if(ct === 'cajas' && parseFloat(v.totalC)) detalle += (detalle?' · ':'') + parseFloat(v.totalC).toFixed(0) + ' cajas';
+  else if(ct === 'pieza' && parseFloat(v.totalP)) detalle += (detalle?' · ':'') + parseFloat(v.totalP).toFixed(0) + ' piezas';
+  else if(ct === 'puertas'){
+    if(parseFloat(v.pennAcres)) detalle += (detalle?' · ':'') + parseFloat(v.pennAcres).toFixed(2) + ' acres';
+    else if(parseFloat(v.totalPies)) detalle += (detalle?' · ':'') + parseFloat(v.totalPies).toFixed(0) + ' pies';
+  }
+  var t = gEl('delTitle'); if(t) t.textContent = 'Eliminar grupal';
+  var m = gEl('delMsg'); if(m) m.textContent = '¿Eliminar la actividad grupal "' + actName + '"?';
+  var d = gEl('delDetail'); if(d) d.textContent = detalle ? ('Se perderá: ' + detalle) : '';
+  _delPending = { type: 'grpAct', gi: gi };
+  var ov = gEl('delOv'); if(ov) ov.classList.add('on');
+}
+
 function removeGrpAct(gi){
   grpActs.splice(gi,1);
   renderGrpActs(); updParts(); autoSave();
@@ -9411,9 +9633,12 @@ function renderGrpActs(){
   for(var gi=0;gi<grpActs.length;gi++){
     var g   = grpActs[gi];
     var act = GRUPAL_ACTS[g.gai];
-    // V98 (port V20_88): red de seguridad — si act undefined en modo lectura, sintetizar mínimo
+    // V119 FASE A (paridad V20_110): red de seguridad extendida — si act es undefined,
+    // antes solo aplicaba en modo lectura. Ahora también en modo normal cuando g.esName
+    // existe (porque el gai pudo desincronizarse tras filtrado de rancho/login).
+    // Esto evita que la grupal "desaparezca" del UI mientras el usuario está capturando.
     if(!act){
-      if(window._readOnlyMode && (g.esName || g._actEs)){
+      if((window._readOnlyMode || g.esName || g._actEs) && (g.esName || g._actEs)){
         act = {
           es: g.esName || g._actEs,
           en: g.esName || g._actEs,
@@ -9423,7 +9648,7 @@ function renderGrpActs(){
           hr: false, calc: '', modo: 'Grupal',
           variable: '', I: '', P: ''
         };
-        console.warn('[V98] Grupal sin act resuelto — fallback sintético en modo lectura:', act.es);
+        console.warn('[V119 FASE A] Grupal sin act resuelto — fallback sintético:', act.es);
       } else continue;
     }
     var ct  = grpCalcType(act);
@@ -9443,8 +9668,9 @@ function renderGrpActs(){
       +'</div>';
 
     // ── BODY colapsable ──
+    // V119 FASE B (paridad V20_110): cambiado removeGrpAct → askDelGrpAct para abrir modal de confirmación
     var removeBtn = '<div style="display:flex;justify-content:flex-end;margin-bottom:10px">'
-      +'<button data-gi="'+gi+'" onclick="event.stopPropagation();removeGrpAct(parseInt(this.dataset.gi))" style="background:var(--rp);color:var(--r);border:none;border-radius:6px;padding:10px 14px;font-size:12px;font-weight:700;cursor:pointer;min-height:44px">✕ Quitar</button>'
+      +'<button data-gi="'+gi+'" onclick="event.stopPropagation();askDelGrpAct(parseInt(this.dataset.gi))" style="background:var(--rp);color:var(--r);border:none;border-radius:6px;padding:10px 14px;font-size:12px;font-weight:700;cursor:pointer;min-height:44px">✕ Quitar</button>'
       +'</div>';
 
     var varsHtml = '';
@@ -9861,8 +10087,13 @@ function renderGrpPart(gi){
   var el = gEl('gpl'+gi); if(!el) return;
   var g  = grpActs[gi]; if(!g) return;
   var h  = '';
+  // V120 FIX 4 (paridad V20_111): dedup defensivo — si hay workers con id duplicado,
+  // pintamos solo el primero. _resyncWid loggea el problema en consola.
+  var seen = {};
   for(var i=0;i<workers.length;i++){
     var w   = workers[i];
+    if(!w || seen[w.id]) continue;
+    seen[w.id] = true;
     var on  = g.participantes.indexOf(w.id)>=0;
     h += '<div class="pc'+(on?' on':'')+'" onclick="togGrpPart('+gi+','+w.id+')">'
        + esc(w.name.split(' ')[0])+' '+esc(w.name.split(' ')[1])+'</div>';
@@ -11965,6 +12196,8 @@ function generateInvoicePDF(){
     + '.empty-row td{height:22px}'
     + '.comments{border:2px solid #1a2a6c;padding:10px;font-size:12px;margin-top:5px;border-radius:4px}'
     + '.comments b{font-size:11px;text-transform:uppercase;color:#1a2a6c}'
+    // V121 (paridad V20_112): CSS footer con versión
+    + '.ft{margin-top:24px;padding:8px 6px;border-top:1px solid #1a2b8c;font-size:10px;color:#666;text-align:center}'
     + '@media print{body{margin:10px}}'
     + '</style></head><body>';
 
@@ -12011,6 +12244,9 @@ function generateInvoicePDF(){
 
   // Comments
   html += '<div class="comments"><b>Comments:</b><br><br></div>';
+
+  // V121 (paridad V20_112): footer con versión
+  html += '<div class="ft">' + esc(rancho) + ' &nbsp;|&nbsp; ' + esc(fecha) + ' &nbsp;|&nbsp; Surquero: ' + esc(surq) + ' &nbsp;|&nbsp; Generado: ' + new Date().toLocaleString() + ' &nbsp;|&nbsp; App: ' + (window.APP_VERSION || '?') + '</div>';
 
   html += '</body></html>';
 
