@@ -34,7 +34,7 @@
 </script>
 <script>
 // V50 (port V20_23): estandarización de colores PDF
-window.APP_VERSION = 'V130';
+window.APP_VERSION = 'V131';
 (function(){
   // V86 (port V20_77): AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Si _ackedVersion === APP_VERSION cargado, ese ack ya cumplió → limpiar para que próximas updates lleguen.
@@ -131,8 +131,10 @@ window.APP_VERSION = 'V130';
 })();
 
 // V62 (port V20_35): botón manual en header — fuerza check ignorando _ackedVersion
+// V131 (paridad V20_122): #verCheckBtn ya no existe (eliminado del header); guards if(btn) protegen contra crash
 window.manualVersionCheck = function(){
-  var btn = document.getElementById('verCheckBtn');
+  // V131 (paridad V20_122): preferir nuevo botón en drawer; fallback al legacy si aún existe
+  var btn = document.getElementById('drawerVerBtn') || document.getElementById('verCheckBtn');
   if(btn){ btn.classList.add('spin'); btn.disabled = true; }
   function done(){ if(btn){ btn.classList.remove('spin'); btn.disabled = false; } }
   if(typeof window.checkVersion !== 'function'){ done(); return; }
@@ -693,12 +695,8 @@ html.login-locked{overflow:hidden!important;height:100%!important}
       <div id="daysWarn" class="days-warn">⚠️ <span id="daysWarnTxt">2+ días sin enviar</span></div>
     </div>
     <button id="faceRegBtn" class="faceTabBtn" onclick="openFaceReg()">👤 Registro</button>
-    <div style="display:flex;align-items:center;gap:6px">
-      <div class="dpill" id="hdate">—</div>
-      <button onclick="showHistory()" style="background:rgba(255,255,255,.15);border:none;border-radius:20px;padding:4px 10px;color:#fff;font-size:12px;font-weight:600;cursor:pointer">📅</button>
-      <button id="verCheckBtn" class="ver-check-btn" onclick="window.manualVersionCheck()" title="Buscar actualización" aria-label="Buscar actualización de versión">↻</button>
-      <button id="logoutBtn" onclick="logoutUser()" style="display:none;background:rgba(204,34,34,.75);border:none;border-radius:20px;padding:4px 10px;color:#fff;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap">🚪 Salir</button>
-    </div>
+    <!-- V131 (paridad V20_122): línea 2 movida al top del drawer -->
+    <div id="savepillAnchor" style="margin-left:auto"></div>
   </div>
   <!-- V111: tabs horizontales reemplazadas por drawer lateral (ver botón ☰ en htop) -->
 </header>
@@ -719,6 +717,13 @@ html.login-locked{overflow:hidden!important;height:100%!important}
       <span class="label">Rancho activo</span>
       <span class="value" id="drawerRancho">—</span>
     </div>
+  </div>
+  <!-- V131 (paridad V20_122): tira al top del drawer (movida desde header línea 2) -->
+  <div class="drawer-toolstrip" style="background:#f5f6fa;border-bottom:1px solid #e5e7eb;padding:10px 14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+    <span id="drawerHdate" class="dpill" style="background:#1a2b8c;color:#fff">—</span>
+    <button id="drawerCalBtn" onclick="showHistory()" style="background:#1a2b8c;border:none;border-radius:50%;width:32px;height:32px;color:#fff;cursor:pointer;font-size:14px" title="Historial">📅</button>
+    <button id="drawerVerBtn" onclick="window.manualVersionCheck()" style="background:#1a2b8c;border:none;border-radius:50%;width:32px;height:32px;color:#fff;cursor:pointer" title="Buscar actualización" aria-label="Buscar actualización">↻</button>
+    <button id="drawerLogoutBtn" onclick="logoutUser()" style="margin-left:auto;background:#cc2222;color:#fff;border:none;border-radius:12px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer">🚪 Salir</button>
   </div>
   <div class="drawer-tabs">
     <!-- V122 (paridad V20_113): data-pg re-mapeado al orden interno real de go(n) -->
@@ -4959,7 +4964,13 @@ var _lastFecha = '';
 function updDate(){
   var v=gVal('fecha'); if(!v)return;
   var p=v.split('-');
-  if(p.length===3) gEl('hdate').textContent=p[2]+'/'+p[1]+'/'+p[0];
+  if(p.length===3){
+    var fechaTxt = p[2]+'/'+p[1]+'/'+p[0];
+    // V131 (paridad V20_122): guard porque #hdate fue eliminado del header
+    var _h = gEl('hdate'); if(_h) _h.textContent = fechaTxt;
+    // V131 (paridad V20_122): sincronizar fecha también en el drawer
+    var _dh = gEl('drawerHdate'); if(_dh) _dh.textContent = fechaTxt;
+  }
   _lastFecha = v;
 }
 
@@ -11040,6 +11051,7 @@ window.addEventListener('DOMContentLoaded', function(){
 
   // Save pill
   // V81 (port V20_61): pill arranca en estado "Pausa" hasta que se cumplan las condiciones
+  // V131 (paridad V20_122): se ancla a #savepillAnchor (línea 1 del header) en lugar de .dpill (eliminada)
   var htop=document.querySelector('.htop');
   if(htop){
     var pill=document.createElement('div');
@@ -11049,9 +11061,14 @@ window.addEventListener('DOMContentLoaded', function(){
     pill.textContent='⏸️ Pausa';
     pill.title='Click para guardar manualmente';
     pill.addEventListener('click', function(){ try { save(); } catch(e){ console.warn('Pill click save error:', e); } });
-    var dpill=htop.querySelector('.dpill');
-    if(dpill&&dpill.parentNode){ dpill.parentNode.insertBefore(pill,dpill.nextSibling); }
-    else { htop.appendChild(pill); }
+    // V131 (paridad V20_122): preferir nuevo anchor; fallback a .dpill (legacy) y htop (último recurso)
+    var anchor=document.getElementById('savepillAnchor');
+    if(anchor){ anchor.appendChild(pill); }
+    else {
+      var dpill=htop.querySelector('.dpill');
+      if(dpill&&dpill.parentNode){ dpill.parentNode.insertBefore(pill,dpill.nextSibling); }
+      else { htop.appendChild(pill); }
+    }
   }
 
   var ids=['rancho','fecha','numBus','numCam','finca','notas','hEnt','hSal','lIni','lFin'];
