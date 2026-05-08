@@ -34,7 +34,7 @@
 </script>
 <script>
 // V50 (port V20_23): estandarización de colores PDF
-window.APP_VERSION = 'V126';
+window.APP_VERSION = 'V127';
 (function(){
   // V86 (port V20_77): AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Si _ackedVersion === APP_VERSION cargado, ese ack ya cumplió → limpiar para que próximas updates lleguen.
@@ -780,6 +780,8 @@ html.login-locked{overflow:hidden!important;height:100%!important}
       <button class="pin-btn del" onclick="pinDel()">⌫</button>
     </div>
     <div class="login-err" id="loginErr"></div>
+    <!-- V127 (paridad V20_118): banner de diagnóstico CONFIG visible en login -->
+    <div id="cfgDiag" style="display:none;margin-top:14px;padding:10px 12px;background:#fff3c4;border:1px solid #d4a017;border-radius:8px;color:#5a3e00;font-size:12px;line-height:1.4;max-width:320px;text-align:left;word-break:break-word"></div>
   </div>
 </div>
 
@@ -1796,6 +1798,46 @@ var ADMIN_USER_NAME = 'ADM';
 // V124 SEGURIDAD (paridad V20_115): hash YA NO hardcoded.
 // Se carga únicamente del sheet CONFIG (key admin_pin).
 
+// V127 (paridad V20_118): tracking de estado de CONFIG para banner visible.
+// status: 'pending'|'loading'|'ok'|'timeout'|'error'|'no_pin'
+var _cfgState = { status: 'pending', startedAt: 0, finishedAt: 0, errMsg: '', hasPin: false, hasNomAdm: false, rawSrc: '' };
+
+// V127 (paridad V20_118): actualiza el banner visible en login screen según _cfgState.
+function _updCfgDiag(){
+  try{
+    var el = document.getElementById('cfgDiag');
+    if(!el) return;
+    var s = _cfgState;
+    var html = '';
+    if(s.status === 'pending'){
+      el.style.display = 'none';
+      return;
+    } else if(s.status === 'loading'){
+      el.style.background = '#fff3c4'; el.style.borderColor = '#d4a017'; el.style.color = '#5a3e00';
+      html = '⏳ <b>Cargando CONFIG...</b><br>Pidiendo PIN admin del sheet.';
+    } else if(s.status === 'ok'){
+      el.style.background = '#d4edda'; el.style.borderColor = '#5eba45'; el.style.color = '#155724';
+      var elapsed = (s.finishedAt - s.startedAt);
+      html = '✅ <b>CONFIG OK</b> ('+elapsed+'ms)<br>'
+           + (s.hasPin ? '🔑 admin_pin: cargado' : '⚠️ admin_pin: VACÍO en sheet')
+           + '<br>'
+           + (s.hasNomAdm ? '👤 nom_adm: ' + (ADMIN_USER_NAME||'?') : '👤 nom_adm: default ADM');
+    } else if(s.status === 'timeout'){
+      el.style.background = '#f8d7da'; el.style.borderColor = '#c0392b'; el.style.color = '#721c24';
+      html = '⏱️ <b>CONFIG timeout (8s)</b><br>El sheet no respondió. PIN admin no disponible — solo surqueros pueden entrar.';
+    } else if(s.status === 'error'){
+      el.style.background = '#f8d7da'; el.style.borderColor = '#c0392b'; el.style.color = '#721c24';
+      var safeErr = String(s.errMsg||'sin detalle').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      html = '❌ <b>Error CONFIG</b><br>'+safeErr+'<br>PIN admin no disponible.';
+    } else if(s.status === 'no_pin'){
+      el.style.background = '#fff3c4'; el.style.borderColor = '#d4a017'; el.style.color = '#5a3e00';
+      html = '⚠️ <b>CONFIG sin admin_pin</b><br>El sheet respondió pero no tiene la fila admin_pin.<br>Solo surqueros pueden entrar.';
+    }
+    el.innerHTML = html;
+    el.style.display = 'block';
+  }catch(e){ console.warn('[V127] _updCfgDiag falló:', e); }
+}
+
 // ── Hash PIN usando Web Crypto (SHA-256) — retorna Promise ──
 function hashPin(pin){
   // Upsilon2: fallback for Safari private mode / old iOS where crypto.subtle is unavailable
@@ -2025,8 +2067,15 @@ function checkPin(){
   // Hash el PIN ingresado y comparar con admin hash
   hashPin(pin).then(function(hashed){
 
-    // Admin PIN — no session check needed
-    if(hashed === ADMIN_PIN_HASH){
+    // V127 (paridad V20_118): si ADMIN_PIN_HASH está vacío, CONFIG no cargó —
+    // mostrar mensaje claro al surquero/admin y abortar comparación admin.
+    if(!ADMIN_PIN_HASH){
+      console.warn('[V127] checkPin: ADMIN_PIN_HASH vacío — CONFIG no cargó. _cfgState.status='+_cfgState.status);
+      gEl('loginErr').textContent = '⚠️ CONFIG no cargó (PIN admin no disponible). Revisa el banner amarillo arriba.';
+      _updCfgDiag();
+      // Aún permitir login de surquero si su PIN matchea
+    } else if(hashed === ADMIN_PIN_HASH){
+      // Admin PIN — no session check needed
       loginSuccess({name:'Administrador', pin:pin, crew:'ALL', isAdmin:true});
       return;
     }
@@ -2704,38 +2753,89 @@ function loadSheetsData(){
 
   // V101_26: timeout aumentado a 10s + esperar hashPin antes de marcar loaded.config
   // Bug previo: timeout 3s + race en Promise dejaban PIN default activo aunque CONFIG estuviera actualizado.
+  // V127 (paridad V20_118): watchdog 8s para diagnóstico visible — el config request puede seguir más allá,
+  // pero el banner muestra timeout para que el surquero sepa que no se podrá entrar como admin.
+  _cfgState.status = 'loading';
+  _cfgState.startedAt = Date.now();
+  console.log('[V127] CONFIG fetch started at', new Date(_cfgState.startedAt).toISOString());
+  _updCfgDiag();
   var configDone = false;
   var configTimeout = setTimeout(function(){
     if(configDone) return;
     configDone = true;
-    console.warn('[V101_26] Config timeout (10s) — usando defaults');
+    console.warn('[V127] CONFIG timeout (10s) — usando defaults');
+    if(_cfgState.status === 'loading'){
+      _cfgState.status = 'timeout';
+      _cfgState.finishedAt = Date.now();
+      _updCfgDiag();
+    }
     loaded.config = true;
     checkDone();
   }, 10000);
+  // V127 (paridad V20_118): watchdog 8s — actualiza banner antes de que el timeout duro de 10s aborte el flow.
+  var configWatchdog = setTimeout(function(){
+    if(_cfgState.status === 'loading'){
+      console.warn('[V127] CONFIG watchdog 8s disparado — sin respuesta aún');
+      _cfgState.status = 'timeout';
+      _cfgState.finishedAt = Date.now();
+      _cfgState.errMsg = 'Watchdog 8s — sheet sin respuesta';
+      _updCfgDiag();
+    }
+  }, 8000);
 
   fetchFromScript('config', function(err, data){
     var alreadyDone = configDone;
     configDone = true;
     clearTimeout(configTimeout);
+    clearTimeout(configWatchdog);
+    _cfgState.finishedAt = Date.now();
+    var elapsed = _cfgState.finishedAt - _cfgState.startedAt;
+    console.log('[V127] CONFIG response after '+elapsed+'ms — err:', err, 'data keys:', data?Object.keys(data).join(','):'null');
+    if(err){
+      _cfgState.status = 'error';
+      _cfgState.errMsg = String(err && err.message || err || 'sin detalle');
+      console.warn('[V127] CONFIG error:', _cfgState.errMsg);
+      _updCfgDiag();
+      if(!alreadyDone){ loaded.config = true; checkDone(); }
+      return;
+    }
     if(!err && data){
       var ok  = data.success || data['éxito'] || data.exito;
       var cfg = data.config  || data['configuración'] || data.configuracion || {};
+      _cfgState.rawSrc = JSON.stringify(cfg).slice(0,200);
+      console.log('[V127] CONFIG cfg keys:', cfg?Object.keys(cfg).join(','):'(empty)');
       if(ok && cfg && cfg.nom_adm){
         ADMIN_USER_NAME = String(cfg.nom_adm).trim();
-        console.log('[V101_26] ADMIN_USER_NAME desde CONFIG:', ADMIN_USER_NAME);
+        _cfgState.hasNomAdm = true;
+        console.log('[V127] ADMIN_USER_NAME desde CONFIG:', ADMIN_USER_NAME);
       }
       if(ok && cfg && cfg.admin_pin){
         var rawPin = String(cfg.admin_pin).trim();
+        _cfgState.hasPin = true;
+        console.log('[V127] admin_pin recibido del sheet (len='+rawPin.length+'), aplicando hashPin...');
         hashPin(rawPin).then(function(h){
           ADMIN_PIN_HASH = h;
-          console.log('[V101_26] ADMIN_PIN_HASH actualizado desde CONFIG');
+          _cfgState.status = 'ok';
+          console.log('[V127] ADMIN_PIN_HASH actualizado desde CONFIG (hash len='+(h?h.length:0)+')');
+          _updCfgDiag();
           if(!alreadyDone){ loaded.config = true; checkDone(); }
         }).catch(function(e){
-          console.warn('[V101_26] hashPin falló:', e);
+          _cfgState.status = 'error';
+          _cfgState.errMsg = 'hashPin falló: '+(e&&e.message||e);
+          console.warn('[V127] hashPin falló:', e);
+          _updCfgDiag();
           if(!alreadyDone){ loaded.config = true; checkDone(); }
         });
         return;
+      } else {
+        _cfgState.status = 'no_pin';
+        console.warn('[V127] CONFIG respondió pero sin admin_pin. ok='+ok+' cfg.admin_pin='+(cfg?cfg.admin_pin:'(no cfg)'));
+        _updCfgDiag();
       }
+    } else {
+      _cfgState.status = 'error';
+      _cfgState.errMsg = 'respuesta vacía o inválida';
+      _updCfgDiag();
     }
     if(!alreadyDone){ loaded.config = true; checkDone(); }
   });
@@ -2880,6 +2980,8 @@ function showLogin(){
   // Tau: lock body scroll so content can't be seen behind login on Safari/iOS
   document.body.classList.add('login-locked');
   document.documentElement.classList.add('login-locked');
+  // V127 (paridad V20_118): refrescar banner CONFIG cuando se muestra login
+  try{ _updCfgDiag(); }catch(e){}
 }
 
 // ── APP STATE (Iota: variables globales organizadas) ──
