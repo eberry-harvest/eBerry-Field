@@ -34,7 +34,7 @@
 </script>
 <script>
 // V50 (port V20_23): estandarización de colores PDF
-window.APP_VERSION = 'V128';
+window.APP_VERSION = 'V129';
 (function(){
   // V86 (port V20_77): AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Si _ackedVersion === APP_VERSION cargado, ese ack ya cumplió → limpiar para que próximas updates lleguen.
@@ -1836,6 +1836,37 @@ function _updCfgDiag(){
     el.innerHTML = html;
     el.style.display = 'block';
   }catch(e){ console.warn('[V127] _updCfgDiag falló:', e); }
+  // V129 (paridad V20_120): cada cambio de _cfgState debe re-evaluar el teclado PIN
+  try{ _updPinReady(); }catch(e){}
+}
+
+// V129 (paridad V20_120): habilitar/deshabilitar teclado PIN según estado de CONFIG.
+// Race condition: surquero teclea PIN antes de que ADMIN_PIN_HASH esté listo (~3s tras login screen).
+// Mientras CONFIG está pendiente/loading, deshabilitar botones para evitar checks fallidos.
+// Estados habilitados: 'ok' (hash listo) | 'error' | 'timeout' | 'no_pin' (degraded mode — solo surqueros).
+function _updPinReady(){
+  try{
+    var btns = document.querySelectorAll('.pin-btn');
+    if(!btns || !btns.length) return;
+    var s = (typeof _cfgState !== 'undefined') ? _cfgState : {status:'ok'};
+    var ready = (s.status === 'ok' && ADMIN_PIN_HASH)
+             || (s.status === 'error' || s.status === 'timeout' || s.status === 'no_pin');
+    for(var i=0; i<btns.length; i++){
+      btns[i].disabled = !ready;
+      btns[i].style.opacity = ready ? '' : '0.4';
+      btns[i].style.cursor = ready ? '' : 'not-allowed';
+    }
+    var loginErr = (typeof gEl === 'function') ? gEl('loginErr') : document.getElementById('loginErr');
+    if(loginErr){
+      if(!ready){
+        loginErr.textContent = '⏳ Cargando configuración admin...';
+        loginErr.style.color = '#cc7700';
+      } else if(loginErr.textContent === '⏳ Cargando configuración admin...'){
+        loginErr.textContent = '';
+        loginErr.style.color = '';
+      }
+    }
+  }catch(e){ console.warn('[V129] _updPinReady falló:', e); }
 }
 
 // ── Hash PIN usando Web Crypto (SHA-256) — retorna Promise ──
@@ -2063,6 +2094,37 @@ function checkPin(){
   var pin = pinBuffer;
   pinBuffer = '';
   updPinDots();
+
+  // V129 (paridad V20_120): si CONFIG aún cargando y hash vacío, esperar hasta 5s antes de rechazar.
+  // Cubre el race en que el surquero teclea PIN antes de que llegue el hash desde Sheets.
+  if(!ADMIN_PIN_HASH && typeof _cfgState !== 'undefined'
+     && (_cfgState.status === 'pending' || _cfgState.status === 'loading')){
+    var loginErrEl = gEl('loginErr');
+    if(loginErrEl){ loginErrEl.textContent = '⏳ Cargando configuración... espera'; loginErrEl.style.color = '#cc7700'; }
+    var tries = 0;
+    var maxTries = 10; // 10 × 500ms = 5s
+    var savedPin = pin; // capturar el pin antes que pinBuffer se vuelva a usar
+    var retry = setInterval(function(){
+      tries++;
+      // Si hash llegó O CONFIG terminó (ok/error/timeout/no_pin) → reintentar el flujo completo
+      if(ADMIN_PIN_HASH || (_cfgState.status === 'ok' || _cfgState.status === 'error'
+         || _cfgState.status === 'timeout' || _cfgState.status === 'no_pin')){
+        clearInterval(retry);
+        if(loginErrEl){ loginErrEl.textContent = ''; loginErrEl.style.color = ''; }
+        // Re-inyectar el pin en el buffer y reintentar
+        pinBuffer = savedPin;
+        updPinDots();
+        checkPin();
+      } else if(tries >= maxTries){
+        clearInterval(retry);
+        if(loginErrEl){
+          loginErrEl.textContent = '❌ CONFIG no cargó. Recarga la app.';
+          loginErrEl.style.color = '#c00';
+        }
+      }
+    }, 500);
+    return;
+  }
 
   // Hash el PIN ingresado y comparar con admin hash
   hashPin(pin).then(function(hashed){
@@ -2700,6 +2762,8 @@ function fetchFromScript(action, callback, _retries){
 
 function loadSheetsData(){
   setLoading(true, 'Cargando datos...');
+  // V129 (paridad V20_120): asegurar teclado PIN bloqueado mientras CONFIG carga
+  try{ _updPinReady(); }catch(e){}
   var loaded = {workers: false, tasks: false, config: false};
   var done = false;
 
@@ -2982,6 +3046,8 @@ function showLogin(){
   document.documentElement.classList.add('login-locked');
   // V127 (paridad V20_118): refrescar banner CONFIG cuando se muestra login
   try{ _updCfgDiag(); }catch(e){}
+  // V129 (paridad V20_120): bloquear teclado PIN si CONFIG aún no terminó
+  try{ _updPinReady(); }catch(e){}
 }
 
 // ── APP STATE (Iota: variables globales organizadas) ──
@@ -11039,7 +11105,13 @@ function refreshDataBackground(){
     }
     console.log('[V128] CONFIG callback (refreshBackground) — err:', err, 'data:', data);
     if(err || !data || !data.success){
+      // V129 (paridad V20_120): fallo de red → marcar 'error' para liberar teclado y no dejarlo trabado
+      if(typeof _cfgState !== 'undefined'){
+        _cfgState.status = 'error';
+        _cfgState.errMsg = String(err || (data && data.error) || 'sin respuesta');
+      }
       if(typeof _updCfgDiag === 'function') _updCfgDiag();
+      try{ _updPinReady(); }catch(e){}
       return;
     }
     var cfg = data.config || {};
@@ -11056,18 +11128,38 @@ function refreshDataBackground(){
       console.log('[V128] admin_pin recibido (background):', JSON.stringify(rawPin));
       hashPin(rawPin).then(function(h){
         ADMIN_PIN_HASH = h;
-        if(typeof _cfgState !== 'undefined') _cfgState.hashCalculated = true;
+        if(typeof _cfgState !== 'undefined'){
+          _cfgState.hashCalculated = true;
+          // V129 (paridad V20_120): marcar status='ok' explícitamente para liberar el teclado PIN
+          _cfgState.status = 'ok';
+          _cfgState.hasPin = true;
+          _cfgState.finishedAt = Date.now();
+          if(!_cfgState.startedAt) _cfgState.startedAt = _cfgState.finishedAt;
+        }
         console.log('[V128] hashPin resuelto (background). ADMIN_PIN_HASH:', h.substring(0,16) + '...');
         if(typeof _updCfgDiag === 'function') _updCfgDiag();
+        // V129 (paridad V20_120): habilitar teclado PIN ahora que el hash está listo
+        try{ _updPinReady(); }catch(e){}
       }).catch(function(eHash){
         console.error('[V128] hashPin error (background):', eHash);
-        if(typeof _cfgState !== 'undefined') _cfgState.error = 'hashPin failed: ' + eHash;
+        if(typeof _cfgState !== 'undefined'){
+          _cfgState.error = 'hashPin failed: ' + eHash;
+          // V129 (paridad V20_120): error → status='error' para no dejar teclado bloqueado eternamente
+          _cfgState.status = 'error';
+          _cfgState.errMsg = 'hashPin failed: ' + eHash;
+        }
         if(typeof _updCfgDiag === 'function') _updCfgDiag();
+        try{ _updPinReady(); }catch(e){}
       });
     } else {
       console.warn('[V128] admin_pin NO encontrado en CONFIG (background)');
-      if(typeof _cfgState !== 'undefined') _cfgState.hasAdminPin = false;
+      if(typeof _cfgState !== 'undefined'){
+        _cfgState.hasAdminPin = false;
+        // V129 (paridad V20_120): sin PIN admin → status='no_pin' para liberar teclado (modo degraded)
+        _cfgState.status = 'no_pin';
+      }
       if(typeof _updCfgDiag === 'function') _updCfgDiag();
+      try{ _updPinReady(); }catch(e){}
     }
   });
 
