@@ -34,7 +34,7 @@
 </script>
 <script>
 // V50 (port V20_23): estandarización de colores PDF
-window.APP_VERSION = 'V131';
+window.APP_VERSION = 'V132';
 (function(){
   // V86 (port V20_77): AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Si _ackedVersion === APP_VERSION cargado, ese ack ya cumplió → limpiar para que próximas updates lleguen.
@@ -694,7 +694,7 @@ html.login-locked{overflow:hidden!important;height:100%!important}
       <div id="queueBadge" class="queue-badge" onclick="flushOfflineQueue()">📤 <span id="queueCount">0</span> pendiente(s)</div>
       <div id="daysWarn" class="days-warn">⚠️ <span id="daysWarnTxt">2+ días sin enviar</span></div>
     </div>
-    <button id="faceRegBtn" class="faceTabBtn" onclick="openFaceReg()">👤 Registro</button>
+    <!-- V132 (paridad V20_123): faceRegBtn movido al drawer toolstrip como "Registro FID" -->
     <!-- V131 (paridad V20_122): línea 2 movida al top del drawer -->
     <div id="savepillAnchor" style="margin-left:auto"></div>
   </div>
@@ -723,6 +723,8 @@ html.login-locked{overflow:hidden!important;height:100%!important}
     <span id="drawerHdate" class="dpill" style="background:#1a2b8c;color:#fff">—</span>
     <button id="drawerCalBtn" onclick="showHistory()" style="background:#1a2b8c;border:none;border-radius:50%;width:32px;height:32px;color:#fff;cursor:pointer;font-size:14px" title="Historial">📅</button>
     <button id="drawerVerBtn" onclick="window.manualVersionCheck()" style="background:#1a2b8c;border:none;border-radius:50%;width:32px;height:32px;color:#fff;cursor:pointer" title="Buscar actualización" aria-label="Buscar actualización">↻</button>
+    <!-- V132 (paridad V20_123): Registro FID en drawer toolstrip — solo visible para admin -->
+    <button id="drawerFaceRegBtn" onclick="openFaceReg()" style="display:none;background:#5eba45;color:#fff;border:none;border-radius:12px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:0.5px">👤 Registro FID</button>
     <button id="drawerLogoutBtn" onclick="logoutUser()" style="margin-left:auto;background:#cc2222;color:#fff;border:none;border-radius:12px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer">🚪 Salir</button>
   </div>
   <div class="drawer-tabs">
@@ -2058,6 +2060,8 @@ function logoutUser(){
   var btn = gEl('logoutBtn'); if(btn) btn.style.display = 'none';
   var badge = gEl('adminBadge'); if(badge) badge.style.display = 'none';
   var fBtn = gEl('faceRegBtn'); if(fBtn) fBtn.classList.remove('vis');
+  // V132 (paridad V20_123): también ocultar el botón del drawer toolstrip
+  var btnDr = gEl('drawerFaceRegBtn'); if(btnDr) btnDr.style.display = 'none';
   pinBuffer = '';
   updPinDots();
   gEl('loginErr').textContent = '';
@@ -12691,8 +12695,16 @@ function formatDateInv(fecha){
 
 // ── Show face reg button for admin ──
 function showFaceRegBtn(){
+  // V132 (paridad V20_123): controlar AMBOS botones — el legacy del header (si existe) y el nuevo del drawer
   var btn = gEl('faceRegBtn');
-  if(btn && currentUser && currentUser.isAdmin) btn.classList.add('vis');
+  if(btn){
+    if(currentUser && currentUser.isAdmin){ btn.classList.add('vis'); }
+    else { btn.classList.remove('vis'); }
+  }
+  var btnDrawer = gEl('drawerFaceRegBtn');
+  if(btnDrawer){
+    btnDrawer.style.display = (currentUser && currentUser.isAdmin) ? 'inline-flex' : 'none';
+  }
 }
 
 // ════════════════════════════════════════════════════════════
