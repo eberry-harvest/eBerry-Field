@@ -34,7 +34,7 @@
 </script>
 <script>
 // V50 (port V20_23): estandarización de colores PDF
-window.APP_VERSION = 'V129';
+window.APP_VERSION = 'V130';
 (function(){
   // V86 (port V20_77): AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Si _ackedVersion === APP_VERSION cargado, ese ack ya cumplió → limpiar para que próximas updates lleguen.
@@ -2876,11 +2876,15 @@ function loadSheetsData(){
       if(ok && cfg && cfg.admin_pin){
         var rawPin = String(cfg.admin_pin).trim();
         _cfgState.hasPin = true;
-        console.log('[V127] admin_pin recibido del sheet (len='+rawPin.length+'), aplicando hashPin...');
+        // V130 (paridad V20_121): no loggear longitud del PIN (filtrado de info)
+        console.log('[V130] admin_pin recibido ✓ (longitud: '+rawPin.length+')');
         hashPin(rawPin).then(function(h){
           ADMIN_PIN_HASH = h;
           _cfgState.status = 'ok';
-          console.log('[V127] ADMIN_PIN_HASH actualizado desde CONFIG (hash len='+(h?h.length:0)+')');
+          // V130 (paridad V20_121): no loggear longitud del hash
+          console.log('[V130] hash admin calculado ✓');
+          // V130 (paridad V20_121): limpiar variable local rawPin tras hashear
+          rawPin = null;
           _updCfgDiag();
           if(!alreadyDone){ loaded.config = true; checkDone(); }
         }).catch(function(e){
@@ -11123,9 +11127,10 @@ function refreshDataBackground(){
       var rawPin = String(cfg.admin_pin).trim();
       if(typeof _cfgState !== 'undefined'){
         _cfgState.hasAdminPin = true;
-        _cfgState.rawPin = rawPin;
+        // V130 (paridad V20_121): NO persistir rawPin en _cfgState (fuga en memoria)
       }
-      console.log('[V128] admin_pin recibido (background):', JSON.stringify(rawPin));
+      // V130 (paridad V20_121): no loggear el PIN ni con JSON.stringify
+      console.log('[V130] admin_pin recibido ✓ (longitud: '+rawPin.length+')');
       hashPin(rawPin).then(function(h){
         ADMIN_PIN_HASH = h;
         if(typeof _cfgState !== 'undefined'){
@@ -11136,7 +11141,10 @@ function refreshDataBackground(){
           _cfgState.finishedAt = Date.now();
           if(!_cfgState.startedAt) _cfgState.startedAt = _cfgState.finishedAt;
         }
-        console.log('[V128] hashPin resuelto (background). ADMIN_PIN_HASH:', h.substring(0,16) + '...');
+        // V130 (paridad V20_121): no loggear el hash (ni siquiera substring)
+        console.log('[V130] hash admin calculado ✓');
+        // V130 (paridad V20_121): limpiar variable local rawPin tras hashear
+        rawPin = null;
         if(typeof _updCfgDiag === 'function') _updCfgDiag();
         // V129 (paridad V20_120): habilitar teclado PIN ahora que el hash está listo
         try{ _updPinReady(); }catch(e){}
