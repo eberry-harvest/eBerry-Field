@@ -34,7 +34,7 @@
 </script>
 <script>
 // V50 (port V20_23): estandarización de colores PDF
-window.APP_VERSION = 'V122';
+window.APP_VERSION = 'V126';
 (function(){
   // V86 (port V20_77): AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Si _ackedVersion === APP_VERSION cargado, ese ack ya cumplió → limpiar para que próximas updates lleguen.
@@ -1793,12 +1793,8 @@ var currentUser = null; // {name, pin, crew, isAdmin}
 var ADMIN_PIN_HASH = ''; // Se calcula al cargar — Sheets lo sobreescribe
 // V101_25: alias del admin (ADM por default). Se sobreescribe desde CONFIG!B2 (key='nom_adm')
 var ADMIN_USER_NAME = 'ADM';
-// V7: hash pre-computado del PIN default — ya no se expone en texto plano
-// V11: hash corregido SHA-256('2026') = 158a323a7ba4...
-(function(){
-  var _defHash = '158a323a7ba44870f23d96f1516dd70aa48e9a72db4ebb026b0a89e212a208ab';
-  if(!ADMIN_PIN_HASH) ADMIN_PIN_HASH = _defHash;
-})();
+// V124 SEGURIDAD (paridad V20_115): hash YA NO hardcoded.
+// Se carga únicamente del sheet CONFIG (key admin_pin).
 
 // ── Hash PIN usando Web Crypto (SHA-256) — retorna Promise ──
 function hashPin(pin){
@@ -3001,6 +2997,20 @@ function _loadRanchoCtx(idx){
   _dayFlow = r.dayFlow ? r.dayFlow : _initDayFlow();
   // V120 FIX 4 (paridad V20_111): resync wid tras swap de rancho (multi-rancho)
   try { _resyncWid(); } catch(_){}
+  // V123 (paridad V20_114): refrescar precioC desde MASTER en grupales cajas
+  // CRÍTICO multi-rancho: en cada swap de pill el MASTER puede tener precio actualizado
+  // Guard !_readOnlyMode: en modo lectura respetar valor congelado del payload
+  if(grpActs && grpActs.length && !_readOnlyMode){
+    for(var _gi=0; _gi<grpActs.length; _gi++){
+      var _g = grpActs[_gi];
+      if(!_g) continue;
+      var _act = (typeof GRUPAL_ACTS !== 'undefined' && GRUPAL_ACTS[_g.gai]) ? GRUPAL_ACTS[_g.gai] : null;
+      if(_act && (typeof grpCalcType === 'function') && grpCalcType(_act) === 'cajas' && _act.p > 0){
+        if(!_g.vars) _g.vars = {};
+        _g.vars.precioC = parseFloat(_act.p);
+      }
+    }
+  }
 }
 
 // V78 FIX: re-renderizar TODO el UI del rancho activo (workers + grupales + ausencias).
@@ -5932,11 +5942,24 @@ function mkActRow(wid_,ai,_cont){
 function onQty(wi,ai,v){ var w=getW(wi); if(!w||!w.acts[ai])return; var n=parseFloat(v); w.acts[ai].qty=isFinite(n)?n:0; recalc(wi,ai); autoSave(); }
 
 // V85 (port V20_76): sistema de bloques para individuales VarDoor (PIES + SURCOS por bloque).
-// qty (puertas) = Σ(pies×surcos) / 100. acres = qty / getActFactorAcres(act).
+// V125 (paridad V20_116): si col H del MASTER tiene label 'Acres', el cuadrito captura ACRES y
+// qty (puertas) = acres × factor (col I). Si label es 'Pies' (legacy), qty = Σ(pies×surcos)/100.
 function renderIndBloques(div, act, wid_, ai){
   var w = getW(wid_); if(!w || !w.acts[ai]) return;
   var a = w.acts[ai];
-  if(!a.bloques || !a.bloques.length) a.bloques = [{pies:'', surcos:''}];
+  // V125 (paridad V20_116): detectar label de col H para bifurcar input acres vs pies+surcos
+  var _hCol = (typeof parseFormulaCell === 'function' && act && act.H) ? parseFormulaCell(act.H) : null;
+  var _hLabel = (_hCol && _hCol.label) ? String(_hCol.label).toLowerCase() : '';
+  var _isAcresInput = (_hLabel === 'acres');
+  var _factCol = (typeof parseFormulaCell === 'function' && act && act.I) ? parseFormulaCell(act.I) : null;
+  var _factor = (_factCol && _factCol.kind === 'const') ? parseFloat(_factCol.value) : 0;
+  if(!_factor && typeof getActFactorAcres === 'function') _factor = parseFloat(getActFactorAcres(act)) || 0;
+  if(!_factor && typeof getActAncho === 'function') _factor = parseFloat(getActAncho(act)) || 0;
+  if(!a.bloques || !a.bloques.length) a.bloques = [_isAcresInput ? {acres:''} : {pies:'', surcos:''}];
+  // V125: garantizar default b.acres=0 si la estructura no lo tenía
+  for(var _ib=0; _ib<a.bloques.length; _ib++){
+    if(_isAcresInput && (a.bloques[_ib].acres === undefined || a.bloques[_ib].acres === null)) a.bloques[_ib].acres = 0;
+  }
   var wrap = document.createElement('div');
   wrap.className = 'indBloquesWrap'; wrap.id = 'ibw'+wid_+'_'+ai;
   wrap.style.cssText = 'margin-top:8px';
@@ -5944,6 +5967,19 @@ function renderIndBloques(div, act, wid_, ai){
     var b = a.bloques[bi];
     var card = document.createElement('div');
     card.style.cssText = 'background:var(--lt);border:1.5px solid var(--bd);border-radius:8px;padding:10px;margin-bottom:8px';
+    // V125 (paridad V20_116): input bifurcado según _isAcresInput
+    var inputsHTML;
+    if(_isAcresInput){
+      inputsHTML = '<div><label style="font-size:10px;font-weight:600">ACRES</label>'
+        + '<input type="number" inputmode="decimal" step="0.0001" value="'+(b.acres||'')+'" placeholder="0.0000" data-wid="'+wid_+'" data-ai="'+ai+'" data-bi="'+bi+'" data-bf="acres" oninput="onIndBloqueField(this)" style="width:100%;padding:8px;border:1.5px solid var(--bd);border-radius:6px;font-size:14px"></div>';
+    } else {
+      inputsHTML = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
+        + '<div><label style="font-size:10px;font-weight:600">PIES</label>'
+        + '<input type="number" inputmode="decimal" value="'+(b.pies||'')+'" placeholder="0" data-wid="'+wid_+'" data-ai="'+ai+'" data-bi="'+bi+'" data-bf="pies" oninput="onIndBloqueField(this)" style="width:100%;padding:8px;border:1.5px solid var(--bd);border-radius:6px;font-size:14px"></div>'
+        + '<div><label style="font-size:10px;font-weight:600">SURCOS</label>'
+        + '<input type="number" inputmode="decimal" value="'+(b.surcos||'')+'" placeholder="0" data-wid="'+wid_+'" data-ai="'+ai+'" data-bi="'+bi+'" data-bf="surcos" oninput="onIndBloqueField(this)" style="width:100%;padding:8px;border:1.5px solid var(--bd);border-radius:6px;font-size:14px"></div>'
+        + '</div>';
+    }
     card.innerHTML = '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px">'
       + '<div style="display:flex;align-items:center;gap:6px;flex:1">'
       + '<span style="font-size:14px">📏</span>'
@@ -5953,32 +5989,45 @@ function renderIndBloques(div, act, wid_, ai){
       + '</div>'
       + (a.bloques.length>1 ? '<button class="shift-del" onclick="delIndBloque('+wid_+','+ai+','+bi+')">✕</button>' : '<span></span>')
       + '</div>'
-      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">'
-      + '<div><label style="font-size:10px;font-weight:600">PIES</label>'
-      + '<input type="number" inputmode="decimal" value="'+(b.pies||'')+'" placeholder="0" data-wid="'+wid_+'" data-ai="'+ai+'" data-bi="'+bi+'" data-bf="pies" oninput="onIndBloqueField(this)" style="width:100%;padding:8px;border:1.5px solid var(--bd);border-radius:6px;font-size:14px"></div>'
-      + '<div><label style="font-size:10px;font-weight:600">SURCOS</label>'
-      + '<input type="number" inputmode="decimal" value="'+(b.surcos||'')+'" placeholder="0" data-wid="'+wid_+'" data-ai="'+ai+'" data-bi="'+bi+'" data-bf="surcos" oninput="onIndBloqueField(this)" style="width:100%;padding:8px;border:1.5px solid var(--bd);border-radius:6px;font-size:14px"></div>'
-      + '</div>';
+      + inputsHTML;
     wrap.appendChild(card);
   }
-  var pies_total=0;
-  for(var _bi=0; _bi<a.bloques.length; _bi++){
-    var _bp = parseFloat(a.bloques[_bi].pies)||0;
-    var _bs = parseFloat(a.bloques[_bi].surcos)||0;
-    pies_total += _bp * _bs;
+  // V126 (paridad V20_117): sumario data-driven via computeQty (col L del MASTER)
+  var puertas = 0, acres_show = 0, pies_total = 0;
+  if(_isAcresInput){
+    for(var _bi=0; _bi<a.bloques.length; _bi++){
+      acres_show += parseFloat(a.bloques[_bi].acres)||0;
+    }
+    puertas = (typeof computeQty === 'function') ? (computeQty(act, {H: acres_show}, 1) || 0) : 0;
+  } else {
+    for(var _bi2=0; _bi2<a.bloques.length; _bi2++){
+      var _bp = parseFloat(a.bloques[_bi2].pies)||0;
+      var _bs = parseFloat(a.bloques[_bi2].surcos)||0;
+      pies_total += _bp * _bs;
+    }
+    puertas = (typeof computeQty === 'function') ? (computeQty(act, {H: pies_total}, 1) || 0) : 0;
+    acres_show = (_factor && puertas>0) ? puertas/_factor : 0;
   }
-  var puertas = pies_total/100;
-  var fact = getActFactorAcres(act);
-  var acres = (fact && puertas>0) ? puertas/fact : 0;
-  if(pies_total>0){
+  if(_isAcresInput && acres_show>0){
+    var sumA0 = document.createElement('div');
+    sumA0.style.cssText = 'background:var(--bp);border-radius:8px;padding:10px 12px;margin-bottom:6px;display:flex;justify-content:space-between;color:var(--b);font-size:13px';
+    sumA0.innerHTML = '<span>🌿 Acres (total)</span><b style="font-family:Bebas Neue,sans-serif;font-size:18px">'+acres_show.toFixed(4)+'</b>';
+    wrap.appendChild(sumA0);
+    if(_factor>0 && puertas>0){
+      var sum0 = document.createElement('div');
+      sum0.style.cssText = 'background:var(--dk);border-radius:8px;padding:10px 12px;margin-bottom:6px;display:flex;justify-content:space-between;color:#fff;font-size:13px';
+      sum0.innerHTML = '<span>🚪 Puertas (acres × '+_factor+')</span><b style="font-family:Bebas Neue,sans-serif;font-size:20px">'+puertas.toFixed(2)+'</b>';
+      wrap.appendChild(sum0);
+    }
+  } else if(!_isAcresInput && pies_total>0){
     var sum = document.createElement('div');
     sum.style.cssText = 'background:var(--dk);border-radius:8px;padding:10px 12px;margin-bottom:6px;display:flex;justify-content:space-between;color:#fff;font-size:13px';
     sum.innerHTML = '<span>🚪 Puertas (pies÷100)</span><b style="font-family:Bebas Neue,sans-serif;font-size:20px">'+puertas.toFixed(2)+'</b>';
     wrap.appendChild(sum);
-    if(acres>0){
+    if(acres_show>0){
       var sumA = document.createElement('div');
       sumA.style.cssText = 'background:var(--bp);border-radius:8px;padding:10px 12px;margin-bottom:6px;display:flex;justify-content:space-between;color:var(--b);font-size:13px';
-      sumA.innerHTML = '<span>🌿 Acres (puertas÷'+fact+')</span><b style="font-family:Bebas Neue,sans-serif;font-size:18px">'+acres.toFixed(4)+'</b>';
+      sumA.innerHTML = '<span>🌿 Acres (puertas÷'+_factor+')</span><b style="font-family:Bebas Neue,sans-serif;font-size:18px">'+acres_show.toFixed(4)+'</b>';
       wrap.appendChild(sumA);
     }
   }
@@ -5990,11 +6039,26 @@ function renderIndBloques(div, act, wid_, ai){
   div.appendChild(wrap);
 }
 
+// V125 (paridad V20_116): helper para detectar modo Acres vs Pies según col H del MASTER
+function _indBloqueModo(act){
+  var _hCol = (typeof parseFormulaCell === 'function' && act && act.H) ? parseFormulaCell(act.H) : null;
+  var _hLabel = (_hCol && _hCol.label) ? String(_hCol.label).toLowerCase() : '';
+  var _isAcres = (_hLabel === 'acres');
+  var _factCol = (typeof parseFormulaCell === 'function' && act && act.I) ? parseFormulaCell(act.I) : null;
+  var _factor = (_factCol && _factCol.kind === 'const') ? parseFloat(_factCol.value) : 0;
+  if(!_factor && typeof getActFactorAcres === 'function') _factor = parseFloat(getActFactorAcres(act)) || 0;
+  if(!_factor && typeof getActAncho === 'function') _factor = parseFloat(getActAncho(act)) || 0;
+  return {isAcres:_isAcres, factor:_factor};
+}
+
 function addIndBloque(wi, ai){
   var w = getW(wi); if(!w || !w.acts[ai]) return;
+  if(_readOnlyMode) return; // V125: no mutar en modo lectura
   var a = w.acts[ai];
   if(!a.bloques) a.bloques = [];
-  a.bloques.push({pies:'', surcos:''});
+  // V125 (paridad V20_116): default acres si label es 'Acres'
+  var _mode = _indBloqueModo(ACTS[a.ai]);
+  a.bloques.push(_mode.isAcres ? {acres:0} : {pies:'', surcos:''});
   var cont = gEl('ac'+wi); if(!cont) return;
   cont.innerHTML = '';
   for(var i=0; i<w.acts.length; i++) mkActRow(wi, i);
@@ -6003,41 +6067,81 @@ function addIndBloque(wi, ai){
 
 function delIndBloque(wi, ai, bi){
   var w = getW(wi); if(!w || !w.acts[ai]) return;
+  if(_readOnlyMode) return; // V125
   var a = w.acts[ai];
   if(!a.bloques || a.bloques.length<=1) return;
   // V85 (port V20_76): confirm antes de borrar
   if(!confirm('¿Borrar bloque '+(bi+1)+'?')) return;
   a.bloques.splice(bi, 1);
-  var pies_total = 0;
-  for(var _b=0; _b<a.bloques.length; _b++){
-    var _p = parseFloat(a.bloques[_b].pies)||0;
-    var _s = parseFloat(a.bloques[_b].surcos)||0;
-    pies_total += _p * _s;
+  // V126 (paridad V20_117): qty data-driven via computeQty (col L del MASTER)
+  var _mode = _indBloqueModo(ACTS[a.ai]);
+  a.qty = _calcVarDoorQty(ACTS[a.ai], a.bloques);
+  if(_mode.isAcres){
+    a.indPies = 0;
+  } else {
+    var pies_total = 0;
+    for(var _b2=0; _b2<a.bloques.length; _b2++){
+      var _p = parseFloat(a.bloques[_b2].pies)||0;
+      var _s = parseFloat(a.bloques[_b2].surcos)||0;
+      pies_total += _p * _s;
+    }
+    a.indPies = pies_total;
   }
-  a.qty = pies_total / 100;
-  a.indPies = pies_total;
   var cont = gEl('ac'+wi); if(!cont) return;
   cont.innerHTML = '';
   for(var i=0; i<w.acts.length; i++) mkActRow(wi, i);
   recalc(wi, ai); autoSave();
 }
 
+// V126 (paridad V20_117): helper data-driven que usa computeQty del motor (col L del MASTER)
+// elimina hardcoded /100 — el divisor real vive en col L del Sheet
+function _calcVarDoorQty(act, bloques){
+  if(!act || !bloques) return 0;
+  var _hCol = (typeof parseFormulaCell === 'function') ? parseFormulaCell(act.H) : null;
+  var _hLabel = (_hCol && _hCol.label) ? String(_hCol.label).toLowerCase() : '';
+  var _isAcres = (_hLabel === 'acres');
+  var totalH = 0;
+  for(var k=0; k<bloques.length; k++){
+    var b = bloques[k];
+    if(_isAcres){
+      totalH += parseFloat(b.acres) || 0;
+    } else {
+      totalH += (parseFloat(b.pies) || 0) * (parseFloat(b.surcos) || 1);
+    }
+  }
+  if(typeof computeQty === 'function'){
+    var qty = computeQty(act, {H: totalH}, 1) || 0;
+    return Math.round(qty * 1000) / 1000;
+  }
+  return 0;
+}
+
 function onIndBloqueField(inp){
   var wi = parseInt(inp.dataset.wid); var ai = parseInt(inp.dataset.ai);
   var bi = parseInt(inp.dataset.bi); var bf = inp.dataset.bf;
   var w = getW(wi); if(!w || !w.acts[ai]) return;
+  if(_readOnlyMode) return; // V125: no mutar en modo lectura
   var a = w.acts[ai];
-  if(!a.bloques) a.bloques = [{pies:'', surcos:''}];
-  if(!a.bloques[bi]) a.bloques[bi] = {pies:'', surcos:''};
-  a.bloques[bi][bf] = inp.value.trim();
-  var pies_total = 0;
-  for(var _b=0; _b<a.bloques.length; _b++){
-    var _p = parseFloat(a.bloques[_b].pies)||0;
-    var _s = parseFloat(a.bloques[_b].surcos)||0;
-    pies_total += _p * _s;
+  // V125 (paridad V20_116): detectar modo y bifurcar
+  var _mode = _indBloqueModo(ACTS[a.ai]);
+  if(!a.bloques) a.bloques = [_mode.isAcres ? {acres:0} : {pies:'', surcos:''}];
+  if(!a.bloques[bi]) a.bloques[bi] = _mode.isAcres ? {acres:0} : {pies:'', surcos:''};
+  // Asignación según field
+  if(bf === 'acres'){
+    a.bloques[bi].acres = parseFloat(inp.value) || 0;
+  } else if(bf === 'pies' || bf === 'surcos'){
+    a.bloques[bi][bf] = parseFloat(inp.value) || 0;
+  } else {
+    a.bloques[bi][bf] = inp.value.trim();
   }
-  a.qty = pies_total / 100;
-  a.indPies = pies_total;
+  // V126 (paridad V20_117): qty data-driven via computeQty (col L del MASTER)
+  a.qty = _calcVarDoorQty(ACTS[a.ai], a.bloques);
+  if(_mode.isAcres){
+    a.indPies = 0;
+  } else {
+    var pies_total = a.bloques.reduce(function(acc,bk){ return acc + ((parseFloat(bk.pies)||0) * (parseFloat(bk.surcos)||1)); }, 0);
+    a.indPies = pies_total;
+  }
   recalc(wi, ai); autoSave();
 }
 
@@ -7047,6 +7151,19 @@ function load(){
     }
     // V120 FIX 4 (paridad V20_111): asegurar unicidad de wid tras restaurar
     try { _resyncWid(); } catch(_){}
+    // V123 (paridad V20_114): refrescar precioC desde MASTER en grupales cajas
+    // Guard !_readOnlyMode: en modo lectura respetar valor congelado del payload
+    if(grpActs && grpActs.length && !_readOnlyMode){
+      for(var _gi=0; _gi<grpActs.length; _gi++){
+        var _g = grpActs[_gi];
+        if(!_g) continue;
+        var _act = (typeof GRUPAL_ACTS !== 'undefined' && GRUPAL_ACTS[_g.gai]) ? GRUPAL_ACTS[_g.gai] : null;
+        if(_act && (typeof grpCalcType === 'function') && grpCalcType(_act) === 'cajas' && _act.p > 0){
+          if(!_g.vars) _g.vars = {};
+          _g.vars.precioC = parseFloat(_act.p);
+        }
+      }
+    }
     // Tau: recuperar empNum y contractRate de ALL_WORKERS si faltan (datos legacy)
     for(var ei=0;ei<workers.length;ei++){
       if(!workers[ei].empNum || !workers[ei].contractRate){
@@ -7588,6 +7705,19 @@ function loadDay(key){
     }
     // V120 FIX 4 (paridad V20_111): resync wid tras cargar workers
     try { _resyncWid(); } catch(_){}
+    // V123 (paridad V20_114): refrescar precioC desde MASTER en grupales cajas
+    // Guard !_readOnlyMode: en modo lectura respetar valor congelado del payload
+    if(grpActs && grpActs.length && !_readOnlyMode){
+      for(var _gi=0; _gi<grpActs.length; _gi++){
+        var _g = grpActs[_gi];
+        if(!_g) continue;
+        var _act = (typeof GRUPAL_ACTS !== 'undefined' && GRUPAL_ACTS[_g.gai]) ? GRUPAL_ACTS[_g.gai] : null;
+        if(_act && (typeof grpCalcType === 'function') && grpCalcType(_act) === 'cajas' && _act.p > 0){
+          if(!_g.vars) _g.vars = {};
+          _g.vars.precioC = parseFloat(_act.p);
+        }
+      }
+    }
     // Tau: recuperar contractRate en datos de historial
     for(var ri=0;ri<workers.length;ri++){
       if(!workers[ri].contractRate){
@@ -8869,8 +8999,14 @@ function askDelWorker(id){
   // V101_03: PIN admin para eliminaciones tardías (pasados los 60s tras agregar)
   var isAdminUser = !!(currentUser && currentUser.isAdmin);
   var withinUndo = w.canUndoUntil && Date.now() < w.canUndoUntil;
-  if(isAdminUser || withinUndo || !ADMIN_PIN_HASH){
+  // V124 SEGURIDAD: bypass solo si admin o dentro de ventana undo
+  if(isAdminUser || withinUndo){
     return _showDelWorkerModal(w, id);
+  }
+  // V124 SEGURIDAD: si no hay hash cargado del CONFIG, rechazar (no permitir bypass)
+  if(!ADMIN_PIN_HASH){
+    toast('⚠️ Configuración admin no cargada — espera a tener internet');
+    return;
   }
   var pin = prompt('Eliminar a '+w.name+' requiere PIN admin (ya pasaron más de 60s del registro):');
   if(!pin) return;
@@ -9282,7 +9418,8 @@ function sendToSheets(customFrameId) {
     } else if (ct === 'cajas') {
       var totalC = parseFloat(g.vars.totalC) || 0;
       qtyPerPerson = totalC / np;
-      unitP = parseFloat(g.vars.precioC) || act.p || 0.80;
+      // V123 (paridad V20_114): MASTER tiene prioridad sobre vars.precioC
+      unitP = (act && act.p) ? parseFloat(act.p) : (parseFloat(g.vars.precioC) || 0.80);
     } else if (ct === 'hora') {
       var hGrp = nh(g.vars.ini || '', g.vars.fin || '');
       qtyPerPerson = hGrp || 0; // horas (igual para todos)
@@ -9527,7 +9664,14 @@ function showGrpPicker(){
 }
 
 function addGrpAct(gai){
-  grpActs.push({gai:gai, participantes:[], vars:{}, open:true});
+  var newGrpAct = {gai:gai, participantes:[], vars:{}, open:true};
+  // V123 (paridad V20_114): sembrar precioC desde MASTER si es grupal cajas
+  var _newAct = (typeof GRUPAL_ACTS !== 'undefined' && GRUPAL_ACTS[gai]) ? GRUPAL_ACTS[gai] : null;
+  if(_newAct && (typeof grpCalcType === 'function') && grpCalcType(_newAct) === 'cajas'){
+    newGrpAct.vars = newGrpAct.vars || {};
+    newGrpAct.vars.precioC = parseFloat(_newAct.p) || 0;
+  }
+  grpActs.push(newGrpAct);
   gEl('grpPickOv').classList.remove('on');
   renderGrpActs(); autoSave();
 }
@@ -9808,12 +9952,16 @@ function renderGrpActs(){
           })()
         +_fincaGrpHtml(gi, g.vars.finca||'', 'ej: El Columpio, Block 3...');
     } else if(ct === 'cajas'){
-      var totalC = g.vars.totalC||''; var precioC = g.vars.precioC||act.p||0.80;
+      // V123 (paridad V20_114): precio readonly desde MASTER (act.p prioridad)
+      var totalC = g.vars.totalC||''; var precioC = (act && act.p) ? act.p : (g.vars.precioC || 0.80);
       varsHtml = '<div class="r2" style="margin-bottom:8px">'
         +'<div><label style="font-size:10px">Total cajas</label>'
         +'<input type="number" inputmode="decimal" pattern="[0-9]*\\.?[0-9]*" min="0" step="1" value="'+totalC+'" placeholder="0" data-gi="'+gi+'" data-v="totalC" onchange="setGrpVar(this)" style="font-size:16px;padding:10px 11px"></div>'
-        +'<div><label style="font-size:10px">$/caja</label>'
-        +'<input type="number" inputmode="decimal" pattern="[0-9]*\\.?[0-9]*" min="0" step="0.01" value="'+precioC+'" data-gi="'+gi+'" data-v="precioC" onchange="setGrpVar(this)" style="font-size:16px;padding:10px 11px"></div>'
+        +'<!-- V123 (paridad V20_114): precio readonly desde MASTER -->'
+        +'<div style="background:#eef;border:1px solid #c8d0e8;border-radius:6px;padding:8px 10px;font-size:14px;color:#1a2b8c">'
+        +'<span style="font-size:11px;opacity:0.75">$/caja (MASTER)</span><br>'
+        +'<strong style="font-size:18px">$'+(parseFloat(precioC)||0).toFixed(2)+'</strong>'
+        +'</div>'
         +'</div>'
         +'<div class="r2" style="margin-bottom:8px">'
         +'<div><label style="font-size:10px">🟢 Entrada</label>'
@@ -13762,10 +13910,16 @@ function activarAdminBypass(){
 function adminBypassQR(){
   if(!currentUser || !currentUser.isAdmin){ toast('⚠️ Solo admin'); return; }
   if(_readOnlyMode){ toast('🔒 Modo lectura — no aplica'); return; }
+  // V124 SEGURIDAD: rechazar explícitamente si CONFIG no cargó (mensaje claro al admin)
+  if(!ADMIN_PIN_HASH){
+    toast('⚠️ Configuración admin no cargada — espera a tener internet');
+    return;
+  }
   var pin = prompt('🔢 PIN de admin para sustituir QR:');
   if(!pin) return;
   hashPin(String(pin)).then(function(h){
-    if(!ADMIN_PIN_HASH || h !== ADMIN_PIN_HASH){ toast('⚠️ PIN incorrecto'); return; }
+    // V124 SEGURIDAD: ahora solo valida coincidencia (la carga ya se verificó arriba)
+    if(h !== ADMIN_PIN_HASH){ toast('⚠️ PIN incorrecto'); return; }
     var name = '', empNum = '';
     var mode = _qrMode || 'trabajador';
     if(mode === 'chofer' || mode === 'coChofer'){
