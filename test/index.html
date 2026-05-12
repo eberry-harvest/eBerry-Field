@@ -35,7 +35,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_126';
+window.APP_VERSION = 'V20_127';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -3269,6 +3269,11 @@ function _hhmmNow(){
   return h + ':' + m;
 }
 
+// V20_127: generador de ID único para cada act/grupal/ausencia (UPSERT en FIELD_DROP)
+function _genRowId(){
+  return 'r' + Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+}
+
 // Iota: reset limpio de todo el estado (útil para Nuevo Día)
 function resetState(){
   pg=0; workers=[]; wid=0; grpActs=[];
@@ -4604,6 +4609,7 @@ function _enterReadOnly(payload){
         _bloquesRO = [{pies: String(Math.round(qty*100)), surcos: '1'}];
       }
       w.acts.push({
+        localRowId: pa.localRowId || _genRowId(), // V20_127: preservar del backend o generar
         ai: aiIdx, esName: pa.actEs||'', tipo: pa.tipo||'',
         qty: qty, ini: pa.hEnt||'', fin: pa.hSal||'',
         // V20_66: siempre expandir horario al cargar día → muestra inputs INICIO/FIN inmediatamente.
@@ -4705,6 +4711,7 @@ function _enterReadOnly(payload){
     // V20_111 FIX 3: enriquecer con _actEs/_payType/_unitPrice para paridad con V20_110 FASE A
     // (la red de seguridad sintética en renderGrpActs los necesita si gai=-1)
     grpActs.push({
+      localRowId: pg.localRowId || _genRowId(), // V20_127: ID único del grupal (preserva del backend si viene)
       gai: gaiIdx, esName: pg.actEs||'',
       _actEs: pg.actEs || '',
       _payType: pg.tipo || '',
@@ -4719,7 +4726,7 @@ function _enterReadOnly(payload){
 
   // 5) Ausencias
   ausencias = (payload.ausencias||[]).map(function(a){
-    return { name:a.name||'', empNum:a.empNum||'', motivo:a.motivo||'', _frozen:true };
+    return { name:a.name||'', empNum:a.empNum||'', motivo:a.motivo||'', _frozen:true, localRowId: a.localRowId || _genRowId() }; // V20_127: ID único UPSERT
   });
 
   // 6) Restaurar campos top del payload — V20_49: normalizar fecha por si viene en formato raro
@@ -6113,6 +6120,7 @@ function addAct(wid_){
     lockIni = true;
   }
   w.acts.push({
+    localRowId: _genRowId(), // V20_127: ID único para UPSERT en FIELD_DROP
     ai:0, esName:defName, tipo:defTipo, qty:'',
     ini: initIni, fin:'',
     showTime: !!initIni, // abrir reloj si ya tenemos hora del check-in
@@ -6854,7 +6862,7 @@ function saAll(){ var all=true; for(var i=0;i<pcp.sel.length;i++){if(!pcp.sel[i]
 function okCopy(){
   if(!pcp)return; var wi=pcp.wi,w=workers[wi];
   w.acts=[];
-  for(var i=0;i<pcp.pat.length;i++){ if(pcp.sel[i]){ var _pa=pcp.pat[i]; var _pact=_pa.ai>=0&&_pa.ai<ACTS.length?ACTS[_pa.ai]:null; w.acts.push({ai:_pa.ai,esName:_pact?_pact.es:'',tipo:_pact?_pact.tipo:'',qty:'',ini:_pa.ini,fin:_pa.fin,showTime:_pa.showTime,pay:0,finca:_pa.finca||gVal('finca')}); }}
+  for(var i=0;i<pcp.pat.length;i++){ if(pcp.sel[i]){ var _pa=pcp.pat[i]; var _pact=_pa.ai>=0&&_pa.ai<ACTS.length?ACTS[_pa.ai]:null; w.acts.push({localRowId:_genRowId(),ai:_pa.ai,esName:_pact?_pact.es:'',tipo:_pact?_pact.tipo:'',qty:'',ini:_pa.ini,fin:_pa.fin,showTime:_pa.showTime,pay:0,finca:_pa.finca||gVal('finca')}); }}
   w.open=true;
   var cont=gEl('ac'+w.id); if(cont){ cont.innerHTML=''; for(var i=0;i<w.acts.length;i++) mkActRow(w.id,i); }
   var c=gEl('wc'+w.id); if(c)c.classList.add('op');
@@ -7311,6 +7319,7 @@ function _serializeState(){
       if(sa.indAcres) actSv.indAcres=sa.indAcres;
       if(sa.bloques && sa.bloques.length) actSv.bloques=sa.bloques; // V20_76: persistir bloques VarDoor
       if(sa.inputs && Object.keys(sa.inputs).length) actSv.inputs=sa.inputs; // V20_28: persistir motor inputs
+      actSv.localRowId = sa.localRowId || ''; // V20_127: persistir ID único para UPSERT
       ws.acts.push(actSv);
     }
     wSave.push(ws);
@@ -7589,7 +7598,21 @@ function load(){
           if(!_aMig.bloques && _aMig.indPies){
             _aMig.bloques = [{pies: String(_aMig.indPies), surcos: '1'}];
           }
+          // V20_127: migración acts pre-V20_127 sin localRowId
+          if(!_aMig.localRowId) _aMig.localRowId = _genRowId();
         }
+      }
+    }
+    // V20_127: migración grupales viejos sin localRowId (load top-level)
+    if(grpActs && grpActs.length){
+      for(var _mgi=0; _mgi<grpActs.length; _mgi++){
+        if(grpActs[_mgi] && !grpActs[_mgi].localRowId) grpActs[_mgi].localRowId = _genRowId();
+      }
+    }
+    // V20_127: migración ausencias viejas sin localRowId
+    if(ausencias && ausencias.length){
+      for(var _mai=0; _mai<ausencias.length; _mai++){
+        if(ausencias[_mai] && !ausencias[_mai].localRowId) ausencias[_mai].localRowId = _genRowId();
       }
     }
     updParam(); updParts();
@@ -8152,6 +8175,7 @@ function confirmAssignMany(){
     if(!w) continue;
     w.acts = w.acts || [];
     var newAct = {
+      localRowId: _genRowId(), // V20_127: ID único por act (UPSERT FIELD_DROP) — cada worker recibe su propio ID
       ai: _assignCurrentActIdx,
       esName: act.es,
       tipo: act.hr ? 'hora' : (act.payType === 'Daywork' ? 'daywork' : 'pieza'),
@@ -10229,6 +10253,8 @@ function sendToSheets() {
       var uPrice = isHourAct(act) ? getHRate(w, act) : act.p;
       // V12: incluir horarios para FIELD_DROP cols 16-19
       // ini/fin son por actividad; lonche (lIni/lFin) es global de Parámetros
+      // V20_127: garantizar localRowId (acts viejos pre-V20_127 sin migrar todavía)
+      if(!a.localRowId) a.localRowId = _genRowId();
       wOut.acts.push({
         actEs:      act.es,
         actEn:      act.en || act.es,
@@ -10240,7 +10266,8 @@ function sendToSheets() {
         hEnt:       a.ini || '',
         hSal:       a.fin || '',
         hLIni:      gVal('lIni') || '',
-        hLFin:      gVal('lFin') || ''
+        hLFin:      gVal('lFin') || '',
+        localRowId: a.localRowId // V20_127: ID único para UPSERT en FIELD_DROP (col 21 backend v5.30)
       });
     }
     if(wOut.acts.length) payload.workers.push(wOut); // V12-BUG3: no enviar workers sin actividades (filas fantasma)
@@ -10252,6 +10279,8 @@ function sendToSheets() {
     var aus = ausencias[ai];
     var mot = aus.motivo || '';
     var lbl = _motLabels[mot] || _motLabels[''];
+    // V20_127: garantizar localRowId en ausencias viejas pre-migración
+    if(!aus.localRowId) aus.localRowId = _genRowId();
     payload.workers.push({
       name: aus.name,
       empNum: aus.empNum||'',
@@ -10264,7 +10293,8 @@ function sendToSheets() {
         totalHours: '',
         motivo:     mot,
         // V20_100 FIX: ausencias ahora también mandan finca (estaba ausente del payload).
-        finca:      gVal('finca') || ''
+        finca:      gVal('finca') || '',
+        localRowId: aus.localRowId // V20_127: ID único UPSERT
       }]
     });
     ausSent++;
@@ -10344,6 +10374,11 @@ function sendToSheets() {
 
       // V20_99 FIX: para grupales tipo Hora cada participante usa SU contractRate, no el precio del catálogo
       var uPriceGrp = (ct === 'hora') ? (getHRate(w, act) || unitP) : unitP;
+      // V20_127: localRowId determinístico por participante. Si el grupal tiene localRowId
+      // base, lo combinamos con el id del participante para que reenvíos sin cambios produzcan
+      // el mismo ID (UPSERT correcto). Si no, generamos uno y lo cacheamos en el grupal.
+      if(!g.localRowId) g.localRowId = _genRowId();
+      var rowLrid = g.localRowId + '_w' + w.id;
       found.acts.push({
         actEs:      act.es,
         actEn:      act.en || act.es,
@@ -10357,7 +10392,8 @@ function sendToSheets() {
         hSal:       g.vars.fin || '',
         hLIni:      gVal('lIni') || '',
         hLFin:      gVal('lFin') || '',
-        isGrupal:   true                // V20_56: flag para FieldSync v5.15 col 20 Is_grupal
+        isGrupal:   true,               // V20_56: flag para FieldSync v5.15 col 20 Is_grupal
+        localRowId: rowLrid             // V20_127: ID único determinístico por (grupal,participante)
       });
       grpSent++;
     }
@@ -10592,6 +10628,7 @@ function addGrpAct(gai){
     _initVars.precioC = parseFloat(_gact.p) || 0;
   }
   grpActs.push({
+    localRowId: _genRowId(), // V20_127: ID base del grupal — cada participante usa lrid+'_w'+wid en payload
     gai: gai,
     esName: _gact ? (_gact.es || '') : '',
     _actEs: _gact ? (_gact.es || '') : '',
@@ -11485,7 +11522,7 @@ function syncAusencias(){
       // Preservar empNum si faltaba
       if(!existing.empNum && c2.empNum) existing.empNum = c2.empNum;
     } else {
-      ausencias.push({name:c2.name, empNum:c2.empNum, motivo:""});
+      ausencias.push({localRowId: _genRowId(), name:c2.name, empNum:c2.empNum, motivo:""}); // V20_127
     }
   }
 }
@@ -11656,7 +11693,7 @@ function addAusenciaConfirmed(name, empNum){
   }
   var num = empNum||"";
   if(!num){ var dbW=findInArr(ALL_WORKERS,name); if(dbW) num=dbW.empNum||""; }
-  ausencias.push({name:name, empNum:num, motivo:""});
+  ausencias.push({localRowId: _genRowId(), name:name, empNum:num, motivo:""}); // V20_127
   renderAusencias(); autoSave();
 }
 
@@ -12617,6 +12654,7 @@ function testFill(){
       };
 
       var a = {
+        localRowId: _genRowId(), // V20_127: ID único por act (peinado)
         ai: ai,
         esName: act.es,
         tipo: act.tipo || '',
@@ -12688,14 +12726,14 @@ function testFill(){
 
       var nParts = Math.min(3, addedWids.length);
       var parts = addedWids.slice(0, nParts);
-      grpActs.push({gai: gai, participantes: parts, vars: vars});
+      grpActs.push({localRowId: _genRowId(), gai: gai, participantes: parts, vars: vars}); // V20_127: ID único grupal (peinado)
     }
     if(typeof renderGrpActs === 'function') renderGrpActs();
   }
 
   // ── 3. Ausencias (2 con motivos distintos) ──
-  ausencias.push({name:'Test Ausente Uno', empNum:'T001', motivo:'enfermedad'});
-  ausencias.push({name:'Test Ausente Dos', empNum:'T002', motivo:'cambio'});
+  ausencias.push({localRowId: _genRowId(), name:'Test Ausente Uno', empNum:'T001', motivo:'enfermedad'}); // V20_127
+  ausencias.push({localRowId: _genRowId(), name:'Test Ausente Dos', empNum:'T002', motivo:'cambio'}); // V20_127
   if(typeof renderAusencias === 'function') renderAusencias();
 
   // ── 4. Recalcular y guardar ──
