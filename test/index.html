@@ -35,7 +35,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_141';
+window.APP_VERSION = 'V20_142';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -1325,11 +1325,17 @@ body.readOnly [onclick*="openNewDay"]{display:none !important}
 .wlist-empty .e-txt{font-size:13px;color:var(--gr)}
 /* Vista por actividad (acordeones) — usada en Act. Individuales y Act. Grupales */
 .acc-act{background:#fff;border:1px solid #ddd;border-radius:10px;margin:8px 0;overflow:hidden}
-.acc-act-head{display:flex;align-items:center;gap:10px;padding:14px 16px;cursor:pointer;background:#f8f9fa;user-select:none;min-height:60px}
+.acc-act-head{display:flex;align-items:flex-start;gap:10px;padding:10px 12px;cursor:pointer;background:#f8f9fa;user-select:none;min-height:60px}
 .acc-act-head:hover{background:#e9ecef}
-.acc-act-head .acc-arrow{font-size:14px;color:#1a2b8c;flex-shrink:0;width:18px}
+.acc-act-head .acc-arrow{font-size:14px;color:#1a2b8c;flex-shrink:0;width:18px;padding-top:2px}
 .acc-act-head .acc-nm{font-weight:700;color:#1a2b8c;font-size:14px;white-space:normal;word-break:break-word}
 .acc-act-head .acc-meta{font-size:12px;color:#666;display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-top:4px}
+/* V20_142: columna izquierda apilada (tag + botones Editar/Eliminar) */
+.acc-act-left{display:flex;flex-direction:column;gap:5px;align-items:stretch;min-width:90px;max-width:110px;flex-shrink:0}
+.acc-act-left .type-tag{text-align:center;font-size:10px;padding:3px 6px}
+.acc-act-left .edit-act-group,
+.acc-act-left .del-act-group{margin:0;width:100%;text-align:center;font-size:10px;padding:4px 6px;min-height:32px}
+.acc-act-right{flex:1;min-width:0}
 .acc-act-body{display:none;padding:12px 16px;border-top:1px solid #e9ecef;background:#fafbfc}
 .acc-act.open .acc-act-body{display:block}
 .pill{display:inline-block;padding:2px 10px;border-radius:12px;font-size:11px;font-weight:600}
@@ -8184,8 +8190,15 @@ function renderWlistByActivity(){
     html += '<div class="acc-act" data-gi="'+gi+'">';
     html += '  <div class="acc-act-head" onclick="toggleAccAct(this)">';
     html += '    <span class="acc-arrow">▶</span>';
-    html += '    <span class="type-tag '+typeTag.cls+'">'+typeTag.label+'</span>';
-    html += '    <div style="flex:1;min-width:0">';
+    var _gkAi = (g.ai != null ? g.ai : g.actName);
+    var _gkStr = esc(String(_gkAi)) + '|' + esc(g.ini||'') + '|' + esc(g.fin||'') + '|' + esc(g.finca||'');
+    // V20_142: columna izquierda apilada (type-tag arriba + Editar + Eliminar)
+    html += '    <div class="acc-act-left">';
+    html += '      <span class="type-tag '+typeTag.cls+'">'+typeTag.label+'</span>';
+    html += '      <button class="edit-act-group" onclick="event.stopPropagation();editActivityGroup(\''+_gkStr.replace(/'/g,"\\'")+'\')" title="Editar esta actividad (horario, finca, trabajadores)">✏️ Editar</button>';
+    html += '      <button class="del-act-group" onclick="event.stopPropagation();deleteActivityGroup(\''+_gkStr.replace(/'/g,"\\'")+'\')" title="Eliminar esta actividad de todos los trabajadores asignados">🗑️ Eliminar</button>';
+    html += '    </div>';
+    html += '    <div class="acc-act-right">';
     html += '      <div class="acc-nm">'+esc(g.actName)+'</div>';
     html += '      <div class="acc-meta">';
     if(g.ini && g.fin) html += '<span class="pill pill-time">🕐 '+esc(g.ini)+'-'+esc(g.fin)+'</span> ';
@@ -8194,11 +8207,6 @@ function renderWlistByActivity(){
     html += '<span class="pill pill-rate">$'+(+g.rate||0).toFixed(2)+'</span>';
     html += '      </div>';
     html += '    </div>';
-    var _gkAi = (g.ai != null ? g.ai : g.actName);
-    var _gkStr = esc(String(_gkAi)) + '|' + esc(g.ini||'') + '|' + esc(g.fin||'') + '|' + esc(g.finca||'');
-    // V20_141: botón Editar grupo (azul) + botón Eliminar (rojo)
-    html += '    <button class="edit-act-group" onclick="event.stopPropagation();editActivityGroup(\''+_gkStr.replace(/'/g,"\\'")+'\')" title="Editar esta actividad (horario, finca, trabajadores)">✏️ Editar</button>';
-    html += '    <button class="del-act-group" onclick="event.stopPropagation();deleteActivityGroup(\''+_gkStr.replace(/'/g,"\\'")+'\')" title="Eliminar esta actividad de todos los trabajadores asignados">🗑️ Eliminar</button>';
     html += '  </div>';
     html += '  <div class="acc-act-body">';
     for(var wi=0; wi<g.workers.length; wi++){
