@@ -35,7 +35,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_132';
+window.APP_VERSION = 'V20_133_c';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -493,6 +493,12 @@ html.login-locked{overflow:hidden!important;height:100%!important}
 .aus-opt.sel-enfermedad .aus-lbl{color:var(--b)}
 .aus-opt.sel-injustificada .aus-lbl{color:var(--r)}
 .aus-opt.sel-notrabajo .aus-lbl{color:#f39c12}
+/* V20_133_c: Lista de Trabajadores Activos en pestaña Check-in/Ausencias */
+.active-worker-row{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-bottom:1px solid #eee;gap:10px}
+.active-worker-row:last-child{border-bottom:none}
+.active-worker-info{flex:1;font-size:13px;font-weight:600;color:#222}
+.active-worker-rm{background:#fff;color:#c0392b;border:1.5px solid #c0392b;border-radius:4px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;min-height:36px}
+.active-worker-rm:hover{background:#c0392b;color:#fff}
 /* ── FACE REGISTRATION ── */
 .faceOv{position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.92);z-index:700;display:none;flex-direction:column}
 .faceOv.on{display:flex}
@@ -902,7 +908,7 @@ html.login-locked{overflow:hidden!important;height:100%!important}
     <a class="drawer-tab" data-pg="2" onclick="pickDrawerTab(2)"><span class="tab-num">②</span> Act. Individuales</a><!-- V20_126: renombrado Trabajadores → Act. Individuales -->
     <a class="drawer-tab" data-pg="3" onclick="pickDrawerTab(3)"><span class="tab-num">③</span> Act. Grupales</a>
     <a class="drawer-tab" data-pg="4" onclick="pickDrawerTab(4)"><span class="tab-num">④</span> Resumen</a>
-    <a class="drawer-tab" data-pg="5" onclick="pickDrawerTab(5)"><span class="tab-num">⑤</span> Ausencias</a>
+    <a class="drawer-tab" data-pg="5" onclick="pickDrawerTab(5)"><span class="tab-num">⑤</span> Check-in / Ausencias</a>
     <a class="drawer-tab" data-pg="1" onclick="pickDrawerTab(1)"><span class="tab-num">⑥</span> Análisis</a>
     <a class="drawer-tab" data-pg="6" onclick="pickDrawerTab(6)"><span class="tab-num">⑦</span> Invoice</a>
     <a class="drawer-tab" data-pg="7" onclick="pickDrawerTab(7)"><span class="tab-num">⑧</span> Semanal</a>
@@ -1343,6 +1349,8 @@ body.readOnly [onclick*="openNewDay"]{display:none !important}
 .w-row-act .qty-input-act{width:70px;padding:4px;text-align:center;border:1px solid #ddd;border-radius:4px;font-size:12px}
 .w-row-act .pay-act{font-weight:700;color:#155724;font-size:12px;background:#d4edda;padding:2px 8px;border-radius:8px;white-space:nowrap}
 .w-row-act .del-act{background:#dc3545;color:#fff;border:none;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:11px;font-weight:600}
+.del-act-group{background:#fff;color:#c0392b;border:1.5px solid #c0392b;border-radius:4px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0;margin-left:6px}
+.del-act-group:hover{background:#c0392b;color:#fff}
 .add-row-big{background:#1a2b8c;color:#fff;padding:14px;border-radius:8px;font-weight:600;font-size:14px;cursor:pointer;text-align:center;width:100%;border:none;min-height:48px;margin-top:14px}
 .add-row-sec{background:#28a745;color:#fff;padding:8px;border-radius:6px;font-weight:600;font-size:13px;cursor:pointer;text-align:center;width:100%;border:none;margin-top:8px}
 /* V20_126: tabla Resumen mejorado */
@@ -1680,8 +1688,13 @@ body.readOnly [onclick*="openNewDay"]{display:none !important}
 
 <!-- PAGE 4 — AUSENCIAS -->
 <div class="pg" id="p4">
-  <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px;margin-bottom:3px">Ausencias del Día</div>
+  <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px;margin-bottom:3px">Check-in / Ausencias del Día</div>
   <div id="ausHdr" style="font-size:13px;color:var(--gr);margin-bottom:14px">Personas de tu equipo que no trabajaron hoy</div>
+  <!-- V20_133_c: Trabajadores Activos Hoy con botón Quitar -->
+  <div class="card" id="activeWorkersCard">
+    <div class="ct">👥 Trabajadores Activos Hoy <span id="activeWorkersCount" style="color:#666;font-weight:normal">(0)</span></div>
+    <div id="activeWorkersList"></div>
+  </div>
   <div id="ausenciasList" class="resp-grid resp-grid-ausencias"></div>
   <div id="ausenciasEmpty" style="text-align:center;padding:40px 20px;color:var(--gr)">
     <div style="font-size:40px;margin-bottom:12px">✅</div>
@@ -8000,6 +8013,9 @@ function renderWlistByActivity(){
     html += '<span class="pill pill-rate">$'+(+g.rate||0).toFixed(2)+'</span>';
     html += '      </div>';
     html += '    </div>';
+    var _gkAi = (g.ai != null ? g.ai : g.actName);
+    var _gkStr = esc(String(_gkAi)) + '|' + esc(g.ini||'') + '|' + esc(g.fin||'') + '|' + esc(g.finca||'');
+    html += '    <button class="del-act-group" onclick="event.stopPropagation();deleteActivityGroup(\''+_gkStr.replace(/'/g,"\\'")+'\')" title="Eliminar esta actividad de todos los trabajadores asignados">🗑️ Eliminar</button>';
     html += '  </div>';
     html += '  <div class="acc-act-body">';
     for(var wi=0; wi<g.workers.length; wi++){
@@ -8059,6 +8075,58 @@ function onActWorkerRemove(wid_, actIdx){
   try { recalc(wid_); } catch(e){}
   try { autoSave(); } catch(e){}
   renderWlistByActivity();
+}
+
+// Bug 3: eliminar UNA actividad de TODOS los trabajadores asignados (no quita workers)
+function deleteActivityGroup(groupKey){
+  if(_readOnlyMode){ toast && toast('🔒 Modo lectura — no se pueden eliminar actividades'); return; }
+  if(!groupKey){ return; }
+  var parts = String(groupKey).split('|');
+  if(parts.length < 4){ console.warn('deleteActivityGroup: key inválido', groupKey); return; }
+  var aiStr = parts[0];
+  var ini = parts[1] || '';
+  var fin = parts[2] || '';
+  var finca = parts[3] || '';
+  var aiNum = parseInt(aiStr, 10);
+  var matchByName = isNaN(aiNum); // si ai no era número, era actName (fallback de buildActViewGroups)
+  if(!confirm('¿Eliminar esta actividad de TODOS los trabajadores asignados?\n\nLos trabajadores NO se quitan de la lista, solo esta actividad.')) return;
+  var count = 0;
+  var affectedWorkers = [];
+  for(var wi=0; wi<workers.length; wi++){
+    var w = workers[wi];
+    if(!w || !w.acts) continue;
+    var removedFromThisWorker = 0;
+    for(var ax = w.acts.length - 1; ax >= 0; ax--){
+      var a = w.acts[ax];
+      var aIni = a.ini || (a.shifts && a.shifts[0] && a.shifts[0].ini) || '';
+      var aFin = a.fin || (a.shifts && a.shifts[0] && a.shifts[0].fin) || '';
+      var aFinca = a.finca || '';
+      var keyMatch = false;
+      if(matchByName){
+        // Fallback: matching por nombre cuando a.ai era null
+        var aName = a.esName || a._actEs || '';
+        if((a.ai == null) && aName === aiStr && aIni === ini && aFin === fin && aFinca === finca) keyMatch = true;
+      } else {
+        if(a.ai === aiNum && aIni === ini && aFin === fin && aFinca === finca) keyMatch = true;
+      }
+      if(keyMatch){
+        w.acts.splice(ax, 1);
+        count++;
+        removedFromThisWorker++;
+      }
+    }
+    if(removedFromThisWorker > 0){
+      affectedWorkers.push(w.id);
+      try { recalc(w.id); } catch(e){ console.warn('deleteActivityGroup recalc fallo:', e); }
+    }
+  }
+  if(count === 0){
+    toast && toast('⚠️ No se encontraron coincidencias para eliminar');
+    return;
+  }
+  try { autoSave(); } catch(e){}
+  toast && toast('✅ Actividad eliminada de ' + count + ' trabajador' + (count>1?'es':''));
+  try { renderWlistByActivity(); } catch(e){ console.warn('deleteActivityGroup render fallo:', e); }
 }
 
 // ============================================================================
@@ -8225,7 +8293,7 @@ function confirmAssignMany(){
     if(!w) continue;
     var tempAct = {
       ai: _assignCurrentActIdx, esName: act.es,
-      tipo: act.hr ? 'hora' : (act.payType === 'Daywork' ? 'daywork' : 'pieza'),
+      tipo: _derivarTipoActividad(act), // V20_133_a: data-driven (col G + col J)
       p: act.p, payType: act.payType||'', ini:ini, fin:fin, finca:finca,
       qty: 0, showTime:true, shifts:[{ini:ini, fin:fin}], inputs:{}
     };
@@ -8261,7 +8329,7 @@ function confirmAssignMany(){
       localRowId: _genRowId(), // V20_127: ID único por act (UPSERT FIELD_DROP) — cada worker recibe su propio ID
       ai: _assignCurrentActIdx,
       esName: act.es,
-      tipo: act.hr ? 'hora' : (act.payType === 'Daywork' ? 'daywork' : 'pieza'),
+      tipo: _derivarTipoActividad(act), // V20_133_a: data-driven (col G + col J)
       p: act.p,
       payType: act.payType||'',
       ini: ini, fin: fin, finca: finca,
@@ -8376,6 +8444,8 @@ function go(n){
     } else {
       syncAusencias(); renderAusencias();
     }
+    // V20_133_c: garantizar que la lista de activos se renderice al entrar a la pestaña
+    try { renderActiveWorkersInAbsences(); } catch(e){ console.warn('renderActiveWorkersInAbsences en go(5) fallo:', e); }
   }
   if(n===6) refreshInvoiceAuto();
   if(n===7){
@@ -10081,6 +10151,11 @@ function confirmDelAll(){
   ph.textContent='Escribe un nombre en la barra de abajo 👇';
   list.appendChild(ph);
   updParts(); renderGrpActs(); gEl('delAllOv').classList.remove('on');
+  // Bug 4: refrescar UI completa para que el botón "Asignar actividades" reaparezca sin cambiar de pestaña
+  try { renderWlistByActivity(); } catch(e){ console.warn('confirmDelAll renderWlistByActivity fallo:', e); }
+  try { if (typeof _renderCheckOutBtn === 'function') _renderCheckOutBtn(); } catch(e){}
+  try { if (typeof _renderIniciarDia === 'function') _renderIniciarDia(); } catch(e){}
+  try { if (typeof renderResumenV20_126 === 'function') renderResumenV20_126(); } catch(e){}
   toast('✓ Lista limpia'); autoSave();
 }
 
@@ -10620,6 +10695,26 @@ function isActPuertas(act){
   if(typeof _readOnlyMode !== 'undefined' && _readOnlyMode && act.calc==='puertas') return true;
   // Camino oficial: solo Variable
   return (act.variable||'').toLowerCase() === 'vardoor';
+}
+
+// V20_133_a: derivar tipo de actividad data-driven (col G Variable + col J Hours).
+// Reemplaza hardcode `act.hr ? 'hora' : (Daywork ? 'daywork' : 'pieza')`.
+function _derivarTipoActividad(act){
+  if(!act) return 'pieza';
+  var v = (act.variable||'').toString().toLowerCase();
+  // 1. Daywork (col G = 'Daywork' o payType)
+  if(v === 'daywork' || act.payType === 'Daywork') return 'daywork';
+  // 2. col J = 'Hours' (act.hr=true) o variable VarQty
+  if(v === 'varqty' || act.hr === true) return 'hora';
+  // 3. Si motor data-driven no requiere inputs → asumir hora
+  try {
+    if(typeof getRequiredInputs === 'function'){
+      var inputs = getRequiredInputs(act);
+      if(!inputs || !inputs.length) return 'hora';
+    }
+  } catch(e){}
+  // 4. Por defecto: pieza
+  return 'pieza';
 }
 
 // V20_104 FASE 2C: tipo de cálculo grupal SOLO por Variable.
@@ -11618,11 +11713,14 @@ function syncAusencias(){
 // "Pennrosé" vs "Pennrose" no matcheaban y el modal "no pertenece al crew"
 // disparaba falso. Aplicado en filterDataForCrew + check defensivo onQRSuccess.
 function _normCrew(s){
+  // V20_133_a: match EXACTO de cuadrilla. NO stripear dígitos finales ni colapsar todos los separadores.
+  // Antes: "Pennrose 1" y "Pennrose 2" se normalizaban ambos a "pennrose" → surquero 1 veía workers de 2 y 3.
+  // Ahora: solo NFD (acentos) + lowercase + colapsa espacios múltiples + trim.
   return (s||'').toString()
-    .normalize('NFD').replace(/[̀-ͯ]/g,'')   // V20_106: strip diacríticos
-    .replace(/\s*\d+$/,'')
-    .replace(/[\s_-]+/g,'')
-    .toLowerCase();
+    .normalize('NFD').replace(/[̀-ͯ]/g,'')
+    .toLowerCase()
+    .replace(/\s+/g,' ')
+    .trim();
 }
 
 // V9: Helper — obtener workers filtrados por CREW/RANCHO (no por IOE)
@@ -11832,6 +11930,46 @@ function renderAusencias(){
       +"</div>"
       +"<div class=\"aus-opts\">"+optsHtml+"</div>";
     list.appendChild(card);
+  }
+  // V20_133_c: refrescar también la lista de trabajadores activos al renderizar ausencias
+  try { renderActiveWorkersInAbsences(); } catch(e){ console.warn('renderActiveWorkersInAbsences fallo:', e); }
+}
+
+// V20_133_c: Renderiza la lista de trabajadores activos dentro de la pestaña Check-in/Ausencias.
+// Permite al surquero quitar workers desde la misma vista donde marca ausencias.
+function renderActiveWorkersInAbsences(){
+  var cont = gEl('activeWorkersList');
+  var cntEl = gEl('activeWorkersCount');
+  if(!cont) return; // pestaña aún no montada; silent return
+  if(!workers || workers.length === 0){
+    cont.innerHTML = '<div style="color:#888;padding:8px;text-align:center;font-size:12px">Sin trabajadores activos</div>';
+    if(cntEl) cntEl.textContent = '(0)';
+    return;
+  }
+  if(cntEl) cntEl.textContent = '(' + workers.length + ')';
+  var html = '';
+  for(var i=0; i<workers.length; i++){
+    var w = workers[i];
+    var ckIn = w.checkInTime ? ' · 🔒 ' + esc(w.checkInTime) : '';
+    var ckOut = w.checkOutTime ? ' · 🏁 ' + esc(w.checkOutTime) : '';
+    var role = w.role || '';
+    var roleEm = (role === 'chofer' ? '🚌 ' : (role === 'surquero' ? '👤 ' : (role === 'choferSurquero' ? '🚌👤 ' : '')));
+    var empNumTxt = w.empNum ? ' · #' + esc(w.empNum) : '';
+    html += '<div class="active-worker-row" data-wid="' + w.id + '">'
+      + '<div class="active-worker-info">' + roleEm + esc(w.name) + empNumTxt + ckIn + ckOut + '</div>'
+      + '<button class="active-worker-rm" data-wid="' + w.id + '">🗑️ Quitar</button>'
+      + '</div>';
+  }
+  cont.innerHTML = html;
+  var btns = cont.querySelectorAll('.active-worker-rm');
+  for(var b=0; b<btns.length; b++){
+    btns[b].addEventListener('click', function(ev){
+      var wid = parseInt(ev.currentTarget.getAttribute('data-wid'), 10);
+      if(isNaN(wid)) return;
+      // askDelWorker ya maneja confirm, PIN admin y modo lectura (vía wrapper FN_NAMES)
+      if(typeof askDelWorker === 'function') askDelWorker(wid);
+      else if(typeof rmWorker === 'function') rmWorker(wid);
+    });
   }
 }
 
