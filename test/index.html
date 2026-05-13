@@ -35,7 +35,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_128';
+window.APP_VERSION = 'V20_132';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -250,11 +250,6 @@ header{background:var(--g);color:#fff;padding:12px 14px 0;position:sticky;top:0;
 .ver-check-btn:disabled{opacity:.6;cursor:default}
 .ver-check-btn.spin{animation:verSpin 1s linear infinite}
 @keyframes verSpin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
-.tabs{display:flex;gap:5px;overflow-x:auto;padding-bottom:8px;scrollbar-width:none}
-.tabs::-webkit-scrollbar{display:none}
-.tab{flex-shrink:0;background:rgba(255,255,255,.1);color:rgba(255,255,255,.85);border:none;border-radius:20px;padding:5px 12px;min-height:44px;display:inline-flex;align-items:center;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap}
-.tab.act{background:var(--a);color:var(--dk)}
-.tab.done{background:var(--g2);color:#fff}
 .pg{display:none;padding:13px}
 .pg.on{display:block}
 .card{background:#fff;border-radius:12px;padding:14px;margin-bottom:11px;border:1px solid var(--bd)}
@@ -295,9 +290,6 @@ select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/
 .qrStatus.ok{background:var(--bp);color:var(--b)}
 .qrStatus.err{background:var(--rp);color:var(--r)}
 .qrCount{background:var(--gp);color:var(--g);padding:8px 16px;font-size:12px;font-weight:700;text-align:center;border-top:1px solid var(--bd)}
-.nav{display:flex;padding:8px 12px 15px;gap:8px}
-.np{flex:1;padding:12px;border:1.5px solid var(--bd);border-radius:8px;font-family:'DM Sans',sans-serif;font-size:14px;font-weight:700;cursor:pointer;background:var(--lt);color:var(--gr)}
-.nn{flex:2;padding:12px;border:none;border-radius:8px;font-family:'DM Sans',sans-serif;font-size:15px;font-weight:700;cursor:pointer;background:var(--g);color:#fff}
 .wc{background:#fff;border:1.5px solid var(--bd);border-radius:12px;margin-bottom:10px}
 .wc.hi{border-color:var(--g)}
 .wh{display:flex;align-items:flex-start;padding:12px 13px;gap:9px;cursor:pointer}
@@ -607,13 +599,10 @@ html.login-locked{overflow:hidden!important;height:100%!important}
 /* V20_61: responsive header — evitar scroll horizontal en celular.
    Tabs hacen wrap a 2-3 líneas, header se acomoda. Pill savepill visible siempre. */
 @media(max-width:768px){
-  .tabs{flex-wrap:wrap;overflow-x:visible;padding-bottom:6px}
-  .tab{font-size:11px;padding:7px 10px;min-height:38px;flex:0 1 auto}
   .htop{flex-wrap:wrap;gap:6px}
   #savepill{order:99;flex-basis:auto}
 }
 @media(max-width:480px){
-  .tab{font-size:10px;padding:6px 8px;min-height:36px}
   .dpill{font-size:11px;padding:3px 8px}
   .htop{gap:4px;margin-bottom:4px}
   .htop button{font-size:11px!important;padding:4px 8px!important}
@@ -647,11 +636,9 @@ html.login-locked{overflow:hidden!important;height:100%!important}
 @media(min-width:768px){
   /* Body con padding cómodo y sin desperdiciar tanto espacio */
   body{padding-left:20px;padding-right:20px}
-  /* Header tabs en una sola línea cómoda (sobreescribe wrap del V20_61 a partir de 768) */
+  /* Header en una sola línea cómoda */
   header{padding:14px 20px 0}
   .htop{flex-wrap:nowrap;gap:10px}
-  .tabs{flex-wrap:nowrap;overflow-x:auto;justify-content:flex-start;gap:8px}
-  .tab{font-size:13px;padding:8px 14px;min-height:44px}
   .pg{padding:18px 8px}
   /* Cards con padding más cómodo */
   .card{padding:18px;margin-bottom:14px}
@@ -683,8 +670,6 @@ html.login-locked{overflow:hidden!important;height:100%!important}
   /* Header sigue full-width visualmente con sticky pero el contenido está centrado */
   header{margin:0 -32px;padding:14px 32px 0}
   .htop{gap:14px}
-  .tabs{justify-content:center;gap:10px}
-  .tab{font-size:13px;padding:8px 16px}
   .pg{padding:24px 0}
   /* Cards aún más cómodas */
   .card{padding:20px;margin-bottom:16px}
@@ -962,7 +947,7 @@ html.login-locked{overflow:hidden!important;height:100%!important}
   <div id="cfgDiag" style="display:none;background:#fff3c4;border:2px solid #e6a700;color:#5a4500;font-size:11px;padding:8px 12px;margin:14px auto;max-width:320px;border-radius:6px;text-align:left;line-height:1.4">
     <strong>⚠️ Diagnóstico CONFIG:</strong><br>
     <span id="cfgDiagMsg">Cargando…</span><br>
-    <span style="font-size:10px;opacity:0.7">App: V20_118</span>
+    <span id="cfgDiagVer" style="font-size:10px;opacity:0.7">App: ?</span>
   </div>
 </div>
 
@@ -1332,9 +1317,7 @@ body.readOnly [onclick*="openNewDay"]{display:none !important}
 .wlist-empty .e-ico{font-size:36px;margin-bottom:10px}
 .wlist-empty .e-tit{font-size:15px;font-weight:700;color:var(--dk);margin-bottom:4px}
 .wlist-empty .e-txt{font-size:13px;color:var(--gr)}
-/* V20_126: vista por actividad — toggle + acordeones */
-.vt-btn{padding:8px 14px;background:#e9ecef;color:#333;border:none;border-radius:6px;font-weight:600;font-size:13px;cursor:pointer;min-height:40px}
-.vt-btn.act{background:#1a2b8c;color:#fff}
+/* Vista por actividad (acordeones) — usada en Act. Individuales y Act. Grupales */
 .acc-act{background:#fff;border:1px solid #ddd;border-radius:10px;margin:8px 0;overflow:hidden}
 .acc-act-head{display:flex;align-items:center;gap:10px;padding:14px 16px;cursor:pointer;background:#f8f9fa;user-select:none;min-height:60px}
 .acc-act-head:hover{background:#e9ecef}
@@ -1634,11 +1617,7 @@ body.readOnly [onclick*="openNewDay"]{display:none !important}
   </div>
   <!-- V20_91_14: agregar trabajadores ahora se hace desde Parámetros → Check-in cuadrilla -->
   <div style="font-size:13px;color:var(--gr);margin-bottom:11px">Toca <b>✅ Check-in cuadrilla</b> en Parámetros para registrar trabajadores.</div>
-  <!-- V20_126: toggle vista (por actividad / por worker) -->
-  <div class="view-toggle" id="vt-bar" style="display:flex;gap:8px;margin-bottom:10px">
-    <button id="vt-act" class="vt-btn act" onclick="setViewMode('act')">📂 Por actividad</button>
-    <button id="vt-wk" class="vt-btn" onclick="setViewMode('worker')">👥 Por worker</button>
-  </div>
+  <!-- Vista única: actividades del día (acordeón por actividad) -->
   <div class="banner" id="banner"></div>
   <div id="wlist" class="resp-grid resp-grid-workers"></div>
   <!-- V20_91_01: botón Cerrar día (check-out global) — solo visible si hay workers y aún no se ha cerrado -->
@@ -1880,14 +1859,7 @@ body.readOnly [onclick*="openNewDay"]{display:none !important}
       <input type="text" id="srch" placeholder="🔍 Buscar o escribir nombre..." autocomplete="off" oninput="onAC(this.value)" onblur="closeAC()">
     </div>
   </div>
-  <!-- V20_102: botones prev/next eliminados (drawer maneja navegación). Funciones JS preservadas. -->
-  <!--
-  <div class="nav">
-    <button class="np" id="np" onclick="prev()">← Atrás</button>
-    <button class="nn" id="nn" onclick="next()">Siguiente →</button>
   </div>
-  -->
-</div>
 
 <script>
 // ── GOOGLE SHEETS CONFIG ──
@@ -1907,6 +1879,30 @@ var ADMIN_USER_NAME = 'ADM';
 // Ahora: ADMIN_PIN_HASH se carga ÚNICAMENTE del sheet CONFIG (key admin_pin).
 // Si CONFIG no carga, ADMIN_PIN_HASH queda '' y el admin login se rechaza con toast claro.
 // Mantener variable iniciada en '' (declarada arriba en L1799).
+
+// V20_132 SEGURIDAD: rate limit anti-fuerza bruta para PIN admin/surquero.
+// Tras 5 intentos fallidos consecutivos → bloqueo 60s. Persiste en localStorage entre cierres.
+var _pinFailCount = 0;
+var _pinLockedUntil = 0;
+(function(){
+  try{
+    var raw = localStorage.getItem('eb_pin_lock');
+    if(raw){
+      var parsed = JSON.parse(raw);
+      _pinFailCount = parsed.count || 0;
+      _pinLockedUntil = parsed.lockedUntil || 0;
+    }
+  }catch(e){}
+})();
+function _persistPinLock(){
+  try{
+    localStorage.setItem('eb_pin_lock', JSON.stringify({count:_pinFailCount, lockedUntil:_pinLockedUntil}));
+  }catch(e){}
+}
+function _pinLockRemainingSec(){
+  var ms = _pinLockedUntil - Date.now();
+  return ms > 0 ? Math.ceil(ms/1000) : 0;
+}
 
 // ── Hash PIN usando Web Crypto (SHA-256) — retorna Promise ──
 function hashPin(pin){
@@ -2079,6 +2075,8 @@ function logoutUser(){
   // Sin esto, cada cambio de surquero dejaba _autoSaveTimer y _checkSendTimer huérfanos.
   if(typeof _autoSaveTimer !== 'undefined' && _autoSaveTimer){ clearInterval(_autoSaveTimer); _autoSaveTimer=null; }
   if(typeof _checkSendTimer !== 'undefined' && _checkSendTimer){ clearInterval(_checkSendTimer); _checkSendTimer=null; }
+  if(typeof _adminSessTimer !== 'undefined' && _adminSessTimer){ clearTimeout(_adminSessTimer); _adminSessTimer=null; }
+  if(typeof _undoTickerInterval !== 'undefined' && _undoTickerInterval){ clearInterval(_undoTickerInterval); _undoTickerInterval=null; }
   // V20_91_19 FIX: capturar userKey ANTES de nullear currentUser para borrar localStorage del día.
   // Bug previo: logoutUser llamaba saveQuiet (que GUARDABA en localStorage) y resetState (que solo
   // limpiaba MEMORIA). El próximo login leía la key persistida y restauraba el día anterior.
@@ -2145,6 +2143,17 @@ function checkPin(){
   pinBuffer = '';
   updPinDots();
 
+  // V20_132 SEGURIDAD: rate limit — si bloqueado, mostrar tiempo restante y abortar
+  if(_pinLockedUntil > Date.now()){
+    var _remSec = _pinLockRemainingSec();
+    var _le = gEl('loginErr');
+    if(_le){
+      _le.textContent = '🚫 Demasiados intentos. Espera ' + _remSec + 's.';
+      _le.style.color = '#c00';
+    }
+    return;
+  }
+
   // V20_120: si hash vacío y CONFIG aún cargando, reintentar automáticamente hasta 5s
   // Estado pending real (mapeo a _cfgState boolean): attempted && !respondió, o respondió con hasAdminPin pero sin hashCalculated y sin error
   if(!ADMIN_PIN_HASH && typeof _cfgState !== 'undefined'){
@@ -2198,6 +2207,8 @@ function checkPin(){
 
     // Admin PIN — no session check needed
     if(hashed === ADMIN_PIN_HASH){
+      // V20_132: reset rate limit en éxito
+      _pinFailCount = 0; _pinLockedUntil = 0; _persistPinLock();
       loginSuccess({name:'Administrador', pin:pin, crew:'ALL', isAdmin:true});
       return;
     }
@@ -2212,10 +2223,29 @@ function checkPin(){
     }
 
     if(!matchedUser){
-      gEl('loginErr').textContent = '❌ PIN incorrecto, intenta de nuevo';
-      setTimeout(function(){ gEl('loginErr').textContent=''; }, 2000);
+      // V20_132 SEGURIDAD: rate limit — incrementa contador, bloquea 60s tras 5 intentos
+      _pinFailCount++;
+      var _errEl = gEl('loginErr');
+      if(_pinFailCount >= 5){
+        _pinLockedUntil = Date.now() + 60000;
+        _pinFailCount = 0;
+        _persistPinLock();
+        if(_errEl){
+          _errEl.textContent = '🚫 Demasiados intentos. Espera 60 segundos.';
+          _errEl.style.color = '#c00';
+        }
+      } else {
+        _persistPinLock();
+        if(_errEl){
+          _errEl.textContent = '❌ PIN incorrecto (' + (5 - _pinFailCount) + ' intentos restantes)';
+        }
+        setTimeout(function(){ var e=gEl('loginErr'); if(e && e.textContent.indexOf('PIN incorrecto')>=0) e.textContent=''; }, 2500);
+      }
       return;
     }
+
+    // V20_132: match de líder válido → reset rate limit
+    _pinFailCount = 0; _pinLockedUntil = 0; _persistPinLock();
 
   // ── Check for duplicate session ──
   gEl('loginErr').textContent = '🔍 Verificando sesión...';
@@ -2848,6 +2878,8 @@ function _updCfgDiag(){
   var el = document.getElementById('cfgDiag');
   var msg = document.getElementById('cfgDiagMsg');
   if(!el || !msg) return;
+  var verEl = document.getElementById('cfgDiagVer');
+  if(verEl) verEl.textContent = 'App: ' + (window.APP_VERSION || '?');
   if(!_cfgState.attempted){
     el.style.display = 'block';
     msg.innerHTML = '⏳ CONFIG no se ha pedido aún';
@@ -3086,7 +3118,7 @@ function loadSheetsData(){
         var modo = (t.modo || 'Individual').trim();
         ALL_ACTS.push({
           farm:t.farm, es:t.es, en:t.en||t.es,
-          tipo:tipoNorm, payType:t.tipo||'', p:t.rate||16.23, hr:tipoNorm==='Hora',
+          tipo:tipoNorm, payType:t.tipo||'', p: (t.rate || (tipoNorm==='Hora'?16.23:0)), hr:tipoNorm==='Hora',
           modo: modo,  // 'Individual' | 'Grupal'
           // V20_29: columnas G-M del motor data-driven (FieldSync v5.8+)
           variable: t.variable||'', H: t.H, I: t.I, J: t.J, K: t.K, L: t.L, M: t.M,
@@ -3630,7 +3662,9 @@ function _renderCheckOutBtn(){
     var lbl = combo ? '🚌+👤 Cerrar mi día (chofer+surquero)' : '👤 Cerrar mi sesión (surquero)';
     html = '<button class="btn" style="'+baseStyle+';background:#27ae60;color:#fff;border:1.5px solid #27ae60" onclick="confirmCheckOut(\'coSurq\')">'+esc(lbl)+'</button>';
   } else if(st === 4){
-    html = '<button disabled class="btn" style="'+baseStyle+';background:#95a5a6;color:#fff;cursor:not-allowed">🔒 Día cerrado a las '+esc(_dayFlow.checkOutTime||'--:--')+'</button>';
+    // V20_132: chip "día cerrado" + botón "Re-abrir día" (admin o PIN admin)
+    html = '<button disabled class="btn" style="'+baseStyle+';background:#95a5a6;color:#fff;cursor:not-allowed">🔒 Día cerrado a las '+esc(_dayFlow.checkOutTime||'--:--')+'</button>'+
+           '<button class="btn" style="'+baseStyle+';margin-top:8px;background:#fff;color:#c0392b;border:1.5px solid #c0392b" onclick="reopenDay()">🔓 Re-abrir día (admin)</button>';
   }
   slot.innerHTML = html;
 }
@@ -3784,16 +3818,77 @@ function confirmCheckOutDia(){
   try { _renderCheckOutBtn(); } catch(e){}
 }
 
-// Iota: ver estado completo en consola (debug en tablet)
-function debugState(){
-  return {
-    pg:pg, workers:workers, wid:wid, grpActs:grpActs,
-    estP:estP, hilP:hilP, cajasP:cajasP,
-    ausencias:ausencias,
-    ptm:ptm, pcp:pcp, pendingUnk:pendingUnk, _delPending:_delPending,
-    user: currentUser,
-    fecha: gVal('fecha'), surquero: gVal('surquero'), finca: gVal('finca')
+// V20_132 SEGURIDAD: verifica PIN admin contra hash con guard de rate limit.
+// Retorna Promise<boolean>. Si está bloqueado, retorna false sin intentar hash.
+function _verifyAdminPin(pin){
+  if(_pinLockedUntil > Date.now()) return Promise.resolve(false);
+  if(!pin || typeof hashPin !== 'function' || !ADMIN_PIN_HASH) return Promise.resolve(false);
+  return hashPin(pin).then(function(h){
+    var ok = (h === ADMIN_PIN_HASH);
+    if(ok){
+      _pinFailCount = 0; _pinLockedUntil = 0; _persistPinLock();
+    } else {
+      _pinFailCount++;
+      if(_pinFailCount >= 5){
+        _pinLockedUntil = Date.now() + 60000;
+        _pinFailCount = 0;
+      }
+      _persistPinLock();
+    }
+    return ok;
+  }).catch(function(e){
+    console.warn('[_verifyAdminPin] error:', e);
+    return false;
+  });
+}
+
+// V20_132: re-abrir día tras cierre erróneo (FEATURE auditoría QA #3).
+// Caso: surquero cierra día a las 14:00 y un trabajador entra a las 14:30 → debe poder seguir.
+// Preserva check-outs individuales (workers con checkOutLocked manual quedan cerrados).
+// Solo reverte el cierre GLOBAL del día.
+function reopenDay(){
+  if(!_dayFlow || !_dayFlow.checkOutDone){ toast('⚠️ El día no está cerrado'); return; }
+  if(window._readOnlyMode){ toast('🔒 Modo lectura'); return; }
+  var proceed = function(){
+    if(!confirm('¿Re-abrir el día? Los check-outs individuales de trabajadores se preservan.')) return;
+    var prevCheckOutTime = _dayFlow.checkOutTime;
+    _dayFlow.checkOutDone = false;
+    _dayFlow.checkOutTime = '';
+    _dayFlow.crewClosed = false;
+    _dayFlow.choferClosed = false;
+    var hSalEl = gEl('hSal');
+    if(hSalEl && hSalEl.value === prevCheckOutTime) hSalEl.value = '';
+    try { if(typeof _renderCheckOutBtn === 'function') _renderCheckOutBtn(); } catch(e){}
+    try { if(typeof _renderHorarioLocks === 'function') _renderHorarioLocks(); } catch(e){}
+    if(workers && workers.length){
+      for(var i=0;i<workers.length;i++){
+        try { if(typeof updCheckInOutDisplay === 'function') updCheckInOutDisplay(workers[i].id); } catch(e){}
+        try { if(typeof _renderWorkerCheckOutBtn === 'function') _renderWorkerCheckOutBtn(workers[i].id); } catch(e){}
+      }
+    }
+    if(typeof autoSave === 'function') autoSave();
+    toast('✅ Día re-abierto. Puedes seguir agregando trabajadores y actividades.');
+    try { console.log('[V20_132 audit] Día re-abierto por: ' + ((currentUser&&currentUser.name)||'?') + ' a las ' + _hhmmNow()); } catch(e){}
   };
+  if(currentUser && currentUser.isAdmin){ proceed(); return; }
+  if(_pinLockedUntil > Date.now()){
+    var rem = _pinLockRemainingSec();
+    toast('🚫 PIN bloqueado. Espera ' + rem + 's.');
+    return;
+  }
+  var pin = prompt('🔓 PIN admin para re-abrir día:');
+  if(!pin) return;
+  _verifyAdminPin(pin).then(function(ok){
+    if(!ok){
+      if(_pinLockedUntil > Date.now()){
+        toast('🚫 Demasiados intentos. Espera 60s.');
+      } else {
+        toast('❌ PIN incorrecto');
+      }
+      return;
+    }
+    proceed();
+  });
 }
 
 function numStr(n){ var s=''+n; return s.length<2?'0'+s:s; }
@@ -4127,6 +4222,15 @@ function checkOverlapsForWorker(wi){
   var w=getW(wi); if(!w) return;
   var ov=checkOverlapsInWorker(w);
   if(!ov.ok) openOverlap(ov, w.name);
+}
+
+function _validateTranslapesPreEnvio(){
+  for (var _wvi=0; _wvi<workers.length; _wvi++){
+    var _wv=workers[_wvi];
+    var _ov=checkOverlapsInWorker(_wv);
+    if(!_ov.ok){ openOverlap(_ov, _wv.name); return {ok:false}; }
+  }
+  return {ok:true};
 }
 
 // ============================================================================
@@ -5817,7 +5921,28 @@ function onQRSuccess(decoded){
     return;
   }
 
+  // V20_130_c: MODO CONTINUO — en trabajador, ya pasamos dayFlow+duplicado+IOE arriba.
+  // El modal sólo confirmaba "otro crew" o "no en DB". Eliminamos esa fricción:
+  //  - wkMatch (existe en MASTER, otro crew) → auto-agregar. El surquero ya validó al escanear.
+  //  - !wkMatch (no en DB) → rechazar con setQRStatus (anomalía real, QR no oficial).
+  if(_qrMode === 'trabajador'){
+    if(wkMatch){
+      doAddConfirmed(officialName);
+      qrSessionCount++;
+      updQRCount();
+      var _crewTxt = wkMatch.crew ? ' (crew: '+wkMatch.crew+')' : '';
+      setQRStatus('✓ ' + officialName + ' agregado'+_crewTxt,'ok');
+      _scheduleQRStatusReset(2000);
+      return;
+    } else {
+      setQRStatus('⚠️ ' + qrName + ' (#'+qrEmpNum+') no está en la base de datos','err');
+      _scheduleQRStatusReset(4000);
+      return;
+    }
+  }
+
   // Otro crew o no en DB → pausar scanner y mostrar modal de confirmación
+  // (rama legacy preservada para modos no-trabajador y entradas vía doAdd/manual)
   pauseQR();
   var otherCrew = wkMatch ? wkMatch.crew : '';
   pendingUnk = officialName;
@@ -6171,7 +6296,8 @@ function mkActRow(wid_,ai,_cont){
     var fincaSel = document.createElement('select');
     fincaSel.id = 'finca_act_'+wid_+'_'+ai;
     fincaSel.style.cssText = 'flex:1;padding:8px 10px;border:1.5px dashed var(--bd);border-radius:8px;font-family:\'DM Sans\',sans-serif;font-size:14px;min-height:44px;background:#fff;color:var(--dk)';
-    var actFincaVal = (a.finca !== undefined && a.finca !== '') ? a.finca : '';
+    var actFincaVal = (a.finca !== undefined && a.finca !== '') ? a.finca : (gVal('finca') || '');
+    if(actFincaVal && (!a.finca || a.finca === '')) a.finca = actFincaVal;
     var _optEmpty = document.createElement('option'); _optEmpty.value=''; _optEmpty.textContent='📍 Seleccionar labor...'; fincaSel.appendChild(_optEmpty);
     for(var _fi=0; _fi<_fincasDelRancho.length; _fi++){
       var _opt = document.createElement('option');
@@ -6258,24 +6384,6 @@ function mkActRow(wid_,ai,_cont){
 // Estaba marcada "desactivado en individual (todas usan flujo Ficha)" en L5814.
 // Era el único emisor de inputs con oninput="onIndField(...)". Sus IDs (indSurco_/indPies_/indAncho_)
 // solo aparecen en su propio HTML — eliminada también la cadena de UI.
-// V20_104 FASE 2D: onIndField — DUDA: legacy candidata a eliminar, sin emisores tras quitar renderIndSurcos.
-// Sigue exportada en lista de FN_NAMES (L13822) por si queda HTML legacy en localStorage. Verificar caller en próximas versiones.
-function onIndField(inp){
-  var wi=parseInt(inp.dataset.wi), ai=parseInt(inp.dataset.ai);
-  var f=inp.dataset.f; // 'pies' o 'ancho'
-  var w=getW(wi); if(!w||!w.acts[ai]) return;
-  var a=w.acts[ai];
-  if(f==='pies') a.indPies=inp.value.trim();
-  else if(f==='ancho') a.indAncho=inp.value.trim();
-  // Recalcular qty (puertas) e indAcres en memoria (sin tocar DOM más allá de los badges)
-  var _pies=parseFloat(a.indPies)||0;
-  var _ancho=parseFloat(a.indAncho)||0;
-  a.qty=_pies/100;
-  a.indAcres=(_pies>0&&_ancho>0)?(_pies*_ancho)/43560:0;
-  recalc(wi,ai);
-  autoSave();
-}
-
 // V7: sanitizar qty como número antes de guardar
 // V19-FIX2: guardar número, no string
 function onQty(wi,ai,v){ var w=getW(wi); if(!w||!w.acts[ai])return; var n=parseFloat(v); w.acts[ai].qty=isFinite(n)?n:0; recalc(wi,ai); autoSave(); }
@@ -7792,34 +7900,11 @@ function showEmptyState(){
 // V20_126: VISTA POR ACTIVIDAD (acordeones) + ASIGNAR A VARIOS + RESUMEN MEJORADO
 // ============================================================================
 
-// V20_126: modo de vista actual en pestaña Act. Individuales — 'act' o 'worker'
-var _viewMode = 'act';
+// Vista única "Por actividad" — eliminado el toggle "Por Trabajador" (duplicado, confundía a surqueros).
+// Stub de setViewMode para compat con callers viejos (no hace nada — solo re-renderiza por actividad).
+function setViewMode(m){ try { renderWlistByActivity(); } catch(e){} }
 
-// V20_126: alterna entre vista por actividad y vista por worker (tarjetas legacy)
-function setViewMode(m){
-  _viewMode = m;
-  var btnA = gEl('vt-act'), btnW = gEl('vt-wk');
-  if(btnA) btnA.classList.toggle('act', m==='act');
-  if(btnW) btnW.classList.toggle('act', m==='worker');
-  if(m==='act') renderWlistByActivity();
-  else renderWlistByWorker();
-}
-
-// V20_126: vista legacy por worker — re-render con mkCard (lo que hacía la app antes)
-function renderWlistByWorker(){
-  var list = gEl('wlist'); if(!list) return;
-  list.innerHTML = '';
-  if(!workers.length){
-    showEmptyState();
-    return;
-  }
-  for(var i=0; i<workers.length; i++){
-    try { list.appendChild(mkCard(workers[i], i)); } catch(e){ console.warn('V20_126 mkCard fallo:', e); }
-  }
-  try { updBanner(); } catch(e){}
-}
-
-// V20_126: agrupa workers[].acts[] por (actividad+horario+finca) y devuelve grupos para renderizar acordeones
+// Agrupa workers[].acts[] por (actividad+horario+finca) y devuelve grupos para renderizar acordeones
 function buildActViewGroups(){
   var groups = {};
   var order = [];
@@ -7922,8 +8007,9 @@ function renderWlistByActivity(){
       html += '<div class="w-row-act">';
       html += '  <div class="nm-full">'+esc(wkr.name)+'</div>';
       if(wkr.empNum) html += '  <span class="num">#'+esc(wkr.empNum)+'</span>';
-      if(g.tipo !== 'hora' && g.payType !== 'Daywork'){
-        html += '  <input class="qty-input-act" type="number" min="0" step="any" value="'+(+wkr.qty||0)+'" onchange="onActQtyChange('+wkr.id+','+wkr.actIdx+',this.value)">';
+      if(g.tipo !== 'hora'){
+        var _qtyDef = (g.payType === 'Daywork' && !(+wkr.qty)) ? 1 : (+wkr.qty||0);
+        html += '  <input class="qty-input-act" type="number" min="0" step="any" value="'+_qtyDef+'" onchange="onActQtyChange('+wkr.id+','+wkr.actIdx+',this.value,this)">';
       }
       html += '  <span class="pay-act">$'+(+wkr.pay||0).toFixed(2)+'</span>';
       html += '  <button class="del-act" onclick="onActWorkerRemove('+wkr.id+','+wkr.actIdx+')">Quitar</button>';
@@ -7943,14 +8029,25 @@ function toggleAccAct(el){
   if(arrow) arrow.textContent = p.classList.contains('open') ? '▼' : '▶';
 }
 
-function onActQtyChange(wid_, actIdx, val){
+function onActQtyChange(wid_, actIdx, val, inpEl){
   if(_readOnlyMode){ toast && toast('🔒 Modo lectura'); return; }
   var w = getW(wid_); if(!w) return;
   if(!w.acts || !w.acts[actIdx]) return;
   w.acts[actIdx].qty = parseFloat(val) || 0;
-  try { recalc(wid_, actIdx); } catch(e){ console.warn('V20_126 recalc fallo:', e); }
+  try { recalc(wid_, actIdx); } catch(e){ console.warn('onActQtyChange recalc fallo:', e); }
   try { autoSave(); } catch(e){}
-  renderWlistByActivity();
+  // Bug 6: NO llamar renderWlistByActivity() completo — destruía el DOM y cerraba todos los acordeones.
+  // Actualizar quirúrgicamente solo el pago del worker afectado, manteniendo el acordeón abierto.
+  try {
+    var newPay = (+w.acts[actIdx].pay) || 0;
+    if(inpEl && inpEl.closest){
+      var row = inpEl.closest('.w-row-act');
+      if(row){
+        var payEl = row.querySelector('.pay-act');
+        if(payEl) payEl.textContent = '$' + newPay.toFixed(2);
+      }
+    }
+  } catch(e){ console.warn('onActQtyChange DOM update fallo:', e); }
 }
 
 function onActWorkerRemove(wid_, actIdx){
@@ -8168,7 +8265,7 @@ function confirmAssignMany(){
       p: act.p,
       payType: act.payType||'',
       ini: ini, fin: fin, finca: finca,
-      qty: 0,
+      qty: (act.payType === 'Daywork') ? 1 : 0,
       showTime: true,
       shifts: [{ini:ini, fin:fin}],
       inputs: JSON.parse(JSON.stringify(commonVars))
@@ -8181,9 +8278,8 @@ function confirmAssignMany(){
   try { autoSave(); } catch(e){}
   closeAssignManyModal();
   toast && toast('✅ Actividad asignada a ' + n + ' trabajadores');
-  // Re-render según vista activa
-  if(_viewMode === 'act') renderWlistByActivity();
-  else renderWlistByWorker();
+  // Vista única: por actividad
+  renderWlistByActivity();
 }
 
 // ============================================================================
@@ -8269,8 +8365,8 @@ function go(n){
     updBanner();
     setTimeout(function(){ for(var i=0;i<workers.length;i++) updTot(workers[i].id); },50);
     try { _renderCheckOutBtn(); } catch(e){}
-    // V20_126: re-render según _viewMode (vista por actividad por default)
-    try { if(_viewMode === 'act') renderWlistByActivity(); else renderWlistByWorker(); } catch(e){ console.warn('V20_126 render fallo:', e); }
+    // Vista única: por actividad (toggle "Por Trabajador" eliminado)
+    try { renderWlistByActivity(); } catch(e){ console.warn('renderWlistByActivity fallo:', e); }
   }
   if(n===3){updParts();renderGrpActs();}
   if(n===4){ buildSum(); try { renderResumenV20_126(); } catch(e){ console.warn('V20_126 resumen fallo:', e); } } // V20_126: sustituir lista #sw con tabla
@@ -8295,10 +8391,9 @@ function go(n){
   }
   if(n===8){ try { renderArchives(); } catch(e){ console.warn('V20_59 renderArchives fallo:', e); } } // V20_59 pestaña Archivos
   var pgs=document.querySelectorAll('.pg'); for(var i=0;i<pgs.length;i++) pgs[i].classList.toggle('on',i===n);
-  var tabs=document.querySelectorAll('.tab'); for(var i=0;i<tabs.length;i++){ tabs[i].classList.remove('act','done'); if(i===n)tabs[i].classList.add('act'); else if(i<n)tabs[i].classList.add('done'); }
   gEl('addbar').classList.toggle('on',n===2);
   var ausBar=gEl('ausBar'); if(ausBar) ausBar.style.display=(n===5?'block':'none');
-  pg=n; updNav(); window.scrollTo(0,0);
+  pg=n; window.scrollTo(0,0);
   // V20_102: refrescar drawer si está abierto / mantener pestaña activa actualizada
   if(typeof refreshDrawerContext === 'function') refreshDrawerContext();
 }
@@ -8350,31 +8445,6 @@ function refreshDrawerContext(){
     if(tp === curPg) dtabs[i].classList.add('act');
     else dtabs[i].classList.remove('act');
   }
-}
-function next(){ if(pg<8)go(pg+1); } // V20_59: extender al ⑨ Archivos
-function prev(){ if(pg>0)go(pg-1); }
-function updNav(){
-  // V20_102: prev/next eliminados (drawer maneja navegación). Guard defensivo si los botones existen.
-  var np = gEl('np');
-  var nn = gEl('nn');
-  if(!np || !nn) return; // botones removidos
-  np.style.display=pg===0?'none':'';
-  if(pg===1){ nn.textContent='💾 Guardar'; nn.onclick=save; }
-  else if(pg===5){ nn.textContent='💾 Guardar'; nn.onclick=save; }
-  else if(pg===7){ nn.textContent='💾 Guardar'; nn.onclick=save; }
-  // V20_65: pg=2 (Trabajadores) y pg=3 (Grupales) son donde el surquero pasa la mayor parte del tiempo.
-  else if(pg===2 || pg===3){ nn.textContent='💾 + Siguiente →'; nn.onclick=nextSave; }
-  else { nn.textContent='Siguiente →'; nn.onclick=next; }
-}
-// V20_65: navega Y guarda — para pestañas ② Trabajadores y ③ Grupales.
-// Si no se puede guardar (modo lectura), navega igual sin error.
-function nextSave(){
-  try {
-    if(typeof _readOnlyMode==='undefined' || !_readOnlyMode){
-      if(typeof save==='function') save();
-    }
-  } catch(e){ console.warn('nextSave save error:', e); }
-  next();
 }
 function toast(msg){ var t=gEl('toast'); t.textContent=msg; t.classList.add('on'); setTimeout(function(){ t.classList.remove('on'); },2500); }
 // V12-FIX2: esc() eliminada — usar esc() global (más completa: escapa & < > ")
@@ -8975,7 +9045,8 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
       var ppx_=puertas_/np_;
       // V20_05: guardar anchoCama en el col para evitar desalineación tras sort T1/T2
       // V20_71 Fase B: usar nombre en inglés en label (PDF es para Cindy en EN)
-      col_={label:(gact_.en||gact_.es), ct:'puertas', perPersona:{}, totalVal:puertas_, np:np_, precio:gact_.p, unitLabel:'Doors p/p', finca:g_.vars.finca||'', ini:g_.vars.ini||'', fin:g_.vars.fin||'', anchoCama:anchoCama_};
+      // V20_131 FASE 3: guardar gact_ para que getAcresFromPuertas pueda leer col P en TOTAL grupal
+      col_={label:(gact_.en||gact_.es), ct:'puertas', perPersona:{}, totalVal:puertas_, np:np_, precio:gact_.p, unitLabel:'Doors p/p', finca:g_.vars.finca||'', ini:g_.vars.ini||'', fin:g_.vars.fin||'', anchoCama:anchoCama_, gact:gact_};
       for(var pi_=0;pi_<g_.participantes.length;pi_++) col_.perPersona[g_.participantes[pi_]]=ppx_;
     } else if(ct_==='cajas'){
       var totalC_=parseFloat(g_.vars.totalC)||0;
@@ -9198,22 +9269,36 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
       for(var _i81=0;_i81<ACTS.length;_i81++){ if(ACTS[_i81].es===col4.esName){ _actC81=ACTS[_i81]; break; } }
     }
     var _isVD81 = !!(_actC81 && (_actC81.variable||'').toLowerCase()==='vardoor');
-    // V20_86: usar getAnchoCamaDefault (que ya tiene fallback col I para Pennrose) en vez de getActFactorAcres directo.
-    // Da paridad con invoice. Si retorna null, no hay factor → se omite la línea de acres y solo se muestra puertas.
-    var _factVD81 = _isVD81 ? getAnchoCamaDefault(_actC81) : null;
-    if(_isVD81 && _factVD81 && tot>0){
-      var _ac81 = tot/_factVD81;
-      totLbl = '<span style="font-size:9px;color:#0f6e56;display:block">'+_ac81.toFixed(4)+' acres</span>'
-             + '<span style="font-size:11px">'+smartNum(tot)+' puertas</span>';
+    // V20_131 FASE 3: usar helper único getAcresFromPuertas (col P MASTER). Sin fallback geometría.
+    // Si falta col P: la celda TOTAL ahora muestra warning visible (antes silenciaba acres y dejaba solo puertas).
+    var _rAcVD81 = _isVD81 ? getAcresFromPuertas(_actC81, tot) : null;
+    if(_isVD81 && tot>0){
+      if(_rAcVD81 && _rAcVD81.ok){
+        totLbl = '<span style="font-size:9px;color:#0f6e56;display:block">'+_rAcVD81.acres.toFixed(4)+' acres</span>'
+               + '<span style="font-size:11px">'+smartNum(tot)+' puertas</span>';
+      } else {
+        // Paridad con invoice — warning visible en lugar de silenciar acres
+        totLbl = '<span style="font-size:9px;color:#c0392b;display:block">'+(_rAcVD81?_rAcVD81.error:'⚠️ Falta FactorAcres')+'</span>'
+               + '<span style="font-size:11px">'+smartNum(tot)+' puertas</span>';
+      }
     }
     // V20_08: si es Hora y multi-shift, emitir total por sub-columna (2h/5h).
     // V20_26: si es no-Hora (Daywork/Ficha/Caja/$) y multi-shift, también emitir total qty por sub-col.
-    if(_isVD81 && _factVD81 && _NS>1){
-      // V20_81: VarDoor multi-shift → 1 celda colspan=N (qty es por bloque, no por shift)
-      var _vdAcRow = (tot>0 ? (tot/_factVD81).toFixed(4)+' acres' : '');
+    if(_isVD81 && _NS>1){
+      // V20_131 FASE 3: VarDoor multi-shift → 1 celda colspan=N. Si falta col P, muestra warning visible.
       var _vdPzRow = (tot>0 ? smartNum(tot)+' puertas' : '');
+      var _vdAcRow = '';
+      var _vdAcColor = '#0f6e56';
+      if(tot>0){
+        if(_rAcVD81 && _rAcVD81.ok){
+          _vdAcRow = _rAcVD81.acres.toFixed(4)+' acres';
+        } else {
+          _vdAcRow = (_rAcVD81?_rAcVD81.error:'⚠️ Falta FactorAcres');
+          _vdAcColor = '#c0392b';
+        }
+      }
       trTotal+='<td colspan="'+_NS+'" style="text-align:center;border:1px solid #000;border-top:3px solid #1a2b8c;color:#1a2b8c;font-weight:700;line-height:1.5">'
-        + (_vdAcRow?'<span style="font-size:9px;color:#0f6e56;display:block">'+_vdAcRow+'</span>':'')
+        + (_vdAcRow?'<span style="font-size:9px;color:'+_vdAcColor+';display:block">'+_vdAcRow+'</span>':'')
         + (_vdPzRow?'<span style="font-size:11px">'+_vdPzRow+'</span>':'')
         + '</td>';
     } else if(col4.hr && _NS>1){
@@ -9319,17 +9404,28 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     var _NG2=_gp2.subs.length;
     var _gcsp=_NG2>1?' colspan="'+_NG2+'"':'';
     // V20_30: emitir TOTAL por sub-col (no colspan) — cada sub con su propio total
+    // V20_131 FASE 3: acres via helper único (col P MASTER). Warning visible si falta factor (paridad invoice/individuales).
     for(var gs2_=0;gs2_<_NG2;gs2_++){
       var _subT=_gp2.subs[gs2_];
       var _subTotVal=_subT.totalVal||0;
-      var _subAcres=0;
+      var _subAcRes=null, _subActRef=null;
       if(_gp2.ct==='puertas'){
-        var _ancho=parseFloat(_subT.anchoCama||0)||0;
-        if(_ancho>0) _subAcres=_subTotVal/_ancho;
+        _subActRef=_subT.gact||null;
+        if(!_subActRef){
+          // Fallback: buscar act por label en GRUPAL_ACTS (ej. modo lectura donde gact pudo no propagarse)
+          for(var _sx2=0;_sx2<(GRUPAL_ACTS||[]).length;_sx2++){
+            var _ga=GRUPAL_ACTS[_sx2];
+            if(_ga && (_ga.es===_gp2.label || _ga.en===_gp2.label)){ _subActRef=_ga; break; }
+          }
+        }
+        _subAcRes = getAcresFromPuertas(_subActRef, _subTotVal);
       }
       var _subTotalCell='';
       if(_gp2.ct==='puertas'){
-        _subTotalCell=(_subAcres>0?'<span style="font-size:9px;color:#0f6e56;display:block">'+smartNum(_subAcres)+' acres</span>':'')
+        var _acTxt='', _acCol='#0f6e56';
+        if(_subAcRes && _subAcRes.ok && _subAcRes.acres>0) _acTxt=smartNum(_subAcRes.acres)+' acres';
+        else if(_subAcRes && !_subAcRes.ok && _subTotVal>0){ _acTxt=_subAcRes.error; _acCol='#c0392b'; }
+        _subTotalCell=(_acTxt?'<span style="font-size:9px;color:'+_acCol+';display:block">'+_acTxt+'</span>':'')
           +'<span style="font-size:11px">'+smartNum(_subTotVal)+' puertas</span>';
       } else if(_gp2.ct==='cajas'){
         _subTotalCell='<span style="font-size:11px">'+smartNum(_subTotVal)+' boxes</span>';
@@ -9880,34 +9976,6 @@ function onSurqueroChange(sel){
 function okSurquero(){ _prevSurquero = _pendingSurquero; _pendingSurquero = ''; gEl('surqOv').classList.remove('on'); autoSave(); toast('✓ Surquero actualizado'); }
 function cancelSurquero(){ var sel = gEl('surquero'); if(sel) sel.value = _prevSurquero; _pendingSurquero = ''; gEl('surqOv').classList.remove('on'); }
 
-function exportData(){
-  try{
-    var exportObj = { version: 'pennrose2026', exportDate: new Date().toISOString(), current: null, history: {} };
-    var raw = localStorage.getItem('pr9');
-    // V20_91 (V9-FIX8 modificado): try/catch CON toast de aviso al usuario.
-    // Antes: catch silencioso permitía que el usuario creyera que exportó todo.
-    if(raw){
-      try{ exportObj.current = JSON.parse(raw); }
-      catch(e){ exportObj.current = null; toast('⚠️ Datos del día actual corruptos — exportando solo historial'); }
-    }
-    for(var i=0;i<localStorage.length;i++){
-      var k=localStorage.key(i);
-      if(k&&k.indexOf('pr9_hist_')===0){ try{ exportObj.history[k]=JSON.parse(localStorage.getItem(k)); }catch(e){ /* skip corrupto */ } }
-    }
-    var fecha = gVal('fecha')||new Date().toISOString().split('T')[0];
-    var rancho = gVal('rancho')||'Pennrose';
-    var filename = rancho+'_'+fecha+'_datos.json';
-    var json = JSON.stringify(exportObj, null, 2);
-    var blob = new Blob([json], {type:'application/json'});
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href = url; a.download = filename;
-    document.body.appendChild(a); a.click();
-    setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 200);
-    toast('✅ Datos exportados: '+filename);
-  }catch(e){ toast('Error al exportar: '+e.message); }
-}
-
 var _pendingImport = null;
 function importData(){ gEl('importFile').value=''; gEl('importFile').click(); }
 function onImportFile(input){
@@ -10119,12 +10187,8 @@ function sendToSheets() {
     // Marcar payload como dato admin para que FieldSync v5.26+ pueda filtrarlo
     window._lastSentByAdmin = true;
   }
-  // V20_31: bloquear envío si algún worker tiene translapes de horarios
-  for (var _wvi=0; _wvi<workers.length; _wvi++){
-    var _wv=workers[_wvi];
-    var _ov=checkOverlapsInWorker(_wv);
-    if(!_ov.ok){ openOverlap(_ov, _wv.name); return; }
-  }
+  var rOverlap = _validateTranslapesPreEnvio();
+  if(!rOverlap.ok) return;
   // V20_93: validación pre-envío — todos los workers/grupales deben tener ini+fin
   var _hr = _validateAllHorariosPre();
   if(!_hr.ok){
@@ -10532,6 +10596,21 @@ function getAnchoCamaDefault(act){
   return null;
 }
 
+// V20_131 FASE 3: helper único para convertir puertas (VarDoor) → acres.
+// Usa SOLO col P del MASTER (FactorAcres). Sin fallback hardcoded /100, /43560 ni anchoCama.
+// Geometría pura (pies × ancho / 43560) NO usa este helper — eso es Tipo A (individuales con surcos reales).
+// VarDoor es Tipo B (conversión empírica por finca: puertas / FactorAcres).
+// Devuelve {acres, factor, ok, source, error}. Caller decide qué mostrar si ok=false.
+function getAcresFromPuertas(act, puertas){
+  var p = parseFloat(puertas);
+  if(!p || p<=0) return {acres:0, factor:null, ok:true, source:'zero'};
+  var factor = (typeof getActFactorAcres==='function') ? getActFactorAcres(act) : null;
+  if(factor && factor>0){
+    return {acres: p/factor, factor: factor, ok:true, source:'col_P'};
+  }
+  return {acres:null, factor:null, ok:false, source:'missing_factor', error:'⚠️ Falta FactorAcres'};
+}
+
 // V20_104 FASE 2C: detección SOLO por Variable (col G MASTER). Sin keywords legacy.
 // Las viejas reglas por nombre ('hilo','estaca','amarre','plástico','colocación','stake'…) se eliminaron.
 // Si MASTER no tiene Variable cargada → la actividad NO se trata como puertas (la app falla limpio).
@@ -10734,16 +10813,31 @@ function renderGrpActs(){
     // Estado open: default true si no existe
     if(g.open===undefined) g.open=true;
     var card = document.createElement('div');
-    card.className = 'ga'+(g.open?' op':''); card.id='ga'+gi;
+    // Bug 9 V20_130_d: misma estructura visual que Act. Individuales (.acc-act).
+    // Conservamos id="ga"+gi + clase legacy "ga"/"op" para no romper togGrpCard, gaR, etc.
+    card.className = 'acc-act ga'+(g.open?' open op':''); card.id='ga'+gi;
 
-    // ── HEADER clickable (siempre visible) ──
-    var headHtml = '<div class="gaHead" data-gi="'+gi+'" onclick="togGrpCard(parseInt(this.dataset.gi))">'
-      +'<div class="gaSum">'
-      +'<div class="gat">🌿 '+esc(act.es)+'</div>'
-      +'<div class="gaPreview" id="gaPrev'+gi+'"></div>'
+    // ── HEADER clickable (mismo look que individuales) ──
+    var _typeTagG = _getTypeTagFromAct(act);
+    var _npG = (g.participantes||[]).length;
+    var _iniG = g.vars && g.vars.ini || '';
+    var _finG = g.vars && g.vars.fin || '';
+    var _fincaG = g.vars && g.vars.finca || '';
+    var _rateG = (act && act.p!=null) ? (+act.p||0) : 0;
+    var metaPills = '';
+    if(_iniG && _finG) metaPills += '<span class="pill pill-time">🕐 '+esc(_iniG)+'-'+esc(_finG)+'</span> ';
+    metaPills += '<span class="pill pill-cnt">👥 '+_npG+'</span> ';
+    if(_fincaG) metaPills += '<span class="pill pill-finca">📍 '+esc(_fincaG)+'</span> ';
+    metaPills += '<span class="pill pill-rate">$'+_rateG.toFixed(2)+'</span>';
+    var headHtml = '<div class="acc-act-head gaHead" data-gi="'+gi+'" onclick="togGrpCard(parseInt(this.dataset.gi))">'
+      +'<span class="acc-arrow">'+(g.open?'▼':'▶')+'</span>'
+      +'<span class="type-tag '+_typeTagG.cls+'">'+_typeTagG.label+'</span>'
+      +'<div style="flex:1;min-width:0">'
+      +'<div class="acc-nm">'+esc(act.es)+'</div>'
+      +'<div class="acc-meta">'+metaPills+'</div>'
+      +'<div class="gaPreview" id="gaPrev'+gi+'" style="margin-top:4px"></div>'
       +'</div>'
       +'<span class="gaTot" id="gaTot'+gi+'"></span>'
-      +'<span class="gaArr">▾</span>'
       +'</div>';
 
     // ── BODY colapsable ──
@@ -10959,7 +11053,7 @@ function renderGrpActs(){
     var resHtml = '<div class="gr2 gaR" id="gaR'+gi+'" style="display:none"></div>';
 
     card.innerHTML = headHtml
-      + '<div class="gaBody">' + removeBtn + varsHtml + partHtml + resHtml + '</div>';
+      + '<div class="acc-act-body gaBody">' + removeBtn + varsHtml + partHtml + resHtml + '</div>';
     list.appendChild(card);
 
     // Render participantes
@@ -10972,7 +11066,13 @@ function renderGrpActs(){
 function togGrpCard(gi){
   var g=grpActs[gi]; if(!g)return;
   g.open=!g.open;
-  var c=gEl('ga'+gi); if(c)c.classList.toggle('op',g.open);
+  var c=gEl('ga'+gi);
+  if(c){
+    c.classList.toggle('op',g.open);
+    c.classList.toggle('open',g.open); // Bug 9 V20_130_d: clase .open para CSS .acc-act
+    var arr = c.querySelector('.acc-arrow');
+    if(arr) arr.textContent = g.open ? '▼' : '▶';
+  }
   autoSave();
 }
 
@@ -11683,11 +11783,6 @@ function addAusenciaConfirmed(name, empNum){
   renderAusencias(); autoSave();
 }
 
-function setMotivo(idx, motivo){
-  if(ausencias[idx]) ausencias[idx].motivo = motivo;
-  renderAusencias(); autoSave();
-}
-
 function removeAusencia(idx){
   toast("ℹ️ Los faltantes se quitan solos cuando los agregas a la lista de trabajo");
 }
@@ -11994,7 +12089,7 @@ function refreshDataBackground(){
         var t=data.tasks[i]; var tipoNorm=tipoMap[t.tipo]||'Hora';
         var modo=(t.modo||'Individual').trim();
         // V20_71 Fase B: incluir cols G-P del motor también en refresh background
-        ALL_ACTS.push({farm:t.farm,es:t.es,en:t.en||t.es,tipo:tipoNorm,payType:t.tipo||'',p:t.rate||16.23,hr:tipoNorm==='Hora',modo:modo,
+        ALL_ACTS.push({farm:t.farm,es:t.es,en:t.en||t.es,tipo:tipoNorm,payType:t.tipo||'',p:(t.rate || (tipoNorm==='Hora'?16.23:0)),hr:tipoNorm==='Hora',modo:modo,
           variable:t.variable||'', H:t.H, I:t.I, J:t.J, K:t.K, L:t.L, M:t.M, N:t.N, O:t.O, P:t.P});
       }
       saveCache(ALL_WORKERS, ALL_ACTS, LIDERES);
@@ -13279,7 +13374,9 @@ function buildInvoiceAutoData(){
         grandPies+=parseFloat(surcos[si].totalPies)||0;
         grandAcres+=parseFloat(surcos[si].totalAcres)||0;
       }
-      // V20_104 FASE 2B: /100 preservado como fallback del invoice; warn si no hay factor (no modo lectura).
+      // V20_131 FASE 3: puertas y acres via helper único getAcresFromPuertas.
+      // Mantenemos cálculo de puertas legacy (acres × anchoCama o pies/100 fallback) para no romper
+      // el path con anchoCama del usuario; el HELPER decide acres a partir de puertas finales.
       var anchoCama = parseFloat(v.anchoCama) || 0;
       if(!anchoCama){
         var _factInv = getActFactorAcres(gact);
@@ -13294,13 +13391,22 @@ function buildInvoiceAutoData(){
         }
         puertas = grandPies / 100;
       }
-      var acres = anchoCama>0 ? puertas/anchoCama : (grandAcres>0 ? grandAcres : grandPies/43560);
+      var rAcInv = getAcresFromPuertas(gact, puertas);
+      var acresLabel, blockLabelInv;
+      if(rAcInv.ok){
+        acresLabel = rAcInv.acres.toFixed(2);
+        blockLabelInv = 'Acres';
+      } else {
+        // Sin FactorAcres en col P — mostrar puertas crudas + flag visible (paridad con V20_86 individuales)
+        acresLabel = puertas.toFixed(2) + ' puertas';
+        blockLabelInv = rAcInv.error;
+      }
       rows.push({
         product: gact.farm || rancho,
         equipment: gact.es,
         units: ga.participantes.length + ' Personas',
-        field: acres.toFixed(2),
-        blockNum: 'Acres'
+        field: acresLabel,
+        blockNum: blockLabelInv
       });
     } else if(ct === 'cajas'){
       // Upsilon2: el campo se llama totalC en vars (no totalCajas)
@@ -14868,6 +14974,7 @@ function _sendNextInQueue(){
   // V7: mantener _queueId para que FieldSync pueda deduplicar; solo quitar _queuedAt
   var clean = JSON.parse(JSON.stringify(payload));
   delete clean._queuedAt;
+  delete clean._retryCount;
 
   // V8: usa submitViaIframe unificado
   submitViaIframe(SHEETS_URL, clean,
@@ -14880,8 +14987,27 @@ function _sendNextInQueue(){
       else { toast('✅ Todos los registros pendientes enviados'); recordLastSend(); checkDaysWithoutSend(); }
     }, 20000,
     function(){ // onTimeout
-      console.warn('[eBerry] Timeout enviando cola, se reintentará');
-      toast('⚠️ Timeout al enviar — se reintentará');
+      var q = getOfflineQueue();
+      if(q.length > 0){
+        var head = q[0];
+        head._retryCount = (head._retryCount || 0) + 1;
+        console.warn('[eBerry] Timeout cola — intento ' + head._retryCount + '/3');
+        if(head._retryCount >= 3 && q.length > 1){
+          q.shift();
+          head._retryCount = 0;
+          q.push(head);
+          saveOfflineQueue(q);
+          console.warn('[eBerry] Payload rotado al final tras 3 timeouts — probando siguientes ranchos');
+          toast('⚠️ Un rancho no responde — intentando otros');
+          setTimeout(_sendNextInQueue, 1500);
+          return;
+        } else {
+          saveOfflineQueue(q);
+          toast('⚠️ Timeout al enviar — se reintentará');
+        }
+      } else {
+        toast('⚠️ Timeout al enviar — se reintentará');
+      }
     }, '_gsQFrame');
 }
 
@@ -15212,11 +15338,11 @@ function adminSyncWorkerTimes(w){
     'setGrpVar','addGrpAct','removeGrpAct','delGrpAct','onSurcoSmart','setSurcoVar',
     'addSurcoFila','delSurcoFila','confirmDelSurco','askDelSurcoFila','togGrpPart',
     // INDIVIDUALES
-    'onIndField','onIndBloqueField','addIndBloque','delIndBloque','askDelIndBloque',
+    'onIndBloqueField','addIndBloque','delIndBloque','askDelIndBloque',
     'onQty','chAct','delAct','askDelAct','onShift','addShift','delShift',
     'onIni','onFin','togTime','rmWorker','askDelWorker','askDelAll',
     // AUSENCIAS
-    'addAusencia','addAusenciaConfirmed','setMotivo','setMotivoClose',
+    'addAusencia','addAusenciaConfirmed','setMotivoClose',
     'rmAusencia','askRemAus','removeAusencia',
     // PARÁMETROS / CONTEXTO
     'onRanchoChange','onSurqueroChange','onAdminSurqueroChange','onFechaChange','updParam',
