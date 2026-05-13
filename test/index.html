@@ -35,7 +35,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_138';
+window.APP_VERSION = 'V20_141';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -994,7 +994,7 @@ html.login-locked{overflow:hidden!important;height:100%!important}
 <div id="assignManyOv" class="ov" role="dialog" aria-modal="true">
   <div class="md" style="max-width:560px;max-height:90vh;overflow-y:auto">
     <h3 style="margin:0 0 14px;color:#1a2b8c;display:flex;justify-content:space-between;align-items:center">
-      <span>➕ Asignar actividad a varios</span>
+      <span id="assignModalTitle">➕ Asignar actividad a varios</span>
       <span id="assignTypeTag" style="font-size:11px;background:#e9ecef;color:#333;padding:3px 8px;border-radius:10px">Selecciona actividad</span>
     </h3>
 
@@ -1013,11 +1013,11 @@ html.login-locked{overflow:hidden!important;height:100%!important}
     <div style="display:flex;gap:10px;margin-bottom:12px">
       <div style="flex:1">
         <label style="display:block;font-size:12px;font-weight:600;color:#666;margin-bottom:4px">Hora inicio</label>
-        <input id="assignIni" type="time" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:14px">
+        <input id="assignIni" type="time" oninput="renderAssignWlist()" onchange="renderAssignWlist()" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:14px">
       </div>
       <div style="flex:1">
         <label style="display:block;font-size:12px;font-weight:600;color:#666;margin-bottom:4px">Hora fin</label>
-        <input id="assignFin" type="time" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:14px">
+        <input id="assignFin" type="time" oninput="renderAssignWlist()" onchange="renderAssignWlist()" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:14px">
       </div>
     </div>
 
@@ -1357,6 +1357,9 @@ body.readOnly [onclick*="openNewDay"]{display:none !important}
 .w-row-act .del-act{background:#dc3545;color:#fff;border:none;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:11px;font-weight:600}
 .del-act-group{background:#fff;color:#c0392b;border:1.5px solid #c0392b;border-radius:4px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0;margin-left:6px}
 .del-act-group:hover{background:#c0392b;color:#fff}
+/* V20_141: botón Editar grupo actividad — gemelo del Eliminar, color azul */
+.edit-act-group{background:#fff;color:#1a2b8c;border:1.5px solid #1a2b8c;border-radius:4px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0;margin-left:6px}
+.edit-act-group:hover{background:#1a2b8c;color:#fff}
 .add-row-big{background:#1a2b8c;color:#fff;padding:14px;border-radius:8px;font-weight:600;font-size:14px;cursor:pointer;text-align:center;width:100%;border:none;min-height:48px;margin-top:14px}
 .add-row-sec{background:#28a745;color:#fff;padding:8px;border-radius:6px;font-weight:600;font-size:13px;cursor:pointer;text-align:center;width:100%;border:none;margin-top:8px}
 /* V20_126: tabla Resumen mejorado */
@@ -8193,6 +8196,8 @@ function renderWlistByActivity(){
     html += '    </div>';
     var _gkAi = (g.ai != null ? g.ai : g.actName);
     var _gkStr = esc(String(_gkAi)) + '|' + esc(g.ini||'') + '|' + esc(g.fin||'') + '|' + esc(g.finca||'');
+    // V20_141: botón Editar grupo (azul) + botón Eliminar (rojo)
+    html += '    <button class="edit-act-group" onclick="event.stopPropagation();editActivityGroup(\''+_gkStr.replace(/'/g,"\\'")+'\')" title="Editar esta actividad (horario, finca, trabajadores)">✏️ Editar</button>';
     html += '    <button class="del-act-group" onclick="event.stopPropagation();deleteActivityGroup(\''+_gkStr.replace(/'/g,"\\'")+'\')" title="Eliminar esta actividad de todos los trabajadores asignados">🗑️ Eliminar</button>';
     html += '  </div>';
     html += '  <div class="acc-act-body">';
@@ -8202,8 +8207,26 @@ function renderWlistByActivity(){
       html += '  <div class="nm-full">'+esc(wkr.name)+'</div>';
       if(wkr.empNum) html += '  <span class="num">#'+esc(wkr.empNum)+'</span>';
       if(g.tipo !== 'hora'){
-        var _qtyDef = (g.payType === 'Daywork' && !(+wkr.qty)) ? 1 : (+wkr.qty||0);
-        html += '  <input class="qty-input-act" type="number" min="0" step="any" value="'+_qtyDef+'" onchange="onActQtyChange('+wkr.id+','+wkr.actIdx+',this.value,this)">';
+        // V20_139: placeholder data-driven desde col H del MASTER (motor V20_27)
+        var _qtyRaw = +wkr.qty || 0;
+        var _qtyAttrs;
+        if(_qtyRaw > 0){
+          _qtyAttrs = 'value="'+_qtyRaw+'"';
+        } else if(g.payType === 'Daywork'){
+          _qtyAttrs = 'value="1"';
+        } else {
+          var _phTxt = '0';
+          try {
+            var _actDef = (g.ai != null && typeof ACTS !== 'undefined' && ACTS[g.ai]) ? ACTS[g.ai] : null;
+            if(!_actDef && g.actName && typeof _resolveActByName === 'function') _actDef = _resolveActByName(g.actName);
+            if(_actDef && typeof getRequiredInputs === 'function'){
+              var _req = getRequiredInputs(_actDef);
+              if(_req && _req[0]) _phTxt = _req[0].label || _req[0].placeholder || '0';
+            }
+          } catch(e){}
+          _qtyAttrs = 'placeholder="'+esc(_phTxt)+'"';
+        }
+        html += '  <input class="qty-input-act" type="number" min="0" step="any" '+_qtyAttrs+' onchange="onActQtyChange('+wkr.id+','+wkr.actIdx+',this.value,this)">';
       }
       html += '  <span class="pay-act">$'+(+wkr.pay||0).toFixed(2)+'</span>';
       html += '  <button class="del-act" onclick="onActWorkerRemove('+wkr.id+','+wkr.actIdx+')">Quitar</button>';
@@ -8324,6 +8347,277 @@ function deleteActivityGroup(groupKey){
 }
 
 // ============================================================================
+// V20_141: Editar grupo de actividad (botón ✏️ Editar en cada acordeón)
+// Reutiliza el modal "Asignar a varios" en modo edición.
+// ============================================================================
+var _editingActivityGroup = null;
+
+function editActivityGroup(groupKey){
+  if(_readOnlyMode){ toast && toast('🔒 Modo lectura — no se puede editar'); return; }
+  if(!groupKey){ return; }
+  var parts = String(groupKey).split('|');
+  if(parts.length < 4){ console.warn('editActivityGroup: key inválido', groupKey); return; }
+  var aiStr = parts[0];
+  var ini = parts[1] || '';
+  var fin = parts[2] || '';
+  var finca = parts[3] || '';
+  var aiNum = parseInt(aiStr, 10);
+  var matchByName = isNaN(aiNum);
+  // Buscar workers del grupo original + primer act para extraer inputs comunes
+  var workerIds = [];
+  var firstAct = null;
+  for(var wi=0; wi<workers.length; wi++){
+    var w = workers[wi];
+    if(!w || !w.acts) continue;
+    for(var ax=0; ax<w.acts.length; ax++){
+      var a = w.acts[ax];
+      var aIni = a.ini || (a.shifts && a.shifts[0] && a.shifts[0].ini) || '';
+      var aFin = a.fin || (a.shifts && a.shifts[0] && a.shifts[0].fin) || '';
+      var aFinca = a.finca || '';
+      var keyMatch = false;
+      if(matchByName){
+        var aName = a.esName || a._actEs || '';
+        if((a.ai == null) && aName === aiStr && aIni === ini && aFin === fin && aFinca === finca) keyMatch = true;
+      } else {
+        if(a.ai === aiNum && aIni === ini && aFin === fin && aFinca === finca) keyMatch = true;
+      }
+      if(keyMatch){
+        workerIds.push(w.id);
+        if(!firstAct) firstAct = a;
+        break; // un worker no debería tener 2 acts iguales del mismo grupo
+      }
+    }
+  }
+  if(!workerIds.length){
+    toast && toast('⚠️ No se encontró el grupo de actividad');
+    return;
+  }
+  // Resolver el ai numérico real (si llegó por nombre, intentar matchear en ACTS)
+  var resolvedAi = matchByName ? -1 : aiNum;
+  if(resolvedAi < 0 && firstAct && firstAct.ai != null) resolvedAi = firstAct.ai;
+  if(resolvedAi < 0 && firstAct){
+    // último recurso: buscar por nombre en ACTS
+    var nm = firstAct.esName || firstAct._actEs || aiStr;
+    for(var ai2=0; ai2<ACTS.length; ai2++){
+      if(ACTS[ai2] && ACTS[ai2].es === nm){ resolvedAi = ai2; break; }
+    }
+  }
+  if(resolvedAi < 0 || !ACTS[resolvedAi]){
+    toast && toast('⚠️ Actividad no encontrada en el catálogo del rancho actual');
+    return;
+  }
+  // Guardar contexto edición
+  _editingActivityGroup = {
+    ai: (matchByName ? null : aiNum),  // ai original para matching (puede ser null si vino por nombre)
+    aiStr: aiStr,
+    matchByName: matchByName,
+    ini: ini, fin: fin, finca: finca,
+    workerIds: workerIds,
+    resolvedAi: resolvedAi
+  };
+  // Abrir modal — pre-poblará en el flujo normal
+  openAssignManyModal();
+  // Después de openAssignManyModal (que limpió todo), aplicar pre-llenado
+  // openAssignManyModal usa render asíncrono ligero pero todo es sync; podemos pre-llenar ahora
+  try {
+    // Título y botón en modo edición
+    var titleEl = gEl('assignModalTitle');
+    if(titleEl) titleEl.textContent = '✏️ Editar actividad';
+    var btn = gEl('assignConfirmBtn');
+    if(btn) btn.textContent = 'Guardar cambios';
+    // Seleccionar actividad
+    var selA = gEl('assignActSel');
+    if(selA){
+      selA.value = String(resolvedAi);
+      // Disparar onAssignActChange manualmente — pinta finca + inputs + tag
+      try { onAssignActChange(); } catch(e){ console.warn('V20_141 onAssignActChange fallo:', e); }
+    }
+    // Pre-poblar horarios
+    var iniEl = gEl('assignIni'); if(iniEl) iniEl.value = ini;
+    var finEl = gEl('assignFin'); if(finEl) finEl.value = fin;
+    // Pre-poblar finca (después de onAssignActChange que la pintó)
+    var fincaSel = gEl('assignFincaSel');
+    var fincaInp = gEl('assignFincaInput');
+    if(fincaSel){
+      // Intentar match exacto, sino agregar opción legacy
+      var matched = false;
+      for(var oi=0; oi<fincaSel.options.length; oi++){
+        if(fincaSel.options[oi].value === finca){ fincaSel.selectedIndex = oi; matched = true; break; }
+      }
+      if(!matched && finca){
+        var opt = document.createElement('option');
+        opt.value = finca; opt.textContent = finca + ' (actual)';
+        opt.selected = true;
+        fincaSel.appendChild(opt);
+      }
+    } else if(fincaInp){
+      fincaInp.value = finca;
+    }
+    // Pre-poblar inputs comunes desde firstAct.inputs (los del motor que aparecen en el modal)
+    if(firstAct && firstAct.inputs){
+      var varInpEls = document.querySelectorAll('#assignVarInputs input');
+      for(var vi=0; vi<varInpEls.length; vi++){
+        var col = varInpEls[vi].getAttribute('data-col') || varInpEls[vi].id.replace('assignVar_','');
+        if(firstAct.inputs[col] != null && firstAct.inputs[col] !== '') varInpEls[vi].value = firstAct.inputs[col];
+      }
+    }
+    // Pre-seleccionar workers del grupo
+    _assignSelectedIds = workerIds.slice();
+    renderAssignWlist();
+  } catch(e){
+    console.warn('V20_141 pre-fill modal fallo:', e);
+  }
+}
+
+function _saveEditedActivityGroup(){
+  if(!_editingActivityGroup){ return; }
+  // Capturar valores del modal
+  var selA = gEl('assignActSel');
+  var newAi = selA ? parseInt(selA.value, 10) : NaN;
+  if(isNaN(newAi) || newAi < 0 || !ACTS[newAi]){ toast && toast('⚠️ Selecciona una actividad válida'); return; }
+  var newAct = ACTS[newAi];
+  var newIni = (gEl('assignIni')||{}).value || '';
+  var newFin = (gEl('assignFin')||{}).value || '';
+  if(!newIni || !newFin){ toast && toast('⚠️ Captura horario inicio y fin'); return; }
+  var fincaSel = gEl('assignFincaSel'); var fincaInp = gEl('assignFincaInput');
+  var newFinca = fincaSel ? (fincaSel.value||'') : (fincaInp ? (fincaInp.value||'') : '');
+  if(!newFinca){ toast && toast('⚠️ Selecciona finca'); return; }
+  var newWorkerIds = _assignSelectedIds.slice();
+  if(!newWorkerIds.length){
+    if(!confirm('No seleccionaste ningún trabajador. Esto eliminará la actividad del grupo. ¿Continuar?')) return;
+  }
+  // Capturar inputs comunes (motor V20_27)
+  var commonVars = {};
+  try {
+    var varInpEls = document.querySelectorAll('#assignVarInputs input');
+    for(var vi=0; vi<varInpEls.length; vi++){
+      var col = varInpEls[vi].getAttribute('data-col') || varInpEls[vi].id.replace('assignVar_','');
+      var val = parseFloat(varInpEls[vi].value);
+      if(!isNaN(val) && val > 0) commonVars[col] = val;
+    }
+  } catch(e){}
+
+  var orig = _editingActivityGroup;
+  var origAiNum = (orig.ai != null) ? orig.ai : null; // si null → matchByName
+  var origAiStr = orig.aiStr;
+  var origMatchByName = !!orig.matchByName;
+  var origIni = orig.ini, origFin = orig.fin, origFinca = orig.finca;
+  // Detectar si la actividad cambió comparando ai resuelto inicial vs nuevo
+  var actChanged = (orig.resolvedAi !== newAi);
+
+  // VALIDACIÓN TRANSLAPE — simular sobre cada worker nuevo, ignorando la act original que se va a eliminar
+  var conflicts = [];
+  for(var ci=0; ci<newWorkerIds.length; ci++){
+    var wC = getW(newWorkerIds[ci]);
+    if(!wC) continue;
+    // Construir copia temporal del worker SIN la act original + CON la nueva act
+    var tempActs = [];
+    if(wC.acts && wC.acts.length){
+      for(var axC=0; axC<wC.acts.length; axC++){
+        var aC = wC.acts[axC];
+        var aIniC = aC.ini || (aC.shifts && aC.shifts[0] && aC.shifts[0].ini) || '';
+        var aFinC = aC.fin || (aC.shifts && aC.shifts[0] && aC.shifts[0].fin) || '';
+        var aFincaC = aC.finca || '';
+        var isOrig = false;
+        if(origMatchByName){
+          var aNameC = aC.esName || aC._actEs || '';
+          if((aC.ai == null) && aNameC === origAiStr && aIniC === origIni && aFinC === origFin && aFincaC === origFinca) isOrig = true;
+        } else {
+          if(aC.ai === origAiNum && aIniC === origIni && aFinC === origFin && aFincaC === origFinca) isOrig = true;
+        }
+        if(!isOrig) tempActs.push(aC);
+      }
+    }
+    tempActs.push({
+      ai: newAi, esName: newAct.es,
+      tipo: _derivarTipoActividad(newAct),
+      p: newAct.p, payType: newAct.payType||'',
+      ini: newIni, fin: newFin, finca: newFinca,
+      qty: 0, showTime: true, shifts: [{ini:newIni, fin:newFin}], inputs:{}
+    });
+    var savedActs = wC.acts;
+    wC.acts = tempActs;
+    var ov = null;
+    try { ov = checkOverlapsInWorker(wC); } catch(e){ ov = {ok:true}; }
+    wC.acts = savedActs;
+    if(ov && ov.ok === false) conflicts.push(wC.name);
+  }
+  if(conflicts.length){
+    alert('⚠️ Translape de horarios detectado en:\n\n' + conflicts.join('\n') + '\n\nRevisa los horarios antes de guardar.');
+    return;
+  }
+
+  // PASO 1: Eliminar acts del grupo original de TODOS los workers,
+  // guardando qty/pay/inputs por workerId si la actividad NO cambió.
+  var preservedByWid = {};
+  for(var wi=0; wi<workers.length; wi++){
+    var w = workers[wi];
+    if(!w || !w.acts || !w.acts.length) continue;
+    for(var ax=w.acts.length-1; ax>=0; ax--){
+      var a = w.acts[ax];
+      var aIni = a.ini || (a.shifts && a.shifts[0] && a.shifts[0].ini) || '';
+      var aFin = a.fin || (a.shifts && a.shifts[0] && a.shifts[0].fin) || '';
+      var aFinca = a.finca || '';
+      var match = false;
+      if(origMatchByName){
+        var aN = a.esName || a._actEs || '';
+        if((a.ai == null) && aN === origAiStr && aIni === origIni && aFin === origFin && aFinca === origFinca) match = true;
+      } else {
+        if(a.ai === origAiNum && aIni === origIni && aFin === origFin && aFinca === origFinca) match = true;
+      }
+      if(match){
+        if(!actChanged){
+          preservedByWid[w.id] = {
+            qty: a.qty,
+            pay: a.pay,
+            inputs: a.inputs ? JSON.parse(JSON.stringify(a.inputs)) : null,
+            localRowId: a.localRowId || null
+          };
+        }
+        w.acts.splice(ax, 1);
+      }
+    }
+  }
+
+  // PASO 2: Agregar nueva act a cada worker en newWorkerIds (preservando qty si aplica)
+  var added = 0;
+  for(var k=0; k<newWorkerIds.length; k++){
+    var wTarget = getW(newWorkerIds[k]);
+    if(!wTarget) continue;
+    wTarget.acts = wTarget.acts || [];
+    var preserved = preservedByWid[wTarget.id];
+    var newActObj = {
+      localRowId: (preserved && preserved.localRowId) ? preserved.localRowId : _genRowId(),
+      ai: newAi,
+      esName: newAct.es,
+      tipo: _derivarTipoActividad(newAct),
+      p: newAct.p,
+      payType: newAct.payType||'',
+      ini: newIni, fin: newFin, finca: newFinca,
+      qty: preserved ? preserved.qty : ((newAct.payType === 'Daywork') ? 1 : 0),
+      showTime: true,
+      shifts: [{ini:newIni, fin:newFin}],
+      inputs: preserved && preserved.inputs ? preserved.inputs : JSON.parse(JSON.stringify(commonVars))
+    };
+    var newIdx = wTarget.acts.length;
+    wTarget.acts.push(newActObj);
+    try { recalc(wTarget.id, newIdx); } catch(e){ console.warn('V20_141 recalc fallo:', e); }
+    added++;
+  }
+  // Workers eliminados del grupo (estaban antes pero no en newWorkerIds) ya no tienen la act
+  // (se borró en PASO 1, nada que hacer aquí).
+
+  try { autoSave(); } catch(e){}
+  _editingActivityGroup = null;
+  closeAssignManyModal();
+  var msg = actChanged
+    ? ('✅ Actividad cambiada — ' + added + ' trabajador(es). Cantidad reiniciada a 0.')
+    : ('✅ Actividad actualizada — ' + added + ' trabajador(es).');
+  toast && toast(msg);
+  try { renderWlistByActivity(); } catch(e){ console.warn('V20_141 render fallo:', e); }
+}
+
+// ============================================================================
 // V20_126: Modal "Asignar actividad a varios"
 // ============================================================================
 var _assignSelectedIds = [];
@@ -8366,6 +8660,12 @@ function closeAssignManyModal(){
   var ov = gEl('assignManyOv'); if(ov) ov.classList.remove('on');
   _assignSelectedIds = [];
   _assignCurrentActIdx = -1;
+  // V20_141: limpiar modo edición y restaurar título/botón al estado "Asignar"
+  _editingActivityGroup = null;
+  var titleEl = gEl('assignModalTitle');
+  if(titleEl) titleEl.textContent = '➕ Asignar actividad a varios';
+  var btn = gEl('assignConfirmBtn');
+  if(btn) btn.textContent = 'Asignar a 0';
 }
 
 function onAssignActChange(){
@@ -8450,10 +8750,24 @@ function renderAssignWlist(){
     cont.innerHTML = '<div style="padding:14px;color:#888;text-align:center">Sin trabajadores. Registra cuadrilla primero.</div>';
     return;
   }
+  // V20_140_a: ocultar workers con translape contra el horario actual del modal.
+  // Workers ya seleccionados se mantienen visibles para poder deseleccionar.
+  // Sin horario → sin filtro (muestra todos).
+  var aIni = (gEl('assignIni')||{}).value || '';
+  var aFin = (gEl('assignFin')||{}).value || '';
+  var canFilter = !!(aIni && aFin);
+  var hiddenCount = 0;
   var html = '';
   for(var i=0; i<workers.length; i++){
     var w = workers[i];
     var sel = _assignSelectedIds.indexOf(w.id) >= 0;
+    // Filtro V20_140_a: ocultar si translape Y no está ya seleccionado
+    if(canFilter && !sel){
+      try {
+        var ov = _workerHasOverlapWith(w, aIni, aFin, -1);
+        if(ov){ hiddenCount++; continue; }
+      } catch(e){}
+    }
     var role = w.role || 'trabajador';
     var roleEm = (role === 'chofer' ? '🚌' : (role === 'surquero' ? '👤' : ''));
     var bg = sel ? ';background:#d4edda;border-left:4px solid #28a745;padding-left:8px' : '';
@@ -8465,6 +8779,9 @@ function renderAssignWlist(){
     html += '<div style="flex:1;font-weight:600;color:#222;white-space:normal;word-break:break-word;font-size:14px">'+esc(w.name)+' '+roleEm+'</div>';
     if(w.empNum) html += '<span style="font-size:11px;color:#888;background:#f0f2f5;padding:2px 6px;border-radius:8px">#'+esc(w.empNum)+'</span>';
     html += '</div>';
+  }
+  if(hiddenCount > 0){
+    html += '<div style="text-align:center;padding:10px;color:#666;font-size:11px;font-style:italic">ℹ️ '+hiddenCount+' trabajador(es) oculto(s) por translape con el horario seleccionado.</div>';
   }
   cont.innerHTML = html;
   var btn = gEl('assignConfirmBtn');
@@ -8480,6 +8797,8 @@ function toggleAssignWorker(wid_){
 
 function confirmAssignMany(){
   if(_readOnlyMode){ toast && toast('🔒 Modo lectura'); return; }
+  // V20_141: si estamos editando un grupo, delegar a la función de edición (preserve-data)
+  if(_editingActivityGroup){ return _saveEditedActivityGroup(); }
   if(_assignCurrentActIdx < 0){ toast && toast('⚠️ Selecciona una actividad'); return; }
   if(!_assignSelectedIds.length){ toast && toast('⚠️ Selecciona al menos un trabajador'); return; }
   var act = ACTS[_assignCurrentActIdx];
