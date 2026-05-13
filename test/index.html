@@ -35,7 +35,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_142';
+window.APP_VERSION = 'V20_144';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -9654,7 +9654,11 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
       // V20_05: guardar anchoCama en el col para evitar desalineación tras sort T1/T2
       // V20_71 Fase B: usar nombre en inglés en label (PDF es para Cindy en EN)
       // V20_131 FASE 3: guardar gact_ para que getAcresFromPuertas pueda leer col P en TOTAL grupal
-      col_={label:(gact_.en||gact_.es), ct:'puertas', perPersona:{}, totalVal:puertas_, np:np_, precio:gact_.p, unitLabel:'Doors p/p', finca:g_.vars.finca||'', ini:g_.vars.ini||'', fin:g_.vars.fin||'', anchoCama:anchoCama_, gact:gact_};
+      // V20_144 FIX A: guardar grandAcres_ y detectar si col H del MASTER es label'Acres' (Pennrose),
+      // para mostrar suma de acres en header del PDF junto a "Doors p/p".
+      var _hColAcr_ = (typeof parseFormulaCell === 'function' && gact_ && gact_.H) ? parseFormulaCell(gact_.H) : null;
+      var _isAcresInputCol_ = !!(_hColAcr_ && _hColAcr_.type==='input' && _hColAcr_.label && String(_hColAcr_.label).toLowerCase()==='acres');
+      col_={label:(gact_.en||gact_.es), ct:'puertas', perPersona:{}, totalVal:puertas_, np:np_, precio:gact_.p, unitLabel:'Doors p/p', finca:g_.vars.finca||'', ini:g_.vars.ini||'', fin:g_.vars.fin||'', anchoCama:anchoCama_, gact:gact_, grandAcres:grandAcres_, isAcresInput:_isAcresInputCol_};
       for(var pi_=0;pi_<g_.participantes.length;pi_++) col_.perPersona[g_.participantes[pi_]]=ppx_;
     } else if(ct_==='cajas'){
       var totalC_=parseFloat(g_.vars.totalC)||0;
@@ -9696,10 +9700,16 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     var _parent=null;
     for(var gpj_=0;gpj_<grpParents.length;gpj_++){ if(grpParents[gpj_].key===_pKey){ _parent=grpParents[gpj_]; break; } }
     if(!_parent){
-      _parent={key:_pKey,label:gcx_.label,finca:gcx_.finca||'',unitLabel:gcx_.unitLabel,precio:gcx_.precio,ct:gcx_.ct,subs:[]};
+      // V20_144 FIX A: parent acumula grandAcres y flag isAcresInput (col H = label'Acres')
+      _parent={key:_pKey,label:gcx_.label,finca:gcx_.finca||'',unitLabel:gcx_.unitLabel,precio:gcx_.precio,ct:gcx_.ct,subs:[],grandAcres:0,isAcresInput:false};
       grpParents.push(_parent);
     }
     _parent.subs.push(gcx_);
+    // V20_144 FIX A: sumar acres del sub (solo puertas) y heredar flag isAcresInput
+    if(gcx_.ct==='puertas'){
+      _parent.grandAcres += (parseFloat(gcx_.grandAcres)||0);
+      if(gcx_.isAcresInput) _parent.isAcresInput = true;
+    }
   }
 
   // V20_06: header en 2 filas (thead). Fila 1 = labels con colspan si multi-shift.
@@ -9731,11 +9741,16 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     var _gp=grpParents[gp1_];
     var _NG=_gp.subs.length;
     var _gpFincaTag=_gp.finca?'<br><span style="font-weight:400;font-size:7px;opacity:.9">'+esc(_gp.finca)+'</span>':'';
+    // V20_144 FIX A: cuando columna VarDoor capturada por acres (col H = label'Acres'),
+    // mostrar suma de acres en header debajo de "Doors p/p". NO se calcula $ total — solo cantidad.
+    var _gpAcresTag = (_gp.isAcresInput && _gp.grandAcres>0)
+      ? '<br><span style="font-weight:400;font-size:10px;color:#1a7a4a">'+_gp.grandAcres.toFixed(2)+' acres</span>'
+      : '';
     if(_NG===1){
-      th1+='<th rowspan="2" style="text-align:center;min-width:80px">'+_gp.label+'<br><span style="font-weight:400;font-size:9px">'+_gp.unitLabel+'</span>'+_gpFincaTag+'</th>';
+      th1+='<th rowspan="2" style="text-align:center;min-width:80px">'+_gp.label+'<br><span style="font-weight:400;font-size:9px">'+_gp.unitLabel+'</span>'+_gpAcresTag+_gpFincaTag+'</th>';
     } else {
       _hasSub=true;
-      th1+='<th colspan="'+_NG+'" style="text-align:center;min-width:'+(80*_NG)+'px">'+_gp.label+'<br><span style="font-weight:400;font-size:9px">'+_gp.unitLabel+'</span>'+_gpFincaTag+'</th>';
+      th1+='<th colspan="'+_NG+'" style="text-align:center;min-width:'+(80*_NG)+'px">'+_gp.label+'<br><span style="font-weight:400;font-size:9px">'+_gp.unitLabel+'</span>'+_gpAcresTag+_gpFincaTag+'</th>';
       for(var gs1_=0;gs1_<_NG;gs1_++){
         var _gsub=_gp.subs[gs1_];
         var _grango=(_gsub.ini||_gsub.fin)?(to12h(_gsub.ini||'')+'-'+to12h(_gsub.fin||'')):'';
@@ -9922,7 +9937,14 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
             var _wT=_wAct.tipo||(ACTS[_wAct.ai]?ACTS[_wAct.ai].tipo:'')||'';
             var _wF=(_wAct.finca||'').trim();
             if(_wN!==_cN||_wT!==(col4.tipo||'')||_wF!==_cF) continue;
+            // V20_144 FIX B: si shifts existe pero entries están vacíos, fallback a a.ini/a.fin
+            var _shHasRealT=false;
             if(_wAct.shifts&&_wAct.shifts.length){
+              for(var _shiT=0;_shiT<_wAct.shifts.length;_shiT++){
+                if(_wAct.shifts[_shiT].ini||_wAct.shifts[_shiT].fin){ _shHasRealT=true; break; }
+              }
+            }
+            if(_shHasRealT){
               for(var ssx_=0;ssx_<_wAct.shifts.length;ssx_++){
                 var _wk_=(_wAct.shifts[ssx_].ini||'')+'|'+(_wAct.shifts[ssx_].fin||'');
                 if(_wk_===_tarK) _subTot+=nh(_wAct.shifts[ssx_].ini||'',_wAct.shifts[ssx_].fin||'')||0;
@@ -9971,7 +9993,14 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
             var _wF2=(_wAct2.finca||'').trim();
             if(_wN2!==_cN2||_wT2!==(col4.tipo||'')||_wF2!==_cF2) continue;
             var _inShift=false;
+            // V20_144 FIX B: si shifts existe pero entries están vacíos, fallback a a.ini/a.fin
+            var _shHasRealT2=false;
             if(_wAct2.shifts&&_wAct2.shifts.length){
+              for(var _shiT2=0;_shiT2<_wAct2.shifts.length;_shiT2++){
+                if(_wAct2.shifts[_shiT2].ini||_wAct2.shifts[_shiT2].fin){ _shHasRealT2=true; break; }
+              }
+            }
+            if(_shHasRealT2){
               for(var ssy_=0;ssy_<_wAct2.shifts.length;ssy_++){
                 var _wkY=(_wAct2.shifts[ssy_].ini||'')+'|'+(_wAct2.shifts[ssy_].fin||'');
                 if(_wkY===_tarK2){ _inShift=true; _subTotH+=nh(_wAct2.shifts[ssy_].ini||'',_wAct2.shifts[ssy_].fin||'')||0; }
@@ -10124,7 +10153,15 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
           continue;
         }
         var _wKeysQ=[];
+        // V20_144 FIX B: shifts puede ser [{ini:'',fin:''}] (estructura sin horario real)
+        // mientras a.ini/a.fin sí tienen valor → fallback a a.ini/a.fin para que matchee la sub-col.
+        var _shHasRealQ=false;
         if(found2.shifts && found2.shifts.length){
+          for(var _shiQ=0;_shiQ<found2.shifts.length;_shiQ++){
+            if(found2.shifts[_shiQ].ini||found2.shifts[_shiQ].fin){ _shHasRealQ=true; break; }
+          }
+        }
+        if(_shHasRealQ){
           for(var swq_=0;swq_<found2.shifts.length;swq_++){
             _wKeysQ.push((found2.shifts[swq_].ini||'')+'|'+(found2.shifts[swq_].fin||''));
           }
@@ -10153,7 +10190,16 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
       }
       var _wKeys=[];
       if(found2){
+        // V20_144 FIX B: si shifts existe pero todos sus entries tienen ini/fin vacíos
+        // (estructura degenerada {ini:'',fin:''}) y a.ini/a.fin sí tienen valor, usar a.ini/a.fin
+        // como fallback. Sin esto el lookup no matchea y la celda de la hora aparece vacía.
+        var _shHasReal=false;
         if(found2.shifts && found2.shifts.length){
+          for(var _shi=0;_shi<found2.shifts.length;_shi++){
+            if(found2.shifts[_shi].ini||found2.shifts[_shi].fin){ _shHasReal=true; break; }
+          }
+        }
+        if(_shHasReal){
           for(var sw_=0;sw_<found2.shifts.length;sw_++){
             _wKeys.push((found2.shifts[sw_].ini||'')+'|'+(found2.shifts[sw_].fin||''));
           }
@@ -11252,16 +11298,27 @@ function getAnchoCamaDefault(act){
 }
 
 // V20_131 FASE 3: helper único para convertir puertas (VarDoor) → acres.
-// Usa SOLO col P del MASTER (FactorAcres). Sin fallback hardcoded /100, /43560 ni anchoCama.
+// Usa col P del MASTER (FactorAcres). Sin fallback hardcoded /100, /43560 ni anchoCama.
 // Geometría pura (pies × ancho / 43560) NO usa este helper — eso es Tipo A (individuales con surcos reales).
 // VarDoor es Tipo B (conversión empírica por finca: puertas / FactorAcres).
 // Devuelve {acres, factor, ok, source, error}. Caller decide qué mostrar si ok=false.
+// V20_143 FIX A: Pennrose usa col I (no col P). Detectar isPennrose5Act y usar getActAncho como segundo intento
+// antes de marcar "Falta FactorAcres". Evita warning falso para Stake/Twine removal Pennrose.
 function getAcresFromPuertas(act, puertas){
   var p = parseFloat(puertas);
   if(!p || p<=0) return {acres:0, factor:null, ok:true, source:'zero'};
+  // Prioridad 1: col P del MASTER (FactorAcres genérico)
   var factor = (typeof getActFactorAcres==='function') ? getActFactorAcres(act) : null;
   if(factor && factor>0){
     return {acres: p/factor, factor: factor, ok:true, source:'col_P'};
+  }
+  // V20_143 FIX A: Prioridad 2 — Pennrose usa col I (data-driven existente)
+  // En Pennrose: puertas = acres × col_I → acres = puertas / col_I
+  if(typeof isPennrose5Act === 'function' && isPennrose5Act(act)){
+    var ancho = (typeof getActAncho === 'function') ? getActAncho(act) : 0;
+    if(ancho && ancho > 0){
+      return {acres: p/ancho, factor: ancho, ok:true, source:'col_I_pennrose'};
+    }
   }
   return {acres:null, factor:null, ok:false, source:'missing_factor', error:'⚠️ Falta FactorAcres'};
 }
