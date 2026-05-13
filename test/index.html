@@ -35,7 +35,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_147';
+window.APP_VERSION = 'V20_149';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -3680,9 +3680,10 @@ function _undoWorker(id){
 // V20_91_01: render del botón global "Cerrar día" en la pestaña Trabajadores.
 // Solo se muestra si hay workers y aún no se cerró.
 // V20_91_20: helper que devuelve el estado actual del check-out (1|2|3|4)
+// V20_149: ORDEN INVERTIDO — cuadrilla → SURQUERO → CHOFER (chofer sale al último).
 // 1 = trabajadores abiertos (esperando cierre cuadrilla)
-// 2 = cuadrilla cerrada, chofer pendiente (NO modo combinado)
-// 3 = cuadrilla y chofer cerrados (o modo combinado), surquero pendiente
+// 2 = cuadrilla cerrada, SURQUERO pendiente (o combinado: cierra ambos)
+// 3 = surquero cerrado, CHOFER separado pendiente (NO modo combinado)
 // 4 = todo cerrado
 function _coState(){
   if(!_dayFlow || !_dayFlow.diaIniciado) return 0;
@@ -3693,19 +3694,89 @@ function _coState(){
     return 4; // tras cerrar cuadrilla, día cerrado directo
   }
   if(!_dayFlow.crewClosed)  return 1;
-  // V20_145 FIX C: defensa contra flags stickys. Si hay chofer SEPARADO registrado y todavía
-  // NO se cerró → estado 2 SIEMPRE. Esto evita que un _modoCombinado=true espurio (heredado
-  // de una sesión anterior o de localStorage viejo) salte el botón "Cerrar día del chofer".
-  if(_dayFlow.choferWorkerId &&
-     _dayFlow.choferWorkerId !== _dayFlow.surqueroWorkerId &&
-     !_dayFlow.choferClosed){
-    return 2;
+
+  // V20_148: AUTO-RECOVERY del estado del chofer.
+  // Si hay worker con role='chofer' no cerrado, reparamos _dayFlow para que aparezca el botón correcto.
+  try {
+    var foundChofer = null;
+    var foundChoferSurq = null;
+    for(var i=0; i<workers.length; i++){
+      var w = workers[i];
+      if(!w || w.checkOutLocked) continue;
+      if(w.role === 'chofer') { foundChofer = w; continue; }
+      if(w.role === 'choferSurquero') { foundChoferSurq = w; continue; }
+    }
+
+    // Caso A: hay chofer combinado (chofer+surquero misma persona) → modo combinado
+    if(foundChoferSurq){
+      _dayFlow._modoCombinado = true;
+      if(!_dayFlow.surqueroWorkerId) _dayFlow.surqueroWorkerId = foundChoferSurq.id;
+      if(!_dayFlow.choferWorkerId)   _dayFlow.choferWorkerId   = foundChoferSurq.id;
+    }
+    // Caso B: hay chofer separado no cerrado
+    else if(foundChofer){
+      // Reparar choferWorkerId si está vacío
+      if(!_dayFlow.choferWorkerId) _dayFlow.choferWorkerId = foundChofer.id;
+      // Limpiar flag choferClosed espurio (si la tarjeta dice no cerrado, el flag no debe estar true)
+      if(_dayFlow.choferClosed) _dayFlow.choferClosed = false;
+      // Si _modoCombinado quedó sticky de un flujo anterior, limpiar
+      if(_dayFlow._modoCombinado && _dayFlow.choferWorkerId !== _dayFlow.surqueroWorkerId){
+        _dayFlow._modoCombinado = false;
+      }
+    }
+    // Caso C: NO hay chofer ni dual → confirmar que choferWorkerId esté null (no quede sticky de día anterior)
+    else {
+      if(_dayFlow.choferWorkerId){
+        // Verificar que el id apunte a worker existente; si no, limpiar
+        var refExists = false;
+        for(var j=0; j<workers.length; j++){
+          if(workers[j].id === _dayFlow.choferWorkerId){ refExists = true; break; }
+        }
+        if(!refExists) _dayFlow.choferWorkerId = null;
+      }
+    }
+  } catch(e){ console.warn('[V20_149] _coState auto-recovery fallo:', e); }
+
+  // V20_149: ORDEN INVERTIDO — primero surquero, luego chofer.
+  // En modo combinado, un solo botón cierra ambos directo.
+
+  // Helper: ¿está el surquero cerrado?
+  var surqClosed = false;
+  if(_dayFlow.surqueroWorkerId){
+    for(var si=0; si<workers.length; si++){
+      if(workers[si].id === _dayFlow.surqueroWorkerId){
+        surqClosed = !!workers[si].checkOutLocked;
+        break;
+      }
+    }
   }
-  // Cuadrilla cerrada — ¿chofer ya cerrado o no aplica (combinado)?
-  if(_dayFlow._modoCombinado || _dayFlow.choferClosed) return 3;
-  // Si no hay choferWorkerId distinto del surquero → no hay chofer separado → saltar a 3
-  if(!_dayFlow.choferWorkerId || _dayFlow.choferWorkerId === _dayFlow.surqueroWorkerId) return 3;
-  return 2;
+
+  // Helper: ¿está el chofer cerrado? (solo si separado del surquero)
+  var choferClosed = false;
+  var hayChoferSeparado = (_dayFlow.choferWorkerId &&
+                          _dayFlow.choferWorkerId !== _dayFlow.surqueroWorkerId);
+  if(hayChoferSeparado){
+    for(var ci=0; ci<workers.length; ci++){
+      if(workers[ci].id === _dayFlow.choferWorkerId){
+        choferClosed = !!workers[ci].checkOutLocked;
+        break;
+      }
+    }
+  }
+
+  // Modo combinado → estado 2 único (1 solo botón cierra ambos)
+  if(_dayFlow._modoCombinado){
+    return surqClosed ? 4 : 2;
+  }
+
+  // Estado 2: surquero NO cerrado
+  if(!surqClosed) return 2;
+
+  // Estado 3: chofer separado NO cerrado
+  if(hayChoferSeparado && !choferClosed) return 3;
+
+  // Todo cerrado
+  return 4;
 }
 
 // V20_91_20: render del botón Check-out con switch por estado en el slot nuevo de Parámetros.
@@ -3727,10 +3798,12 @@ function _renderCheckOutBtn(){
   if(st === 1){
     html = '<button class="btn" style="'+baseStyle+';background:#c0392b;color:#fff;border:1.5px solid #c0392b" onclick="confirmCheckOut(\'coCuadrilla\')">🏁 Check-out cuadrilla</button>';
   } else if(st === 2){
-    html = '<button class="btn" style="'+baseStyle+';background:#e67e22;color:#fff;border:1.5px solid #e67e22" onclick="confirmCheckOut(\'coChofer\')">🚌 Cerrar día del chofer</button>';
-  } else if(st === 3){
+    // V20_149: estado 2 ahora es SURQUERO (antes era chofer)
     var lbl = combo ? '🚌+👤 Cerrar mi día (chofer+surquero)' : '👤 Cerrar mi sesión (surquero)';
     html = '<button class="btn" style="'+baseStyle+';background:#27ae60;color:#fff;border:1.5px solid #27ae60" onclick="confirmCheckOut(\'coSurq\')">'+esc(lbl)+'</button>';
+  } else if(st === 3){
+    // V20_149: estado 3 ahora es CHOFER (antes era surquero)
+    html = '<button class="btn" style="'+baseStyle+';background:#e67e22;color:#fff;border:1.5px solid #e67e22" onclick="confirmCheckOut(\'coChofer\')">🚌 Cerrar día del chofer</button>';
   } else if(st === 4){
     // V20_132: chip "día cerrado" + botón "Re-abrir día" (admin o PIN admin)
     html = '<button disabled class="btn" style="'+baseStyle+';background:#95a5a6;color:#fff;cursor:not-allowed">🔒 Día cerrado a las '+esc(_dayFlow.checkOutTime||'--:--')+'</button>'+
@@ -5837,7 +5910,7 @@ function onQRSuccess(decoded){
       try { _renderHorarioLocks(); } catch(_){}
       try { _renderCheckOutBtn(); } catch(_){}
       try { _updCheckInBtnState(); } catch(_){}
-      toast('✅ Cuadrilla cerrada a las '+_hh1+' ('+_n1+' trabajadores). Faltan: chofer y surquero.');
+      toast('✅ Cuadrilla cerrada a las '+_hh1+' ('+_n1+' trabajadores). Faltan: surquero y chofer.');
       return;
     } catch(e){
       console.warn('[V20_91_20] coCuadrilla error', e);
@@ -5871,13 +5944,33 @@ function onQRSuccess(decoded){
       var _hh2 = _hhmmNow();
       _applyCheckOutForWorker(_wCh, _hh2);
       _dayFlow.choferClosed = true;
+      // V20_149: chofer ahora cierra al ÚLTIMO. Si surquero ya cerró, el día queda cerrado.
+      var _surqClS = false;
+      if(_dayFlow.surqueroWorkerId){
+        for(var _xx=0; _xx<workers.length; _xx++){
+          if(workers[_xx].id === _dayFlow.surqueroWorkerId){
+            _surqClS = !!workers[_xx].checkOutLocked;
+            break;
+          }
+        }
+      }
+      if(_surqClS){
+        _dayFlow.checkOutDone = true;
+        _dayFlow.checkOutTime = _hh2;
+        var _hSc = gEl('hSal'); if(_hSc) _hSc.value = _hh2;
+      }
       _qrMode = 'trabajador';
       if(typeof autoSave === 'function') autoSave();
       try { updCheckInOutDisplay(_wCh.id); } catch(_){}
       try { _renderWorkerCheckOutBtn(_wCh.id); } catch(_){}
       try { _renderHorarioLocks(); } catch(_){}
       try { _renderCheckOutBtn(); } catch(_){}
-      toast('✅ Chofer cerrado a las '+_hh2);
+      try { _updCheckInBtnState(); } catch(_){}
+      if(_dayFlow.checkOutDone){
+        toast('🔒 Día cerrado a las '+_hh2);
+      } else {
+        toast('✅ Chofer cerrado a las '+_hh2);
+      }
       return;
     } catch(e){
       console.warn('[V20_91_20] coChofer error', e);
@@ -5913,9 +6006,15 @@ function onQRSuccess(decoded){
         var _wS = (typeof getW==='function') ? getW(_idsToClose[_ii]) : null;
         if(_wS && !_wS.checkOutLocked) _applyCheckOutForWorker(_wS, _hh3);
       }
-      _dayFlow.checkOutDone = true;
-      _dayFlow.checkOutTime = _hh3;
-      var _hS = gEl('hSal'); if(_hS) _hS.value = _hh3;
+      // V20_149: con orden invertido (cuadrilla → surquero → chofer), surquero ya NO siempre cierra el día.
+      // checkOutDone=true SOLO si: modo combinado (cierra ambos) O no hay chofer separado pendiente.
+      var _hayChoferSepS = (_dayFlow.choferWorkerId &&
+                            _dayFlow.choferWorkerId !== _dayFlow.surqueroWorkerId);
+      if(_dayFlow._modoCombinado || !_hayChoferSepS){
+        _dayFlow.checkOutDone = true;
+        _dayFlow.checkOutTime = _hh3;
+        var _hS = gEl('hSal'); if(_hS) _hS.value = _hh3;
+      }
       _qrMode = 'trabajador';
       if(typeof autoSave === 'function') autoSave();
       for(var _wi3=0; _wi3<workers.length; _wi3++){
@@ -5925,7 +6024,12 @@ function onQRSuccess(decoded){
       try { _renderHorarioLocks(); } catch(_){}
       try { _renderCheckOutBtn(); } catch(_){}
       try { _updCheckInBtnState(); } catch(_){}
-      toast('🔒 Día cerrado a las '+_hh3);
+      // V20_149: mensaje contextual — si falta chofer, dilo. Si no, día cerrado.
+      if(_dayFlow.checkOutDone){
+        toast('🔒 Día cerrado a las '+_hh3);
+      } else {
+        toast('✅ Surquero cerrado a las '+_hh3+'. Falta: chofer.');
+      }
       return;
     } catch(e){
       console.warn('[V20_91_20] coSurq error', e);
