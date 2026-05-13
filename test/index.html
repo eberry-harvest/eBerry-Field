@@ -35,7 +35,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_133_c';
+window.APP_VERSION = 'V20_136';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -915,7 +915,7 @@ html.login-locked{overflow:hidden!important;height:100%!important}
     <a class="drawer-tab" data-pg="8" onclick="pickDrawerTab(8)"><span class="tab-num">⑨</span> Archivos</a>
   </div>
   <div class="drawer-foot">
-    eBerry Field · V20_102 · Mayo 2026
+    eBerry Field · <span id="drawerVerLine">V20_102 · Mayo 2026</span>
   </div>
 </div>
 <!-- ── LOGIN SCREEN ── -->
@@ -1365,6 +1365,22 @@ body.readOnly [onclick*="openNewDay"]{display:none !important}
 .rsm-grand td{background:#1a2b8c;color:#fff;font-weight:700;font-size:14px}
 /* V20_126: fix nombre completo en chips de grupales (sin truncar) */
 .pc{white-space:normal !important;word-break:break-word !important;overflow:visible !important;text-overflow:clip !important}
+/* V20_134_a FIX 4: participantes como filas tipo individuales (nombre completo, sin truncar) */
+.gpl-rows{display:flex;flex-direction:column;gap:6px;margin:8px 0}
+.gp-row{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:8px;background:#fff;border:1.5px solid var(--bd);cursor:pointer;min-height:44px;transition:background .12s}
+.gp-row .gp-nm{flex:1;font-weight:600;color:#222;white-space:normal;word-break:break-word;font-size:14px;line-height:1.3}
+.gp-row .gp-mark{font-size:18px;color:var(--gr);flex-shrink:0;width:24px;text-align:center}
+.gp-row.on{background:var(--a);border-color:var(--a)}
+.gp-row.on .gp-nm{color:#fff;font-weight:700}
+.gp-row.on .gp-mark{color:#fff}
+.gp-row:hover{background:#f8f9fa}
+.gp-row.on:hover{background:#16a085}
+/* V20_134_c: marcar filas de workers que ya tienen actividad/grupal traslapada con el horario actual */
+.gp-row.overlap{opacity:.55;background:#fff3c4;border-color:#f0c419}
+.gp-row.overlap:hover{background:#ffe9a0}
+.gp-row.overlap .gp-nm{color:#5a4a00}
+.gp-overlap-badge{display:none}
+.gp-row.overlap .gp-overlap-badge{display:inline-block;background:#d4a017;color:#fff;padding:2px 6px;border-radius:3px;font-size:10px;font-weight:700;margin-left:6px;white-space:nowrap}
 </style>
 
 <!-- NUEVO DIA MODAL -->
@@ -2222,7 +2238,11 @@ function checkPin(){
     if(hashed === ADMIN_PIN_HASH){
       // V20_132: reset rate limit en éxito
       _pinFailCount = 0; _pinLockedUntil = 0; _persistPinLock();
-      loginSuccess({name:'Administrador', pin:pin, crew:'ALL', isAdmin:true});
+      // V20_135: guardar hash en memoria para enviar en loadDay y audit (FieldSync v5.35)
+      // NUNCA persistir en localStorage por seguridad — solo memoria de sesión.
+      var _adminUser = {name:'Administrador', pin:pin, crew:'ALL', isAdmin:true};
+      _adminUser._adminPinHash = hashed;
+      loginSuccess(_adminUser);
       return;
     }
 
@@ -2314,6 +2334,17 @@ function forceSessionTakeover(){
     // Force close old session via server (envía PIN plano al server que lo valida contra CONFIG)
     var user = _pendingSessionUser;
     gEl('dupAdminErr').textContent = '🔄 Cerrando sesión anterior...';
+    // V20_135: log de auditoría — admin forzó takeover de sesión activa (FieldSync v5.35).
+    // Se loguea ANTES del sessionCall — refleja que el PIN admin fue validado localmente.
+    // Nota: currentUser aún no es admin (estamos en flujo de login), por eso pasamos
+    // _forceAdminCtx=true como 5to arg (PIN ya validado contra ADMIN_PIN_HASH arriba).
+    // target = nombre del surquero al que se le forzó la sesión. targetType='session'.
+    try {
+      _sendAuditEvent('force_session', user.name || '', {
+        prevSession: 'overwritten',
+        fecha: gVal('fecha') || ''
+      }, 'session', true);
+    } catch(e){ console.warn('[V20_135] audit force_session error:', e); }
     sessionCall({cmd:'force', surquero:user.name, adminPin:enteredPin}, function(err, data){
     if(!err && data && data.success){
       gEl('dupSessOv').classList.remove('on');
@@ -3882,6 +3913,13 @@ function reopenDay(){
     if(typeof autoSave === 'function') autoSave();
     toast('✅ Día re-abierto. Puedes seguir agregando trabajadores y actividades.');
     try { console.log('[V20_132 audit] Día re-abierto por: ' + ((currentUser&&currentUser.name)||'?') + ' a las ' + _hhmmNow()); } catch(e){}
+    // V20_135: log de auditoría server-side (FieldSync v5.35 action=audit)
+    try {
+      _sendAuditEvent('reopenDay', gVal('fecha') || '', {
+        prevCheckOutTime: prevCheckOutTime || '',
+        rancho: gVal('rancho') || ''
+      }, 'day');
+    } catch(e){ console.warn('[V20_135] audit reopenDay error:', e); }
   };
   if(currentUser && currentUser.isAdmin){ proceed(); return; }
   if(_pinLockedUntil > Date.now()){
@@ -4206,6 +4244,62 @@ function checkOverlapsInWorker(w){
   return {ok:true};
 }
 
+// V20_134_c: detectar si un worker tiene actividades (individuales o grupales) que se traslapan
+// con un rango [ini, fin]. Devuelve info del primer traslape encontrado o null.
+// excludeGrpIdx evita marcar al worker como traslapado consigo mismo cuando ya participa
+// en la grupal que se está editando.
+// Doble protección de Serafín: la lista de participantes marca visualmente a los workers
+// con conflicto; checkOverlapsInWorker sigue como red de seguridad al confirmar.
+function _workerHasOverlapWith(w, ini, fin, excludeGrpIdx){
+  if(!w || !ini || !fin) return null;
+  var iS = t2m(ini), iE = t2m(fin);
+  if(iS===null || iE===null) return null;
+  if(iE<=iS) iE += 1440; // cruce de medianoche
+  function _ov(aIni, aFin){
+    var aS = t2m(aIni), aE = t2m(aFin);
+    if(aS===null || aE===null) return false;
+    if(aE<=aS) aE += 1440;
+    return (aS < iE && iS < aE);
+  }
+  // 1) Acts individuales del worker (incluye shifts)
+  if(w.acts && w.acts.length){
+    for(var i=0;i<w.acts.length;i++){
+      var a=w.acts[i]; if(!a) continue;
+      var actName=a.esName || ((a.ai!=null && ACTS[a.ai]) ? ACTS[a.ai].es : 'Act. individual');
+      if(a.shifts && a.shifts.length){
+        for(var s=0;s<a.shifts.length;s++){
+          var sh=a.shifts[s];
+          if(!sh || !sh.ini || !sh.fin) continue;
+          if(_ov(sh.ini, sh.fin)){
+            return {source:'individual', actName:actName, ini:sh.ini, fin:sh.fin};
+          }
+        }
+      } else if(a.ini && a.fin){
+        if(_ov(a.ini, a.fin)){
+          return {source:'individual', actName:actName, ini:a.ini, fin:a.fin};
+        }
+      }
+    }
+  }
+  // 2) Otras grupales donde el worker participa (excluyendo la grupal actual)
+  if(typeof grpActs !== 'undefined' && grpActs && grpActs.length){
+    for(var gi=0; gi<grpActs.length; gi++){
+      if(gi===excludeGrpIdx) continue;
+      var g=grpActs[gi];
+      if(!g || !g.participantes || g.participantes.indexOf(w.id)<0) continue;
+      var gIni = (g.vars && g.vars.ini) || g.ini;
+      var gFin = (g.vars && g.vars.fin) || g.fin;
+      if(!gIni || !gFin) continue;
+      if(_ov(gIni, gFin)){
+        var gActDef = (typeof GRUPAL_ACTS!=='undefined' && g.gai!=null && GRUPAL_ACTS[g.gai]) ? GRUPAL_ACTS[g.gai] : null;
+        var gName = (gActDef && gActDef.es) || g.esName || 'Act. grupal';
+        return {source:'grupal', actName:gName, ini:gIni, fin:gFin};
+      }
+    }
+  }
+  return null;
+}
+
 // V20_32: verificar overlaps en TODOS los participantes de un grupal tras cambios
 function checkOverlapsForGrpAct(gi){
   var g=grpActs[gi]; if(!g || !g.participantes) return;
@@ -4297,6 +4391,13 @@ function loadDayFromSheets(){
     + '&isAdmin='  + (isAdmin?'true':'false')
     + '&claimedSurquero=' + encodeURIComponent(targetSurquero);
 
+  // V20_135: enviar hash PIN admin para validación server-side (FieldSync v5.35).
+  // Backend: si el hash coincide con sha256(CONFIG.admin_pin) → permite; si no coincide → 403.
+  // Si NO viene → backend hace log warning + permite (compat con clientes viejos).
+  if(currentUser && currentUser.isAdmin && currentUser._adminPinHash){
+    url += '&adminPinHash=' + encodeURIComponent(currentUser._adminPinHash);
+  }
+
   fetch(url, {method:'GET', cache:'no-store'})
     .then(function(r){ return r.json(); })
     .then(function(res){
@@ -4334,7 +4435,7 @@ function loadDayFromSheets(){
 // V20_50: feedback visible en cada return temprano (toast/alert) + .catch en Promise.all
 //         para diagnosticar fallas silenciosas que se reportaban como "y nada".
 function loadWeekFromSheets(){
-  console.log('[V20_50 loadWeek] inicio — _readOnlyMode=', _readOnlyMode);
+  // V20_136: logs V20_50/51/52 eliminados — diagnóstico ya cerrado
   if(_readOnlyMode){
     alert('⚠️ Ya estás en modo lectura. Sal primero del modo lectura para cargar otra semana.');
     return;
@@ -4360,7 +4461,6 @@ function loadWeekFromSheets(){
     targetSurquero = (currentUser && currentUser.name) || gVal('surquero') || '';
     if(!targetSurquero){ alert('⚠️ No se detecta surquero activo. Cierra sesión y vuelve a entrar.'); return; }
   }
-  console.log('[V20_50 loadWeek] fecha=', fecha, 'targetSurquero=', targetSurquero, 'isAdmin=', isAdmin);
   var myName = (currentUser && currentUser.name) || gVal('surquero') || '';
 
   // Calcular el lunes de la semana de la fecha elegida
@@ -4387,13 +4487,16 @@ function loadWeekFromSheets(){
       + '&surquero=' + encodeURIComponent(myName)
       + '&isAdmin='  + (isAdmin?'true':'false')
       + '&claimedSurquero=' + encodeURIComponent(targetSurquero);
+    // V20_135: hash admin PIN para validación server-side (loadWeek hace 7 fetches loadDay)
+    if(currentUser && currentUser.isAdmin && currentUser._adminPinHash){
+      url += '&adminPinHash=' + encodeURIComponent(currentUser._adminPinHash);
+    }
     return fetch(url, {method:'GET', cache:'no-store'})
       .then(function(r){ return r.json(); })
       .catch(function(err){ return {success:false, error:String(err), fecha:f}; });
   });
 
   Promise.all(fetches).then(function(results){
-    console.log('[V20_50 loadWeek] 7 respuestas recibidas:', results);
     // Validar — al menos uno con datos
     var withData = 0;
     var diag = [];
@@ -4404,7 +4507,6 @@ function loadWeekFromSheets(){
       if(hasW) withData++;
       diag.push(dates[i]+': '+(hasW ? '✓ '+((r.workers||[]).length)+'w' : (r && !r.success ? '❌ '+r.error : '∅ vacío')));
     }
-    console.log('[V20_50 loadWeek] resumen por día:\n' + diag.join('\n'));
     if(!withData){
       if(st) st.textContent='';
       alert('📭 No hay datos de "'+targetSurquero+'" en NINGÚN día de la semana '+dates[0]+' al '+dates[6]+'.\n\nDetalle:\n'+diag.join('\n'));
@@ -4463,15 +4565,12 @@ function loadWeekFromSheets(){
     try { _setupSemReadOnly(primaryPayload); } catch(e){ console.warn('V20_51 setup semanal post-week fallo:', e); }
     // Re-popular tabla semanal con los 7 días
     try { if(typeof buildSemTable === 'function') buildSemTable(); } catch(e){}
-    console.log('[V20_51 loadWeek] tras setup completo — semActivity.value=', gVal('semActivity'),
-                'tbody filas=', (gEl('semTbody') ? gEl('semTbody').children.length : 'null'));
     gEl('histOv').classList.remove('on');
     toast('📖 Semana cargada — '+withData+' día(s) con datos');
-    console.log('[V20_50 loadWeek] OK — '+withData+' días con datos, '+workers.length+' workers totales');
   })
   .catch(function(err){
     // V20_50: capturar excepciones que antes se rechazaban silenciosamente
-    console.error('[V20_50 loadWeek] EXCEPCIÓN:', err);
+    console.error('[loadWeek] EXCEPCIÓN:', err);
     alert('❌ Error procesando semana: '+(err && err.message || String(err))+'\n\nVer consola (F12) para detalle.');
   })
   .finally(function(){
@@ -4484,10 +4583,7 @@ function loadWeekFromSheets(){
 // Se llama desde _enterReadOnly y también desde loadWeekFromSheets después de setear
 // _readOnlyWeekPayloads (para aprovechar workers consolidados de los 7 días).
 function _setupSemReadOnly(payload){
-  console.log('[V20_51 setupSem] inicio — payload.rancho=', payload.rancho, 'fecha=', payload.fecha);
-  console.log('[V20_51 setupSem] payload.workers count=', (payload.workers||[]).length);
-  console.log('[V20_51 setupSem] _readOnlyWeekPayloads=', _readOnlyWeekPayloads ? 'set ('+_readOnlyWeekPayloads.length+')' : 'null');
-
+  // V20_136: logs V20_51/52 eliminados — diagnóstico ya cerrado
   // (a) Inferir rancho si vacío
   if((!payload.rancho || payload.rancho === '') && (payload.workers||[]).length){
     var _firstW = payload.workers[0];
@@ -4497,18 +4593,15 @@ function _setupSemReadOnly(payload){
         if(_crewClean){
           payload.rancho = _crewClean;
           var _rEl = gEl('rancho'); if(_rEl) _rEl.value = _crewClean;
-          console.log('[V20_51 setupSem] rancho inferido de ALL_WORKERS:', _crewClean);
         }
         break;
       }
     }
   }
-  console.log('[V20_51 setupSem] gVal(rancho)=', gVal('rancho'));
 
   // (b) Calcular lunes
   var _fechaRaw = payload.fecha || '';
   var _fechaIso = _normalizeFechaV49(_fechaRaw);
-  console.log('[V20_52 setupSem] fechaRaw=', _fechaRaw, '→ fechaIso=', _fechaIso);
   var _monday = '';
   if(_fechaIso){
     var _d = new Date(_fechaIso + 'T12:00:00');
@@ -4519,16 +4612,13 @@ function _setupSemReadOnly(payload){
       var _mo = _d.getMonth()+1, _dy = _d.getDate();
       _monday = _d.getFullYear()+'-'+(_mo<10?'0'+_mo:_mo)+'-'+(_dy<10?'0'+_dy:_dy);
     } else {
-      console.warn('[V20_52 setupSem] fecha mal parseada:', _fechaRaw);
+      console.warn('[setupSem] fecha mal parseada:', _fechaRaw);
     }
   }
 
   // (c) initSemTab — popula dropdown rancho + actividades
   if(typeof initSemTab === 'function'){
     initSemTab();
-    console.log('[V20_52 setupSem] tras initSemTab — semRancho.value=', gVal('semRancho'),
-                'semWeekStart=', gVal('semWeekStart'),
-                'semActivity opciones=', (gEl('semActivity') ? gEl('semActivity').options.length : 'null'));
   }
 
   // V20_52 FIX CRÍTICO: initSemTab → loadSemData LEE del localStorage y sobrescribe
@@ -4536,7 +4626,6 @@ function _setupSemReadOnly(payload){
   if(_monday){
     var _wkEl = gEl('semWeekStart');
     if(_wkEl) _wkEl.value = _monday;
-    console.log('[V20_52 setupSem] semWeekStart RE-FORZADO a:', _monday, '(después de initSemTab)');
   }
 
   // (d) Buscar primera actividad del payload (preferir tipo Hora)
@@ -4550,10 +4639,9 @@ function _setupSemReadOnly(payload){
       if(_ap.tipo === 'Hora' && _ap.actEs){ _firstActEs = _ap.actEs; _foundHora = true; break; }
     }
   }
-  console.log('[V20_52 setupSem] firstActEs=', _firstActEs, 'foundHora=', _foundHora);
 
   if(!_firstActEs){
-    console.warn('[V20_52 setupSem] no se encontró actividad en payload.workers — la tabla quedará vacía');
+    console.warn('[setupSem] no se encontró actividad en payload.workers — la tabla quedará vacía');
     return;
   }
 
@@ -4561,7 +4649,7 @@ function _setupSemReadOnly(payload){
   // una actividad con el mismo nombre pero de otro rancho (ALL_ACTS tiene duplicados
   // entre ranchos: idx=4 puede ser Pennrose y idx=57 DeWar con nombre similar).
   var _semSel = gEl('semActivity');
-  if(!_semSel){ console.warn('[V20_52 setupSem] gEl(semActivity) null'); return; }
+  if(!_semSel){ console.warn('[setupSem] gEl(semActivity) null'); return; }
 
   var _ranchoActual = (payload.rancho || gVal('rancho') || '').toLowerCase().trim();
   var _allActsIdx = -1;
@@ -4578,10 +4666,8 @@ function _setupSemReadOnly(payload){
       if(ALL_ACTS[_ai2].es === _firstActEs){ _allActsIdx = _ai2; break; }
     }
   }
-  console.log('[V20_52 setupSem] firstActEs en ALL_ACTS idx=', _allActsIdx,
-              '(rancho buscado="'+_ranchoActual+'" → farm="'+(_allActsIdx>=0?ALL_ACTS[_allActsIdx].farm:'?')+'")');
   if(_allActsIdx < 0){
-    console.warn('[V20_52 setupSem] actividad "'+_firstActEs+'" NO está en ALL_ACTS');
+    console.warn('[setupSem] actividad "'+_firstActEs+'" NO está en ALL_ACTS');
     return;
   }
 
@@ -4593,24 +4679,16 @@ function _setupSemReadOnly(payload){
     }
   }
   if(!_foundInDropdown){
-    var _availOpts = [];
-    for(var _oi2=0; _oi2<_semSel.options.length; _oi2++){
-      _availOpts.push(_semSel.options[_oi2].value+'='+_semSel.options[_oi2].textContent.substr(0,40));
-    }
-    console.warn('[V20_52 setupSem] actividad idx '+_allActsIdx+' NO está en dropdown semActivity. Opciones disponibles: '+_availOpts.length+'\n'+_availOpts.join('\n'));
     var _opt = document.createElement('option');
     _opt.value = String(_allActsIdx);
     var _act = ALL_ACTS[_allActsIdx];
     _opt.textContent = _act.es + (_act.en ? ' / '+_act.en : '');
     _semSel.appendChild(_opt);
-    console.log('[V20_52 setupSem] opción agregada al dropdown');
   }
 
   _semSel.value = String(_allActsIdx);
-  console.log('[V20_52 setupSem] semActivity seteado a:', _semSel.value);
   if(typeof buildSemTable === 'function'){
     buildSemTable();
-    console.log('[V20_52 setupSem] buildSemTable llamado — fin del setup');
   }
 }
 
@@ -5954,6 +6032,32 @@ function onQRSuccess(decoded){
     }
   }
 
+  // V20_134_b FIX 2: defensa contra modal "3 opciones" perdido.
+  // Despues de V20_130_c, _qrMode==='trabajador' ya retorna arriba (L5951) sin tocar modal.
+  // PERO si _qrMode queda stale en algun valor inesperado (ej: 'manualConfirm' sin pendingManualAdd,
+  // o un valor heredado de una sesion previa), el flujo caia AQUI y abria el modal unkOv.
+  // Reportado por Serafin: surquero escanea trabajador y aparece "modal con 3 opciones".
+  // Fix: si llegamos hasta aqui sin ser chofer/surquero (que ya retornaron arriba), tratar como
+  // trabajador con QR — auto-agregar si esta en BD, rechazar si no. Nunca abrir unkOv desde QR.
+  if(true){
+    console.warn('[V20_134_b] onQRSuccess fallthrough — _qrMode inesperado: ' + _qrMode + ' — tratando como trabajador');
+    // Forzar modo trabajador para que doAddConfirmed aplique role correcto
+    _qrMode = 'trabajador';
+    if(wkMatch){
+      doAddConfirmed(officialName);
+      qrSessionCount++;
+      updQRCount();
+      var _crewTxtFB = wkMatch.crew ? ' (crew: '+wkMatch.crew+')' : '';
+      setQRStatus('✓ ' + officialName + ' agregado'+_crewTxtFB,'ok');
+      _scheduleQRStatusReset(2000);
+      return;
+    } else {
+      setQRStatus('⚠️ ' + qrName + ' (#'+qrEmpNum+') no está en la base de datos','err');
+      _scheduleQRStatusReset(4000);
+      return;
+    }
+  }
+
   // Otro crew o no en DB → pausar scanner y mostrar modal de confirmación
   // (rama legacy preservada para modos no-trabajador y entradas vía doAdd/manual)
   pauseQR();
@@ -6173,9 +6277,14 @@ function doAddConfirmed(name){
     if(pat){ setTimeout(function(){ showCp(workers.length-1,pat); },400); }
   }
   // V20_91_14: si el alta vino del bottom-sheet, reabrirlo para registrar al siguiente
+  // V20_134_b1: deshabilitado por defecto (Serafin pidio velocidad de captura — cámara viva, sheet NO reabre).
+  // El flag global _skipSheetReopen=true salta el reopen. Para revertir, cambiar el default a false.
+  // _reopenAfterAdd se sigue reseteando para no quedar latente entre flujos.
   if(_reopenAfterAdd){
     _reopenAfterAdd = false;
-    setTimeout(function(){ try{ openCheckInSheet(); }catch(_){ } }, 1500);
+    if(!_skipSheetReopen){
+      setTimeout(function(){ try{ openCheckInSheet(); }catch(_){ } }, 1500);
+    }
   }
   try { _updCheckInBtnState(); } catch(_){}
 }
@@ -6690,6 +6799,23 @@ function recalc(wi,ai){
       if(sb_v){ if(pay>0){sb_v.textContent='Subtotal: $'+pay.toFixed(2);sb_v.style.display='block';}else sb_v.style.display='none'; }
       var row_v=gEl('ar'+wi+'_'+ai);
       if(row_v) row_v.className='ar'+(pay>0?(act.hr?' cb':' ca'):'');
+      updTot(wi); updBadge(wi,ai);
+      return;
+    }
+    // V20_134_b FIX 1: Daywork SIEMPRE usa qty plano × rate (bypass motor).
+    // La vista por actividad (renderWlistByActivity) captura solo qty plano por worker
+    // — no expone inputs del motor (H-M). Si MASTER tuviera Daywork con labels H-M,
+    // computePay devolveria 0 porque a.inputs queda vacio. Por convencion el caso real
+    // de Daywork es "dias x tarifa por dia" -> bypass es seguro y simetrico con VarDoor.
+    var _isDayworkR = (act && ((act.payType === 'Daywork') || (act.variable||'').toLowerCase() === 'daywork'));
+    if(_isDayworkR){
+      pay = (parseFloat(a.qty)||0) * (act.p||0);
+      pay = Math.round(pay*100)/100;
+      a.pay=pay;
+      var sb_d=gEl('sb'+wi+'_'+ai);
+      if(sb_d){ if(pay>0){sb_d.textContent='Subtotal: $'+pay.toFixed(2);sb_d.style.display='block';}else sb_d.style.display='none'; }
+      var row_d=gEl('ar'+wi+'_'+ai);
+      if(row_d) row_d.className='ar'+(pay>0?(act.hr?' cb':' ca'):'');
       updTot(wi); updBadge(wi,ai);
       return;
     }
@@ -7931,6 +8057,25 @@ function buildActViewGroups(){
       if(!act && (a.esName || a._actEs)){
         try { act = _resolveActByName(a.esName || a._actEs); } catch(e){ act = null; }
       }
+      // V20_134_b FIX 3: omitir acts que pertenecen a actividades grupales.
+      // Bug reportado por Serafin: aparecian acordeones de "Empaque chile morron" (grupal)
+      // en la vista por actividad individuales. Causas posibles: data legacy de localStorage
+      // donde grupales se mezclaron con individuales; _resolveActByName busca en ALL_ACTS que
+      // incluye grupales; o backend devolvio grupal dentro de payload.workers[].acts.
+      // NO eliminamos del modelo (workers[].acts) — solo omitimos del render para no perder data.
+      if(act && (act.modo||'').toLowerCase() === 'grupal') continue;
+      // Defensa adicional: si no resolvio act pero el esName matchea con una grupal en GRUPAL_ACTS,
+      // tambien omitir (cubre el caso donde resolveByName fallo pero el nombre sigue siendo de grupal).
+      if(!act && (a.esName || a._actEs)){
+        var _nmCheck = String(a.esName || a._actEs).toLowerCase().trim();
+        var _isGrpName = false;
+        if(typeof GRUPAL_ACTS !== 'undefined' && GRUPAL_ACTS && GRUPAL_ACTS.length){
+          for(var _gck=0; _gck<GRUPAL_ACTS.length; _gck++){
+            if(GRUPAL_ACTS[_gck] && (GRUPAL_ACTS[_gck].es||'').toLowerCase().trim() === _nmCheck){ _isGrpName = true; break; }
+          }
+        }
+        if(_isGrpName) continue;
+      }
       // Si no hay act, sintetizar fallback mínimo para no perder la fila
       var actName = (act && act.es) ? act.es : (a.esName || '(actividad sin nombre)');
       var variable = (act && act.variable) || '';
@@ -8049,7 +8194,23 @@ function onActQtyChange(wid_, actIdx, val, inpEl){
   if(_readOnlyMode){ toast && toast('🔒 Modo lectura'); return; }
   var w = getW(wid_); if(!w) return;
   if(!w.acts || !w.acts[actIdx]) return;
-  w.acts[actIdx].qty = parseFloat(val) || 0;
+  var a = w.acts[actIdx];
+  var qty = parseFloat(val) || 0;
+  a.qty = qty;
+  // V20_134_b1: alimentar a.inputs[primer_col_motor] para que computePay del motor V20_27 funcione.
+  // Antes: solo se seteaba a.qty -> motor con inputs={} retornaba 0 -> pay $0 para VarPsc/VarBox/VarDoor.
+  // VarQty (Hours) NO usa cuadrito; VarPsc tiene col H='label\'Pieza\'' -> reqInputs[0].column='H'.
+  try {
+    var actDef = (a.ai != null && typeof ACTS !== 'undefined') ? ACTS[a.ai] : null;
+    if(actDef && typeof getRequiredInputs === 'function'){
+      var reqInputs = getRequiredInputs(actDef) || [];
+      if(reqInputs.length > 0){
+        if(!a.inputs) a.inputs = {};
+        var firstCol = reqInputs[0].column;
+        if(firstCol){ a.inputs[firstCol] = qty; }
+      }
+    }
+  } catch(e){ console.warn('[V20_134_b1] feed a.inputs fallo:', e); }
   try { recalc(wid_, actIdx); } catch(e){ console.warn('onActQtyChange recalc fallo:', e); }
   try { autoSave(); } catch(e){}
   // Bug 6: NO llamar renderWlistByActivity() completo — destruía el DOM y cerraba todos los acordeones.
@@ -8194,16 +8355,27 @@ function onAssignActChange(){
 
 function _renderAssignFinca(act){
   // Usar el catálogo FINCAS_POR_RANCHO del MASTER, fallback a input libre si no hay
+  // V20_134_a FIX 2: pre-seleccionar la finca actual de Parámetros para no obligar al usuario
   var slot = gEl('assignFincaSlot'); if(!slot) return;
   var rancho = (gVal('rancho')||'').trim();
+  var fincaActual = (gVal('finca')||'').trim();
+  var fincaActualLc = fincaActual.toLowerCase();
   var fincas = (typeof FINCAS_POR_RANCHO !== 'undefined' && FINCAS_POR_RANCHO && FINCAS_POR_RANCHO[rancho]) ? FINCAS_POR_RANCHO[rancho] : null;
   if(fincas && fincas.length){
     var html = '<select id="assignFincaSel" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:14px"><option value="">— Selecciona finca —</option>';
-    for(var i=0; i<fincas.length; i++) html += '<option value="'+esc(fincas[i])+'">'+esc(fincas[i])+'</option>';
+    var matched = false;
+    for(var i=0; i<fincas.length; i++){
+      var sel = (fincas[i].toLowerCase() === fincaActualLc) ? ' selected' : '';
+      if(sel) matched = true;
+      html += '<option value="'+esc(fincas[i])+'"'+sel+'>'+esc(fincas[i])+'</option>';
+    }
+    if(!matched && fincaActual){
+      html += '<option value="'+esc(fincaActual)+'" selected>'+esc(fincaActual)+' (legacy)</option>';
+    }
     html += '</select>';
     slot.innerHTML = html;
   } else {
-    slot.innerHTML = '<input id="assignFincaInput" type="text" placeholder="Nombre de la finca" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:14px">';
+    slot.innerHTML = '<input id="assignFincaInput" type="text" placeholder="Nombre de la finca" value="'+esc(fincaActual)+'" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:14px">';
   }
 }
 
@@ -8507,6 +8679,9 @@ function refreshDrawerContext(){
     try { if(typeof gVal === 'function') rn = gVal('rancho') || '—'; } catch(e){}
     rc.textContent = rn;
   }
+  // V20_134_a FIX 1: actualizar línea de versión en el footer del drawer
+  var _vl = document.getElementById('drawerVerLine');
+  if(_vl) _vl.textContent = (window.APP_VERSION || '?');
   // Marcar pestaña activa según pg
   var dtabs = document.querySelectorAll('.drawer-tab');
   var curPg = (typeof pg !== 'undefined') ? pg : 0;
@@ -8632,6 +8807,8 @@ window.addEventListener('DOMContentLoaded',function(){
       else { htop.appendChild(pill); }
     }
   }
+  // V20_136: marcar flag para que el segundo DOMContentLoaded (~L12358) no duplique
+  // los listeners 'change'/'input'/visibilitychange en los mismos inputs.
   var ids=['rancho','fecha','numBus','numCam','surquero','finca','notas','hEnt','hSal','lIni','lFin'];
   for(var i=0;i<ids.length;i++){
     (function(id){
@@ -8650,6 +8827,7 @@ window.addEventListener('DOMContentLoaded',function(){
     // V20_61: visibility solo guarda si autoSave está activo
     if(document.visibilityState==='hidden' && currentUser && _autoSaveReady()) saveQuiet();
   });
+  window._autoSaveListenersRegistered = true;
 });
 
 function showHistory(){
@@ -10122,6 +10300,16 @@ function askDelWorker(id){
   if(!pin) return;
   hashPin(String(pin).trim()).then(function(h){
     if(h !== ADMIN_PIN_HASH){ toast('❌ PIN incorrecto'); return; }
+    // V20_135: log de auditoría — borrado tardío con PIN admin (FieldSync v5.35 action=audit).
+    // Solo dispara en path de PIN validado (no en undo dentro de 60s).
+    try {
+      _sendAuditEvent('delete_worker', w.name, {
+        empNum: w.empNum || '',
+        fecha: gVal('fecha') || '',
+        rancho: gVal('rancho') || '',
+        reason: 'tardy_delete_with_pin'
+      });
+    } catch(e){ console.warn('[V20_135] audit delete_worker error:', e); }
     _showDelWorkerModal(w, id);
   }).catch(function(){ toast('❌ Error verificando PIN'); });
 }
@@ -10171,6 +10359,38 @@ function getWeekNumber(dateStr){
     var oneWeek=604800000;
     return 'WE '+Math.ceil((diff/oneWeek)+1);
   }catch(e){ return ''; }
+}
+
+// V20_135: log de auditoría server-side (FieldSync v5.35 endpoint action=audit).
+// Solo admin loguea — borrados tardíos con PIN, reopenDay, force_session.
+// Falla silenciosa (no-cors): no bloquea UI ni envíos normales si el backend está caído.
+// Opcional 5to arg `_forceAdminCtx` para el caso force_session donde currentUser aún no es admin
+// pero el PIN admin ya fue validado localmente contra ADMIN_PIN_HASH.
+function _sendAuditEvent(action, target, details, targetType, _forceAdminCtx){
+  var isAdminCtx = !!_forceAdminCtx || (currentUser && currentUser.isAdmin);
+  if (!isAdminCtx) return; // solo admin loguea
+  if (typeof APPS_SCRIPT_URL === 'undefined' || !APPS_SCRIPT_URL) return;
+
+  var payload = {
+    action: 'audit',
+    user: (currentUser && currentUser.name) || (_forceAdminCtx === true ? 'admin' : 'admin'),
+    eventAction: action,
+    targetType: targetType || 'worker',
+    target: target || '',
+    details: typeof details === 'string' ? details : JSON.stringify(details || {}),
+    userAgent: (navigator.userAgent || '').substring(0, 200)
+  };
+
+  try {
+    if (typeof fetch === 'function') {
+      var fd = new FormData();
+      for (var k in payload) if (payload.hasOwnProperty(k)) fd.append(k, payload[k]);
+      fetch(APPS_SCRIPT_URL, { method: 'POST', body: fd, mode: 'no-cors' })
+        .catch(function(e) { console.warn('[V20_135] audit fail:', e); });
+    }
+  } catch (e) {
+    console.warn('[V20_135] _sendAuditEvent error:', e);
+  }
 }
 
 // V8: Helper unificado para POST via iframe oculto (con flag _done anti-race)
@@ -10787,6 +11007,11 @@ function addGrpAct(gai){
   if(_gact && (typeof grpCalcType === 'function') && grpCalcType(_gact) === 'cajas'){
     _initVars.precioC = parseFloat(_gact.p) || 0;
   }
+  // V20_134_a FIX 3: sembrar finca desde Parámetros para que el select grupal aparezca pre-seleccionado
+  try {
+    var _fincaParam = (typeof gVal === 'function') ? (gVal('finca')||'').trim() : '';
+    if(_fincaParam) _initVars.finca = _fincaParam;
+  } catch(e){}
   grpActs.push({
     localRowId: _genRowId(), // V20_127: ID base del grupal — cada participante usa lrid+'_w'+wid en payload
     gai: gai,
@@ -11255,9 +11480,13 @@ function setGrpVar(inp){
       // Revertir + limpiar DOM input
       grpActs[gi].vars[v] = prevVal;
       inp.value = prevVal || '';
+      // V20_134_c: re-render lista para reflejar horario revertido (badges traslape)
+      try { renderGrpPart(gi); } catch(_eRGP){ console.warn('[V20_134_c setGrpVar revert renderGrpPart]', _eRGP); }
       openOverlap(_ovInfo, _ovName);
       return; // NO calcGrpAct, NO autoSave
     }
+    // V20_134_c: horario válido → re-render lista para que badges traslape reflejen el nuevo rango
+    try { renderGrpPart(gi); } catch(_eRGP2){ console.warn('[V20_134_c setGrpVar renderGrpPart]', _eRGP2); }
   } else {
     grpActs[gi].vars[v] = inp.value;
   }
@@ -11424,8 +11653,15 @@ function renderGrpPart(gi){
   var el = gEl('gpl'+gi); if(!el) return;
   var g  = grpActs[gi]; if(!g) return;
   // V20_111 FIX 4: dedup workers por ID en render para evitar chips duplicados con mismo onclick
+  // V20_134_a FIX 4: filas con nombre COMPLETO (no truncar a 2 tokens) + estilo similar a individuales
+  // V20_134_c: marcar visualmente workers con horario ya traslapado (doble protección — la alerta
+  // checkOverlapsInWorker sigue activa al confirmar). Si la grupal no tiene horario aún, no se marca.
+  var gIni = (g.vars && g.vars.ini) || '';
+  var gFin = (g.vars && g.vars.fin) || '';
+  var canCheck = !!(gIni && gFin);
   var seen = {};
-  var h  = '';
+  var h  = '<div class="gpl-rows">';
+  var any = false;
   for(var i=0;i<workers.length;i++){
     var w   = workers[i];
     if(!w) continue;
@@ -11434,11 +11670,24 @@ function renderGrpPart(gi){
       continue;
     }
     seen[w.id] = true;
+    any = true;
     var on  = g.participantes.indexOf(w.id)>=0;
-    h += '<div class="pc'+(on?' on':'')+'" onclick="togGrpPart('+gi+','+w.id+')">'
-       + esc(w.name.split(' ')[0])+' '+esc(w.name.split(' ')[1] || '')+'</div>';
+    var mark = on ? '✓' : '○';
+    // V20_134_c: solo marcamos overlap si el worker NO está ya en esta grupal (no se traslapa consigo mismo)
+    var ovInfo = (canCheck && !on) ? _workerHasOverlapWith(w, gIni, gFin, gi) : null;
+    var rowCls = 'gp-row' + (on?' on':'') + (ovInfo?' overlap':'');
+    var badge  = '';
+    if(ovInfo){
+      var badgeTxt = '⚠️ Translape: ' + (ovInfo.actName||'') + ' ' + to12h(ovInfo.ini) + '→' + to12h(ovInfo.fin);
+      badge = '<span class="gp-overlap-badge" title="'+esc(badgeTxt)+'">'+esc(badgeTxt)+'</span>';
+    }
+    h += '<div class="'+rowCls+'" onclick="togGrpPart('+gi+','+w.id+')">'
+       + '<span class="gp-mark">'+mark+'</span>'
+       + '<span class="gp-nm">'+esc(w.name||'')+badge+'</span>'
+       + '</div>';
   }
-  el.innerHTML = h||'<span style="color:var(--gr);font-size:12px">Agrega trabajadores primero</span>';
+  h += '</div>';
+  el.innerHTML = any ? h : '<span style="color:var(--gr);font-size:12px">Agrega trabajadores primero</span>';
 }
 
 function togGrpPart(gi, wid_){
@@ -11618,6 +11867,21 @@ function migrateActsToNames(){
   try{
     // Solo migrar las keys que aún puedan existir
     var KEYS=['pr9','pr26v9','pr26v8','pr26v7'];
+    var OLD=['pr26v2','pr26v3','pr26v4','pr26v5','pr26v6','pr26'];
+    // V20_136: guard temprano — si NINGUNA key legacy existe en localStorage,
+    // salir de inmediato. Clientes modernos ya no las tienen y no necesitan migrar.
+    // Evita iterar arrays vacíos y llamar removeItem(x6) en cada DOMContentLoaded.
+    var hasLegacy = false;
+    for(var ck=0; ck<KEYS.length; ck++){
+      try { if(localStorage.getItem(KEYS[ck]) !== null){ hasLegacy = true; break; } } catch(e){}
+    }
+    if(!hasLegacy){
+      for(var co=0; co<OLD.length; co++){
+        try { if(localStorage.getItem(OLD[co]) !== null){ hasLegacy = true; break; } } catch(e){}
+      }
+    }
+    if(!hasLegacy) return;
+
     for(var ki=0;ki<KEYS.length;ki++){
       var raw=localStorage.getItem(KEYS[ki]); if(!raw)continue;
       // V20_91 (V9-FIX6): try/catch para no abortar migración por una key corrupta
@@ -11634,7 +11898,6 @@ function migrateActsToNames(){
       if(changed) localStorage.setItem(KEYS[ki],JSON.stringify(d));
     }
     // Limpiar keys muy antiguas que ya no se usan (pr26v2..pr26v6)
-    var OLD=['pr26v2','pr26v3','pr26v4','pr26v5','pr26v6','pr26'];
     for(var oi=0;oi<OLD.length;oi++){ localStorage.removeItem(OLD[oi]); }
   }catch(e){ console.warn('[eBerry] Error en migrateActsToNames:', e.message); } // V9
 }
@@ -12115,16 +12378,23 @@ window.addEventListener('DOMContentLoaded', function(){
   // V20_61: pill duplicada eliminada — la pill se crea solo en el handler arriba (~L5161)
   // que es el que respeta el guard de _autoSaveReady. Aquí solo registramos los listeners de inputs.
 
-  var ids=['rancho','fecha','numBus','numCam','finca','notas','hEnt','hSal','lIni','lFin'];
-  for(var i=0;i<ids.length;i++){
-    (function(id){
-      var el=gEl(id); if(!el)return;
-      el.addEventListener('change',autoSave);
-      el.addEventListener('input',autoSave);
-    })(ids[i]);
+  // V20_136: guard de duplicación — el handler arriba (~L8785) YA registra los mismos
+  // listeners 'change'+'input' en los inputs de Parámetros y el visibilitychange global.
+  // Sin este guard, autoSave se dispara 2 veces por cada keypress (memoria + CPU desperdiciada
+  // en saves redundantes). El guard es idempotente: solo registra si nadie lo hizo antes.
+  if(!window._autoSaveListenersRegistered){
+    var ids=['rancho','fecha','numBus','numCam','finca','notas','hEnt','hSal','lIni','lFin'];
+    for(var i=0;i<ids.length;i++){
+      (function(id){
+        var el=gEl(id); if(!el)return;
+        el.addEventListener('change',autoSave);
+        el.addEventListener('input',autoSave);
+      })(ids[i]);
+    }
+    // V20_61: visibilitychange con guard
+    window.addEventListener('visibilitychange',function(){ if(document.visibilityState==='hidden'&&currentUser&&_autoSaveReady()) saveQuiet(); });
+    window._autoSaveListenersRegistered = true;
   }
-  // V20_61: visibilitychange con guard
-  window.addEventListener('visibilitychange',function(){ if(document.visibilityState==='hidden'&&currentUser&&_autoSaveReady()) saveQuiet(); });
 
   // Try cache first for instant login display
   var cache = loadCache();
@@ -14296,16 +14566,12 @@ function buildSemTable(){
 function _populateSemFromReadOnly(){
   var actIdx = gVal('semActivity');
   var weekStart = gVal('semWeekStart');
-  console.log('[V20_51 popSem] inicio — actIdx=', actIdx, 'weekStart=', weekStart);
-  if(!actIdx || !weekStart){
-    console.warn('[V20_51 popSem] actIdx o weekStart vacíos — return');
-    return;
-  }
+  // V20_136: logs verbosos V20_51/52 eliminados; warns críticos preservados
+  if(!actIdx || !weekStart){ return; }
   var selAct = ALL_ACTS[parseInt(actIdx)];
-  if(!selAct){ console.warn('[V20_51 popSem] selAct null para idx '+actIdx); return; }
-  console.log('[V20_51 popSem] selAct.es=', selAct.es);
+  if(!selAct){ console.warn('[popSem] selAct null para idx '+actIdx); return; }
   var lunD = new Date(weekStart + 'T12:00:00');
-  if(isNaN(lunD.getTime())){ console.warn('[V20_51 popSem] lunD inválido'); return; }
+  if(isNaN(lunD.getTime())){ console.warn('[popSem] lunD inválido'); return; }
 
   var _populated = 0;
   // Helper: popula 1 día de la tabla con un payload
@@ -14336,11 +14602,9 @@ function _populateSemFromReadOnly(){
       try { calcSemHours(wk.id, dayIdx); } catch(e){}
       matched++; _populated++;
     }
-    console.log('[V20_51 popSem] día '+dayIdx+' — '+matched+'/'+workers.length+' workers populados');
   }
 
   if(_readOnlyWeekPayloads && _readOnlyWeekPayloads.length === 7){
-    console.log('[V20_51 popSem] modo SEMANA — iterando 7 días');
     for(var wd=0; wd<7; wd++){
       _popOneDay(wd, _readOnlyWeekPayloads[wd]);
     }
@@ -14349,11 +14613,9 @@ function _populateSemFromReadOnly(){
     if(!isNaN(fechaD.getTime())){
       var diffMs = fechaD - lunD;
       var dayIdx = Math.round(diffMs / 86400000);
-      console.log('[V20_51 popSem] modo DÍA — dayIdx=', dayIdx);
       _popOneDay(dayIdx, _readOnlyPayload);
     }
   }
-  console.log('[V20_51 popSem] TOTAL populados:', _populated);
   try { calcSemDayTotals && calcSemDayTotals(); } catch(e){}
 }
 
@@ -15528,6 +15790,7 @@ function adminSyncWorkerTimes(w){
 var _pendingManualAdd  = null;   // nombre seleccionado del autocomplete manual, esperando confirm QR del surquero
 var _pendingManualRole = null;   // V20_91_16: rol que se va a registrar (chofer/trabajador) tras confirm
 var _reopenAfterAdd    = false;  // bandera: reabrir el sheet tras un add exitoso (solo trabajador)
+var _skipSheetReopen   = true;   // V20_134_b1: si true, no se reabre el bottom-sheet entre escaneos (velocidad de captura). Cambiar a false para volver al flujo V20_91_14.
 var _cisRole           = 'trabajador'; // V20_91_16: rol activo del bottom-sheet
 
 function _updCheckInBtnState(){
