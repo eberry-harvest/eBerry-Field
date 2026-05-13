@@ -35,7 +35,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_127';
+window.APP_VERSION = 'V20_128';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -883,20 +883,6 @@ html.login-locked{overflow:hidden!important;height:100%!important}
          La pill "⏸️ Pausa" (id=savepill) se inserta dinámicamente aquí mismo en DOMContentLoaded. -->
     <div id="savepillAnchor" style="display:flex;align-items:center;gap:6px;margin-left:auto"></div>
   </div>
-  <!-- V20_102: tabs horizontales reemplazadas por drawer lateral -->
-  <!--
-  <div class="tabs">
-    <button class="tab act" onclick="go(0)">① Parámetros</button>
-    <button class="tab" onclick="go(1)">② Análisis</button>
-    <button class="tab" onclick="go(2)">③ Act. Individuales</button><!-- V20_126: renombrado -->
-    <button class="tab" onclick="go(3)">④ Act. Grupales</button>
-    <button class="tab" onclick="go(4)">⑤ Resumen</button>
-    <button class="tab" onclick="go(5)">⑥ Ausencias</button>
-    <button class="tab" onclick="go(6)">⑦ Invoice</button>
-    <button class="tab" onclick="go(7)">⑧ Semanal</button>
-    <button class="tab" onclick="go(8)">⑨ Archivos</button>
-  </div>
-  -->
 </header>
 <!-- V20_102: Drawer Lateral -->
 <div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()"></div>
