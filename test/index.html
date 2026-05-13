@@ -35,7 +35,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_144';
+window.APP_VERSION = 'V20_147';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -2494,7 +2494,8 @@ function getRanchoList(ioe, isAdmin){
   } else {
     var seen2 = {};
     for(var ai=0;ai<ALL_ACTS.length;ai++){
-      var fn = ALL_ACTS[ai].farm || '';
+      // V20_147: trim para evitar duplicados por espacios y matching consistente
+      var fn = (ALL_ACTS[ai].farm || '').trim();
       if(fn && !seen2[fn.toLowerCase()]){ seen2[fn.toLowerCase()]=true; ranchos.push(fn); }
     }
     ranchos.sort();
@@ -2547,16 +2548,17 @@ function onRanchoChange(){
   // V20_42: al cambiar rancho, refrescar dropdown de finca con el catálogo nuevo
   try { renderParamsFinca(); } catch(e){ console.warn('V20_42 renderParamsFinca fallo:', e); }
 
-  var rancho = gVal('rancho');
+  // V20_147 FIX: trim consistente para evitar mismatch cuando MASTER tiene "eBerry " con espacio
+  var rancho = (gVal('rancho')||'').toLowerCase().trim();
   if(!rancho) return;
 
   // Re-filtrar actividades para el rancho seleccionado
   ACTS = [];
   GRUPAL_ACTS = [];
   for(var i=0;i<ALL_ACTS.length;i++){
-    var farm = (ALL_ACTS[i].farm||'').toLowerCase();
-    if(farm === rancho.toLowerCase()){
-      if((ALL_ACTS[i].modo||'Individual').toLowerCase() === 'grupal'){
+    var farm = (ALL_ACTS[i].farm||'').toLowerCase().trim();
+    if(farm === rancho){
+      if((ALL_ACTS[i].modo||'Individual').toLowerCase().trim() === 'grupal'){
         GRUPAL_ACTS.push(ALL_ACTS[i]);
       } else {
         ACTS.push(ALL_ACTS[i]);
@@ -2831,7 +2833,8 @@ function filterDataForCrew(crew){
   for(var i=0;i<ALL_ACTS.length;i++){
     var farmNorm = _normCrew(ALL_ACTS[i].farm);
     if(farmNorm === crewNorm){
-      if((ALL_ACTS[i].modo||'Individual').toLowerCase() === 'grupal'){
+      // V20_147: trim también modo para consistencia
+      if((ALL_ACTS[i].modo||'Individual').toLowerCase().trim() === 'grupal'){
         GRUPAL_ACTS.push(ALL_ACTS[i]);
       } else {
         ACTS.push(ALL_ACTS[i]);
@@ -3690,6 +3693,14 @@ function _coState(){
     return 4; // tras cerrar cuadrilla, día cerrado directo
   }
   if(!_dayFlow.crewClosed)  return 1;
+  // V20_145 FIX C: defensa contra flags stickys. Si hay chofer SEPARADO registrado y todavía
+  // NO se cerró → estado 2 SIEMPRE. Esto evita que un _modoCombinado=true espurio (heredado
+  // de una sesión anterior o de localStorage viejo) salte el botón "Cerrar día del chofer".
+  if(_dayFlow.choferWorkerId &&
+     _dayFlow.choferWorkerId !== _dayFlow.surqueroWorkerId &&
+     !_dayFlow.choferClosed){
+    return 2;
+  }
   // Cuadrilla cerrada — ¿chofer ya cerrado o no aplica (combinado)?
   if(_dayFlow._modoCombinado || _dayFlow.choferClosed) return 3;
   // Si no hay choferWorkerId distinto del surquero → no hay chofer separado → saltar a 3
@@ -7010,12 +7021,19 @@ function rmWorker(id){
   var i=wIdx(id); if(i<0)return;
   var name=workers[i].name;
   // V20_91_02: si era chofer/surquero, limpiar _dayFlow para no dejar punteros colgando
+  // V20_145 FIX C: además limpiar _modoCombinado y choferClosed. Sin esto el flag quedaba
+  // sticky entre rondas de escaneo (ej: usuario eligió "Chofer y Surquero combinado", luego
+  // eliminó al worker y escaneó separados → _modoCombinado seguía true → _coState() saltaba
+  // directo al estado 3 sin pasar por "Cerrar día del chofer" (estado 2).
   if(_dayFlow){
     if(_dayFlow.choferWorkerId === id){
       _dayFlow.choferScanned = false; _dayFlow.choferWorkerId = null; _dayFlow.diaIniciado = false;
+      _dayFlow.choferClosed = false; // V20_145 FIX C
+      _dayFlow._modoCombinado = false; // V20_145 FIX C
     }
     if(_dayFlow.surqueroWorkerId === id){
       _dayFlow.surqueroScanned = false; _dayFlow.surqueroWorkerId = null; _dayFlow.diaIniciado = false;
+      _dayFlow._modoCombinado = false; // V20_145 FIX C (si era el combinado, limpiar también)
     }
   }
   workers.splice(i,1);
@@ -7869,8 +7887,13 @@ function load(){
         var a=workers[i].acts[j];
         var act=resolveAct(a, true); // V8
         if(!act){ a.pay=0; continue; }
-        a.esName=act.es;
-        a.tipo=act.tipo;
+        // V20_145 FIX B: preservar valores guardados en localStorage.
+        // Antes el load() sobrescribía esName/tipo/qty/pay con valores ACTUALES del MASTER
+        // cada vez que se abría la app → si MASTER cambió entre guardado y apertura, las acts
+        // mutaban en runtime. Bug afloraba con vista por actividad (V20_141). Solo poblar
+        // campos vacíos / faltantes; respetar lo que el surquero ya capturó.
+        if(!a.esName) a.esName=act.es;
+        if(!a.tipo)   a.tipo=act.tipo;
         // V4: surcos individuales — puertas=indPies/100, acres=indPies×indAncho
         if(isActPuertas(act)){
           var _ipV4=parseFloat(a.indPies)||0;
@@ -7879,13 +7902,18 @@ function load(){
             for(var si2=0;si2<a.surcos.length;si2++) _ipV4+=parseFloat(a.surcos[si2].totalPies)||0;
           }
           // V20_14: individual = comportamiento legacy (pies/100)
-          if(_ipV4>0) a.qty=_ipV4/100;
+          // V20_145 FIX B: solo recalcular qty si no viene poblado (preserva edición del surquero).
+          if(_ipV4>0 && (!a.qty || parseFloat(a.qty)===0)) a.qty=_ipV4/100;
           var _iaV4=parseFloat(a.indAncho)||0;
-          if(_ipV4>0&&_iaV4>0) a.indAcres=(_ipV4*_iaV4)/43560;
+          if(_ipV4>0&&_iaV4>0 && !a.indAcres) a.indAcres=(_ipV4*_iaV4)/43560;
         }
-        if(act.hr){ a.pay=totalShiftHours(a)*getHRate(workers[i],act); }
-        else if(act.tipo==='$'){ a.pay=parseFloat(a.qty)||0; }
-        else{ a.pay=(parseFloat(a.qty)||0)*act.p; }
+        // V20_145 FIX B: solo recalcular pay si NO viene poblado del localStorage.
+        // a.pay puede ser 0 legítimo (Daywork con 0 cajas) — usar check explícito por undefined/null.
+        if(a.pay===undefined || a.pay===null){
+          if(act.hr){ a.pay=totalShiftHours(a)*getHRate(workers[i],act); }
+          else if(act.tipo==='$'){ a.pay=parseFloat(a.qty)||0; }
+          else{ a.pay=(parseFloat(a.qty)||0)*act.p; }
+        }
       }
     }
     var list=gEl('wlist'); list.innerHTML='';
@@ -7958,13 +7986,14 @@ function applyAutoFill(){
         }
       }
       // Solo re-filtrar ACTS, NO guardar
-      var _rVal = gVal('rancho');
+      // V20_147 FIX: trim consistente para evitar mismatch cuando MASTER tiene farm con espacios
+      var _rVal = (gVal('rancho')||'').toLowerCase().trim();
       if(_rVal){
         ACTS=[]; GRUPAL_ACTS=[];
         for(var _fi=0;_fi<ALL_ACTS.length;_fi++){
-          var _farm=(ALL_ACTS[_fi].farm||'').toLowerCase();
-          if(_farm===_rVal.toLowerCase()){
-            if((ALL_ACTS[_fi].modo||'Individual').toLowerCase()==='grupal') GRUPAL_ACTS.push(ALL_ACTS[_fi]);
+          var _farm=(ALL_ACTS[_fi].farm||'').toLowerCase().trim();
+          if(_farm===_rVal){
+            if((ALL_ACTS[_fi].modo||'Individual').toLowerCase().trim()==='grupal') GRUPAL_ACTS.push(ALL_ACTS[_fi]);
             else ACTS.push(ALL_ACTS[_fi]);
           }
         }
@@ -10155,6 +10184,8 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
         var _wKeysQ=[];
         // V20_144 FIX B: shifts puede ser [{ini:'',fin:''}] (estructura sin horario real)
         // mientras a.ini/a.fin sí tienen valor → fallback a a.ini/a.fin para que matchee la sub-col.
+        // V20_146: revertido Fix A de V20_145 — rompía PDF totalmente (push('|') no matchea keys
+        // reales en _computeFrags → celdas vacías). Restaurado el fallback colspan=N de V20_144.
         var _shHasRealQ=false;
         if(found2.shifts && found2.shifts.length){
           for(var _shiQ=0;_shiQ<found2.shifts.length;_shiQ++){
@@ -11381,11 +11412,12 @@ function showGrpPicker(){
   list.innerHTML = '';
   // V20_78: defensa adicional — filtrar SIEMPRE por rancho activo aunque GRUPAL_ACTS venga contaminado.
   // Si rancho está vacío, mostrar lista completa (admin sin rancho seleccionado).
-  var _ranchoActivo = (typeof gVal==='function' ? (gVal('rancho')||'') : '').toLowerCase();
+  // V20_147 FIX: trim consistente para matchear "eBerry " (con espacio) en MASTER
+  var _ranchoActivo = (typeof gVal==='function' ? (gVal('rancho')||'') : '').toLowerCase().trim();
   var _gListVisible = GRUPAL_ACTS;
   if(_ranchoActivo){
     _gListVisible = GRUPAL_ACTS.filter(function(a){
-      return !a.farm || (a.farm||'').toLowerCase() === _ranchoActivo;
+      return !a.farm || (a.farm||'').toLowerCase().trim() === _ranchoActivo;
     });
   }
   if(!_gListVisible.length){
@@ -14836,11 +14868,13 @@ function onSemRanchoChange(){
   if(!rancho) return;
 
   // Filtrar ALL_ACTS por farm === rancho, solo Individuales (excluir Grupales)
+  // V20_147 FIX: trim consistente para matchear cuando MASTER tiene "eBerry " con espacio
+  var _ranchoSem = (rancho||'').toLowerCase().trim();
   var idx = 0;
   for(var i=0;i<ALL_ACTS.length;i++){
-    var farm = (ALL_ACTS[i].farm||'').toLowerCase();
-    var modo = (ALL_ACTS[i].modo||'Individual').toLowerCase();
-    if(farm === rancho.toLowerCase() && modo !== 'grupal'){
+    var farm = (ALL_ACTS[i].farm||'').toLowerCase().trim();
+    var modo = (ALL_ACTS[i].modo||'Individual').toLowerCase().trim();
+    if(farm === _ranchoSem && modo !== 'grupal'){
       var opt = document.createElement('option');
       opt.value = i;
       // Gamma2-V5: Etiqueta con tipo correcto (Hora, Piezas, Daywork, $, Extra)
