@@ -35,7 +35,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_136';
+window.APP_VERSION = 'V20_138';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -1337,12 +1337,18 @@ body.readOnly [onclick*="openNewDay"]{display:none !important}
 .pill-cnt{background:#d4edda;color:#155724}
 .pill-finca{background:#fff3cd;color:#856404}
 .pill-rate{background:#e2e3e5;color:#383d41}
-.type-tag{display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700}
+.type-tag{display:inline-block;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;color:#fff}
 .type-h{background:#cce5ff;color:#004085}
 .type-p{background:#d4edda;color:#155724}
 .type-c{background:#fff3cd;color:#856404}
 .type-d{background:#f8d7da;color:#721c24}
 .type-v{background:#e2d4f5;color:#5a2d82}
+.tag-color-1{background:#1a2b8c}
+.tag-color-2{background:#5eba45}
+.tag-color-3{background:#c0392b}
+.tag-color-4{background:#d4a017}
+.tag-color-5{background:#1a7a4a}
+.tag-color-6{background:#7d3c98}
 .w-row-act{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;margin:4px 0;background:#fff;border:1px solid #e9ecef;flex-wrap:wrap}
 .w-row-act .nm-full{flex:1;font-weight:600;color:#222;white-space:normal;word-break:break-word;font-size:13px;min-width:120px}
 .w-row-act .num{font-size:11px;color:#888;background:#f0f2f5;padding:2px 6px;border-radius:8px}
@@ -8063,18 +8069,42 @@ function buildActViewGroups(){
       // donde grupales se mezclaron con individuales; _resolveActByName busca en ALL_ACTS que
       // incluye grupales; o backend devolvio grupal dentro de payload.workers[].acts.
       // NO eliminamos del modelo (workers[].acts) — solo omitimos del render para no perder data.
-      if(act && (act.modo||'').toLowerCase() === 'grupal') continue;
-      // Defensa adicional: si no resolvio act pero el esName matchea con una grupal en GRUPAL_ACTS,
-      // tambien omitir (cubre el caso donde resolveByName fallo pero el nombre sigue siendo de grupal).
-      if(!act && (a.esName || a._actEs)){
-        var _nmCheck = String(a.esName || a._actEs).toLowerCase().trim();
-        var _isGrpName = false;
-        if(typeof GRUPAL_ACTS !== 'undefined' && GRUPAL_ACTS && GRUPAL_ACTS.length){
-          for(var _gck=0; _gck<GRUPAL_ACTS.length; _gck++){
-            if(GRUPAL_ACTS[_gck] && (GRUPAL_ACTS[_gck].es||'').toLowerCase().trim() === _nmCheck){ _isGrpName = true; break; }
+      // V20_137 FIX 2: 3 filtros en cascada con logging para diagnosticar cual atrapa cada caso.
+      // Filtro 1 (V20_134_b): por act.modo === 'grupal'
+      if(act && (act.modo||'').toLowerCase().trim() === 'grupal'){
+        try { console.log('[V20_137] omitir grupal (filtro 1: por act.modo):', a.esName, 'ai:', a.ai); } catch(e){}
+        continue;
+      }
+      // Filtro 2 (V20_137 red de seguridad): por nombre en GRUPAL_ACTS — corre SIEMPRE (no solo cuando !act).
+      // Antes (V20_134_b) este filtro solo se evaluaba si act era null; ahora cubre todos los casos.
+      var _nombrePosibleGrupal = String((a.esName || a._actEs || (act && act.es) || '')).toLowerCase().trim();
+      if(_nombrePosibleGrupal && typeof GRUPAL_ACTS !== 'undefined' && GRUPAL_ACTS && GRUPAL_ACTS.length){
+        var _esGrupal2 = false;
+        for(var _grpI=0; _grpI<GRUPAL_ACTS.length; _grpI++){
+          if(GRUPAL_ACTS[_grpI] && (GRUPAL_ACTS[_grpI].es||'').toLowerCase().trim() === _nombrePosibleGrupal){
+            _esGrupal2 = true; break;
           }
         }
-        if(_isGrpName) continue;
+        if(_esGrupal2){
+          try { console.log('[V20_137] omitir grupal (filtro 2: por nombre en GRUPAL_ACTS):', a.esName, 'ai:', a.ai, 'act.modo:', (act && act.modo)); } catch(e){}
+          continue;
+        }
+      }
+      // Filtro 3 (V20_137 segunda red): por nombre en ALL_ACTS donde modo==='grupal'.
+      // Cubre el caso donde GRUPAL_ACTS no contiene la act (ej. filtrado por rancho del admin)
+      // pero ALL_ACTS si la tiene marcada como grupal en el MASTER.
+      if(_nombrePosibleGrupal && typeof ALL_ACTS !== 'undefined' && ALL_ACTS && ALL_ACTS.length){
+        var _esGrupalGlobal = false;
+        for(var _allI=0; _allI<ALL_ACTS.length; _allI++){
+          if(ALL_ACTS[_allI] && (ALL_ACTS[_allI].es||'').toLowerCase().trim() === _nombrePosibleGrupal
+             && (ALL_ACTS[_allI].modo||'').toLowerCase().trim() === 'grupal'){
+            _esGrupalGlobal = true; break;
+          }
+        }
+        if(_esGrupalGlobal){
+          try { console.log('[V20_137] omitir grupal (filtro 3: por nombre en ALL_ACTS):', a.esName, 'ai:', a.ai); } catch(e){}
+          continue;
+        }
       }
       // Si no hay act, sintetizar fallback mínimo para no perder la fila
       var actName = (act && act.es) ? act.es : (a.esName || '(actividad sin nombre)');
@@ -8107,24 +8137,27 @@ function buildActViewGroups(){
   return out;
 }
 
-// V20_126: tag visual por tipo de actividad (lee del MASTER: variable + payType + hr)
-function _getTypeTag(g){
-  if(g.payType === 'Daywork') return {cls:'type-d', label:'DAYWORK'};
-  if(g.tipo === 'hora') return {cls:'type-h', label:'HORAS'};
-  var v = (g.variable||'').toUpperCase();
-  if(v === 'VARBOX') return {cls:'type-c', label:'CAJA'};
-  if(v === 'VARDOOR') return {cls:'type-v', label:'PUERTAS'};
-  return {cls:'type-p', label:'PIEZA'};
+// V20_138: tag visual 100% data-driven — label = payType del MASTER (col D) en MAYÚSCULAS, color por hash a paleta de 6
+function _getTypeTag(g) {
+  var pt = (g && g.payType ? g.payType : '?').toString().trim().toUpperCase();
+  var hash = 0;
+  for (var i = 0; i < pt.length; i++) hash = (hash + pt.charCodeAt(i)) | 0;
+  var colorIdx = (Math.abs(hash) % 6) + 1;
+  return {
+    cls: 'type-tag tag-color-' + colorIdx,
+    label: pt || '?'
+  };
 }
 
-function _getTypeTagFromAct(act){
-  if(!act) return {cls:'type-p', label:'PIEZA'};
-  if(act.payType === 'Daywork') return {cls:'type-d', label:'DAYWORK'};
-  if(act.hr) return {cls:'type-h', label:'HORAS'};
-  var v = (act.variable||'').toUpperCase();
-  if(v === 'VARBOX') return {cls:'type-c', label:'CAJA'};
-  if(v === 'VARDOOR') return {cls:'type-v', label:'PUERTAS'};
-  return {cls:'type-p', label:'PIEZA'};
+function _getTypeTagFromAct(act) {
+  var pt = (act && act.payType ? act.payType : '?').toString().trim().toUpperCase();
+  var hash = 0;
+  for (var i = 0; i < pt.length; i++) hash = (hash + pt.charCodeAt(i)) | 0;
+  var colorIdx = (Math.abs(hash) % 6) + 1;
+  return {
+    cls: 'type-tag tag-color-' + colorIdx,
+    label: pt || '?'
+  };
 }
 
 // V20_126: vista por actividad — acordeones agrupados con tipo, horario, conteo, finca, rate
@@ -11654,14 +11687,20 @@ function renderGrpPart(gi){
   var g  = grpActs[gi]; if(!g) return;
   // V20_111 FIX 4: dedup workers por ID en render para evitar chips duplicados con mismo onclick
   // V20_134_a FIX 4: filas con nombre COMPLETO (no truncar a 2 tokens) + estilo similar a individuales
-  // V20_134_c: marcar visualmente workers con horario ya traslapado (doble protección — la alerta
-  // checkOverlapsInWorker sigue activa al confirmar). Si la grupal no tiene horario aún, no se marca.
+  // V20_137 FIX 1: OCULTAR workers con horario traslapado (V20_134_c solo los marcaba con badge amarillo).
+  // Cita Serafin: "ya no deberia aparecer en la lista para agregarlos... por logica ya no debian
+  // aparecer el nombre del busero y el surquero porque ya entraria en un translape de horario".
+  // Workers YA seleccionados (on=true) se mantienen visibles aunque tengan overlap (para poder quitarlos).
+  // Si la grupal NO tiene horario (gIni o gFin vacios) -> no se aplica filtro, se muestran todos.
+  // CSS .gp-row.overlap y .gp-overlap-badge se conservan en el archivo pero sin uso (reversibilidad).
+  // checkOverlapsInWorker (capa 2 - togGrpPart al confirmar) sigue activa como red de seguridad.
   var gIni = (g.vars && g.vars.ini) || '';
   var gFin = (g.vars && g.vars.fin) || '';
   var canCheck = !!(gIni && gFin);
   var seen = {};
   var h  = '<div class="gpl-rows">';
   var any = false;
+  var hiddenCount = 0; // V20_137 FIX 1: contar workers ocultos por overlap para nota informativa
   for(var i=0;i<workers.length;i++){
     var w   = workers[i];
     if(!w) continue;
@@ -11670,23 +11709,27 @@ function renderGrpPart(gi){
       continue;
     }
     seen[w.id] = true;
-    any = true;
     var on  = g.participantes.indexOf(w.id)>=0;
-    var mark = on ? '✓' : '○';
-    // V20_134_c: solo marcamos overlap si el worker NO está ya en esta grupal (no se traslapa consigo mismo)
-    var ovInfo = (canCheck && !on) ? _workerHasOverlapWith(w, gIni, gFin, gi) : null;
-    var rowCls = 'gp-row' + (on?' on':'') + (ovInfo?' overlap':'');
-    var badge  = '';
-    if(ovInfo){
-      var badgeTxt = '⚠️ Translape: ' + (ovInfo.actName||'') + ' ' + to12h(ovInfo.ini) + '→' + to12h(ovInfo.fin);
-      badge = '<span class="gp-overlap-badge" title="'+esc(badgeTxt)+'">'+esc(badgeTxt)+'</span>';
+    // V20_137 FIX 1: si NO esta seleccionado Y tiene overlap -> OCULTAR (continue, no render).
+    if(canCheck && !on){
+      var _ovHide = _workerHasOverlapWith(w, gIni, gFin, gi);
+      if(_ovHide){ hiddenCount++; continue; }
     }
+    any = true;
+    var mark = on ? '✓' : '○';
+    var rowCls = 'gp-row' + (on?' on':'');
     h += '<div class="'+rowCls+'" onclick="togGrpPart('+gi+','+w.id+')">'
        + '<span class="gp-mark">'+mark+'</span>'
-       + '<span class="gp-nm">'+esc(w.name||'')+badge+'</span>'
+       + '<span class="gp-nm">'+esc(w.name||'')+'</span>'
        + '</div>';
   }
   h += '</div>';
+  // V20_137 FIX 1: nota inferior si se ocultaron workers por overlap
+  if(hiddenCount > 0){
+    h += '<div style="text-align:center;padding:10px;color:#666;font-size:11px;font-style:italic">'
+       + 'ℹ️ ' + hiddenCount + ' trabajador(es) oculto(s) por translape de horario.'
+       + '</div>';
+  }
   el.innerHTML = any ? h : '<span style="color:var(--gr);font-size:12px">Agrega trabajadores primero</span>';
 }
 
