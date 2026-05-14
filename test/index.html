@@ -35,7 +35,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_166';
+window.APP_VERSION = 'V20_167';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -10305,16 +10305,14 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     var _gp=grpParents[gp1_];
     var _NG=_gp.subs.length;
     var _gpFincaTag=_gp.finca?'<br><span style="font-weight:400;font-size:7px;opacity:.9">'+esc(_gp.finca)+'</span>':'';
-    // V20_144 FIX A: cuando columna VarDoor capturada por acres (col H = label'Acres'),
-    // mostrar suma de acres en header debajo de "Doors p/p". NO se calcula $ total — solo cantidad.
-    var _gpAcresTag = (_gp.isAcresInput && _gp.grandAcres>0)
-      ? '<br><span style="font-weight:400;font-size:10px;color:#1a7a4a">'+_gp.grandAcres.toFixed(2)+' acres</span>'
-      : '';
+    // V20_167: eliminado _gpAcresTag del header (V20_144 FIX A revertido).
+    // Los acres se muestran ÚNICAMENTE en la fila TOTAL (línea ~10602) para paridad con columnas individuales VarDoor.
+    // Antes: Pennrose duplicaba acres en header + TOTAL; Dewitt no. Ahora ambos casos solo en TOTAL.
     if(_NG===1){
-      th1+='<th rowspan="2" style="text-align:center;min-width:80px">'+_gp.label+'<br><span style="font-weight:400;font-size:9px">'+_gp.unitLabel+'</span>'+_gpAcresTag+_gpFincaTag+'</th>';
+      th1+='<th rowspan="2" style="text-align:center;min-width:80px">'+_gp.label+'<br><span style="font-weight:400;font-size:9px">'+_gp.unitLabel+'</span>'+_gpFincaTag+'</th>';
     } else {
       _hasSub=true;
-      th1+='<th colspan="'+_NG+'" style="text-align:center;min-width:'+(80*_NG)+'px">'+_gp.label+'<br><span style="font-weight:400;font-size:9px">'+_gp.unitLabel+'</span>'+_gpAcresTag+_gpFincaTag+'</th>';
+      th1+='<th colspan="'+_NG+'" style="text-align:center;min-width:'+(80*_NG)+'px">'+_gp.label+'<br><span style="font-weight:400;font-size:9px">'+_gp.unitLabel+'</span>'+_gpFincaTag+'</th>';
       for(var gs1_=0;gs1_<_NG;gs1_++){
         var _gsub=_gp.subs[gs1_];
         var _grango=(_gsub.ini||_gsub.fin)?(to12h(_gsub.ini||'')+'-'+to12h(_gsub.fin||'')):'';
