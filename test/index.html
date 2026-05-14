@@ -35,7 +35,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_168';
+window.APP_VERSION = 'V20_169';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -8556,7 +8556,7 @@ function _formatQtyForCell(wkr, g, isHora){
   var unit = '';
   if(pt === 'pieces' || pt === 'piece') unit = ' piezas';
   else if(pt === 'boxes' || pt === 'box') unit = ' cajas';
-  else if(pt === 'daywork') unit = (q === 1 ? ' día' : ' días');
+  else if(pt === 'daywork') unit = ' piezas';  // V20_169: Daywork muestra "X piezas" (paridad con Pieces). El concepto "días" lo asumía Pata sin base.
   else {
     var v = (g && g.variable || '').toString().toUpperCase();
     if(v === 'VARDOOR') unit = ' puertas';
