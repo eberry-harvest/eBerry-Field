@@ -35,7 +35,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_154';
+window.APP_VERSION = 'V20_155';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -16683,29 +16683,57 @@ function checkInManualStart(){
 }
 
 function onCheckInManualAC(value){
+  // V20_155: restauración de lógica V20_91 onAC adaptada al bottom-sheet.
+  // Buckets: crewRes (NAMES, máx 5) + otherRes (ALL_WORKERS si searchAll, máx 5).
+  // searchAll = words.length>=2 && última palabra >=2 chars. Admin ve TODOS desde el inicio (sin requerir 2 palabras).
   try{
     var pop = gEl('checkInACPop'); if(!pop) return;
     var v = (value||'').trim().toLowerCase();
     if(v.length < 2){ pop.innerHTML=''; pop.style.display='none'; return; }
-    var crewKey = '';
-    try{ crewKey = ((currentUser && currentUser.crew)||'').toString().toLowerCase().replace(/\s*\d+\s*$/,'').trim(); }catch(_){}
+    var words = v.split(/\s+/).filter(function(w){return w.length>0;});
     var isAdm = !!(currentUser && currentUser.isAdmin);
-    var matches = [];
-    var hiddenAlreadyIn = 0; // V20_150: contador de workers omitidos por estar ya en workers[]
-    for(var i=0; i<ALL_WORKERS.length && matches.length<12; i++){
-      var w = ALL_WORKERS[i]; if(!w || !w.name) continue;
-      if(!isAdm && crewKey){
-        var wc = (w.crew||'').toString().toLowerCase().replace(/\s*\d+\s*$/,'').trim();
-        if(wc && wc!==crewKey) continue;
+
+    // Helper: ¿todas las palabras hacen match en el nombre?
+    function matchesAllWords(nameLower){
+      for(var wi=0;wi<words.length;wi++){
+        if(nameLower.indexOf(words[wi])<0) return false;
       }
-      var nm = w.name.toLowerCase();
-      if(nm.indexOf(v) === -1) continue;
-      // V20_150: filtro REAL anti-duplicado (antes alreadyAdded era local a onAC() → typeof daba 'undefined'
-      // → filtro no se aplicaba → Serafín re-seleccionaba workers ya registrados).
-      if(_isAlreadyCheckedIn(w.name, w.empNum)){ hiddenAlreadyIn++; continue; }
-      matches.push(w);
+      return true;
     }
-    if(!matches.length){
+
+    var hiddenAlreadyIn = 0; // V20_150: contador de workers omitidos por estar ya en workers[]
+
+    // 1) Buscar en crew actual (NAMES) — máx 5
+    var crewRes=[];
+    for(var i=0;i<NAMES.length;i++){
+      var nmCrew = NAMES[i];
+      if(matchesAllWords(nmCrew.toLowerCase())){
+        if(_isAlreadyCheckedIn(nmCrew)){ hiddenAlreadyIn++; continue; }
+        crewRes.push(nmCrew);
+      }
+      if(crewRes.length>=5)break;
+    }
+
+    // 2) searchAll: si hay >=2 palabras y la última tiene >=2 letras, buscar también en ALL_WORKERS.
+    //    Admin: ve TODOS desde el inicio (sin requerir 2 palabras) — paridad con V20_91.
+    var otherRes=[];
+    var searchAll = (words.length>=2 && words[words.length-1].length>=2) || isAdm;
+    if(searchAll){
+      for(var i2=0;i2<ALL_WORKERS.length;i2++){
+        var aw=ALL_WORKERS[i2]; if(!aw || !aw.name) continue;
+        if(matchesAllWords(aw.name.toLowerCase())){
+          // No duplicar los del crew actual
+          var inCrew=false;
+          for(var c=0;c<crewRes.length;c++){ if(crewRes[c]===aw.name){inCrew=true;break;} }
+          if(inCrew) continue;
+          if(_isAlreadyCheckedIn(aw.name, aw.empNum)){ hiddenAlreadyIn++; continue; }
+          otherRes.push({name:aw.name, crew:aw.crew||''});
+        }
+        if(otherRes.length>=5)break;
+      }
+    }
+
+    if(!crewRes.length && !otherRes.length){
       // V20_150: si la única razón de "sin coincidencias" es que ya están todos registrados,
       // mostrar mensaje informativo en vez del genérico "Sin coincidencias".
       var emptyMsg = (hiddenAlreadyIn > 0)
@@ -16714,16 +16742,32 @@ function onCheckInManualAC(value){
       pop.innerHTML = '<div style="padding:12px;color:var(--gr);font-size:13px">'+esc(emptyMsg)+'</div>';
       pop.style.display='block'; return;
     }
-    // V20_91_17: safeHighlight necesita RegExp con grupo de captura, no string crudo.
-    // Bug previo: pasábamos value (string) → safeHighlight hacía text.replace(string, '\x00$1\x01')
-    // → como no hay grupo, $1 quedaba literal en salida → "$1" visible en lugar de letras.
+
+    // V20_91_17: safeHighlight necesita RegExp con grupo de captura — escapamos cada palabra.
+    var rxParts=[];
+    for(var rp=0;rp<words.length;rp++){
+      rxParts.push(words[rp].replace(/[.*+?^${}()|[\]\\]/g,'\\$&'));
+    }
     var rxHi;
-    try { rxHi = new RegExp('('+value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+')','gi'); } catch(_){ rxHi = null; }
+    try { rxHi = new RegExp('('+rxParts.join('|')+')','gi'); } catch(_){ rxHi = null; }
+
     var html = '';
-    for(var k=0; k<matches.length; k++){
-      var nmEsc = esc(matches[k].name).replace(/'/g,"\\'");
-      var nmHi  = (rxHi && typeof safeHighlight==='function') ? safeHighlight(matches[k].name, rxHi) : esc(matches[k].name);
-      html += '<div class="acItem" onclick="checkInManualSelect(\''+nmEsc+'\')">'+nmHi+'</div>';
+    // Crew actual primero
+    for(var k=0;k<crewRes.length;k++){
+      var nmEsc1 = esc(crewRes[k]).replace(/'/g,"\\'");
+      var nmHi1  = (rxHi && typeof safeHighlight==='function') ? safeHighlight(crewRes[k], rxHi) : esc(crewRes[k]);
+      html += '<div class="acItem" onclick="checkInManualSelect(\''+nmEsc1+'\')">'+nmHi1+'</div>';
+    }
+    // Separador si hay resultados de otros crews
+    if(crewRes.length && otherRes.length){
+      html += '<div style="padding:5px 13px;font-size:10px;font-weight:700;color:var(--gr);text-transform:uppercase;letter-spacing:.5px;border-top:1px solid var(--bd);background:var(--lt)">Otros crews</div>';
+    }
+    // Otros crews
+    for(var k2=0;k2<otherRes.length;k2++){
+      var nmEsc2 = esc(otherRes[k2].name).replace(/'/g,"\\'");
+      var nmHi2  = (rxHi && typeof safeHighlight==='function') ? safeHighlight(otherRes[k2].name, rxHi) : esc(otherRes[k2].name);
+      html += '<div class="acItem" onclick="checkInManualSelect(\''+nmEsc2+'\')">'+nmHi2
+        +'<span style="font-size:10px;color:var(--gr);margin-left:6px">'+esc(otherRes[k2].crew)+'</span></div>';
     }
     // V20_150: nota informativa si se ocultaron workers ya registrados
     if(hiddenAlreadyIn > 0){
