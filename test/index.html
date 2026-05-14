@@ -7,7 +7,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Pennrose">
+<meta name="apple-mobile-web-app-title" content="eBerry">
 <meta name="theme-color" content="#1a2b8c">
 <!-- V20_91_21: Iconos reales de eBerry (logo fresa) en vez del emoji 🫐 -->
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
@@ -35,7 +35,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_158';
+window.APP_VERSION = 'V20_161';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -3790,6 +3790,8 @@ function _coState(){
 
 // V20_91_20: render del botón Check-out con switch por estado en el slot nuevo de Parámetros.
 // El slot viejo en Trabajadores (#checkOutDiaWrap) se vacía — Serafín 2026-05-01 quitó toda la UI de cierre de Trabajadores.
+// V20_160: re-arquitectura. Estados 1, 2 y 3 muestran UN SOLO botón rojo "🏁 Check-out" que abre
+// el modal `coOptionsOv` con 2 opciones (Individual / Grupal). Estado 4 conserva chip + Re-abrir día.
 function _renderCheckOutBtn(){
   // Vaciar slot legacy en pestaña Trabajadores
   var oldWrap = gEl('checkOutDiaWrap');
@@ -3801,24 +3803,64 @@ function _renderCheckOutBtn(){
     return;
   }
   var st = _coState();
-  var combo = !!_dayFlow._modoCombinado;
   var html = '';
   var baseStyle = 'width:100%;min-height:50px;border:0;border-radius:8px;font-family:DM Sans,sans-serif;font-weight:700;font-size:15px;cursor:pointer';
-  if(st === 1){
-    html = '<button class="btn" style="'+baseStyle+';background:#c0392b;color:#fff;border:1.5px solid #c0392b" onclick="confirmCheckOut(\'coCuadrilla\')">🏁 Check-out cuadrilla</button>';
-  } else if(st === 2){
-    // V20_149: estado 2 ahora es SURQUERO (antes era chofer)
-    var lbl = combo ? '🚌+👤 Cerrar mi día (chofer+surquero)' : '👤 Cerrar mi sesión (surquero)';
-    html = '<button class="btn" style="'+baseStyle+';background:#27ae60;color:#fff;border:1.5px solid #27ae60" onclick="confirmCheckOut(\'coSurq\')">'+esc(lbl)+'</button>';
-  } else if(st === 3){
-    // V20_149: estado 3 ahora es CHOFER (antes era surquero)
-    html = '<button class="btn" style="'+baseStyle+';background:#e67e22;color:#fff;border:1.5px solid #e67e22" onclick="confirmCheckOut(\'coChofer\')">🚌 Cerrar día del chofer</button>';
+  if(st === 1 || st === 2 || st === 3){
+    // V20_160: botón único — el modal coOptionsOv decide Individual vs Grupal
+    html = '<button class="btn" style="'+baseStyle+';background:#c0392b;color:#fff;border:1.5px solid #c0392b" onclick="openCheckOutOptions()">🏁 Check-out</button>';
   } else if(st === 4){
     // V20_132: chip "día cerrado" + botón "Re-abrir día" (admin o PIN admin)
     html = '<button disabled class="btn" style="'+baseStyle+';background:#95a5a6;color:#fff;cursor:not-allowed">🔒 Día cerrado a las '+esc(_dayFlow.checkOutTime||'--:--')+'</button>'+
            '<button class="btn" style="'+baseStyle+';margin-top:8px;background:#fff;color:#c0392b;border:1.5px solid #c0392b" onclick="reopenDay()">🔓 Re-abrir día (admin)</button>';
   }
   slot.innerHTML = html;
+}
+
+// V20_160: abre el modal de opciones de check-out (Individual vs Grupal).
+function openCheckOutOptions(){
+  if(window._readOnlyMode){ toast('🔒 Modo lectura'); return; }
+  if(!_dayFlow || !_dayFlow.diaIniciado){ toast('⚠️ Día no iniciado'); return; }
+  if(_dayFlow.checkOutDone){ toast('⚠️ Día ya cerrado'); return; }
+  var ov = gEl('coOptionsOv'); if(!ov) return;
+  ov.classList.add('on');
+}
+
+// V20_160: opción "Grupal" del modal — reutiliza el flujo coCuadrilla existente.
+function coOptionGrupal(){
+  try { var ov = gEl('coOptionsOv'); if(ov) ov.classList.remove('on'); } catch(_){}
+  try { confirmCheckOut('coCuadrilla'); } catch(e){ console.warn('coOptionGrupal',e); }
+}
+
+// V20_160: opción "Individual" del modal — abre bottom-sheet en modo checkOut para identificar
+// al worker (QR / Manual / FaceID) y cerrar SU día via _applyCheckOutForWorker.
+function coOptionIndividual(){
+  try { var ov = gEl('coOptionsOv'); if(ov) ov.classList.remove('on'); } catch(_){}
+  if(window._readOnlyMode){ toast('🔒 Modo lectura'); return; }
+  if(!_dayFlow || !_dayFlow.diaIniciado){ toast('⚠️ Día no iniciado'); return; }
+  if(_dayFlow.checkOutDone){ toast('⚠️ Día ya cerrado'); return; }
+  _cisMode = 'checkOut';
+  _cisRole = 'trabajador';
+  if(typeof openCheckInSheet === 'function'){
+    // Forzar rol trabajador, reusando todo el bottom-sheet. El título se ajusta abajo.
+    openCheckInSheet('trabajador');
+    // V20_160: parchamos el título / contador del sheet para que diga "Check-out individual"
+    try {
+      var titleEl = gEl('cisTitle');
+      if(titleEl) titleEl.textContent = '🏁 Check-out individual';
+      var cnt = gEl('cisCount');
+      if(cnt){
+        var nOpen = 0;
+        for(var i=0;i<workers.length;i++){
+          if(workers[i].checkInTime && !workers[i].checkOutLocked) nOpen++;
+        }
+        cnt.style.display = '';
+        cnt.textContent = '('+nOpen+' por cerrar)';
+      }
+    } catch(_){}
+  } else {
+    toast('⚠️ Bottom-sheet no disponible');
+    _cisMode = '';
+  }
 }
 
 // V20_91_20: arranca el flow del check-out con QR según el modo del estado actual.
@@ -6045,6 +6087,64 @@ function onQRSuccess(decoded){
       _qrMode = 'trabajador';
       try { stopQR(); } catch(_){}
       try { toast('⚠️ Error: '+(e&&e.message||'cierre surquero falló')); } catch(_){}
+      return;
+    }
+  }
+
+  // V20_160: branch coIndividual — check-out individual de UN worker identificado por QR.
+  // Se invoca desde el modal coOptionsOv → coOptionIndividual → checkInScanQR. Match por empNum
+  // (preferido) o por nombre case-insensitive. Modo continuo: NO cierra la cámara para que el
+  // surquero pueda cerrar varios uno tras otro hasta tocar el botón X manualmente.
+  if(_qrMode === 'coIndividual'){
+    try {
+      var _qrEmpCI = String(qrEmpNum||'').trim();
+      var _qrNmCI  = String(qrName||'').toLowerCase().trim();
+      var _foundCI = null;
+      for(var _iCI=0; _iCI<workers.length; _iCI++){
+        var _wCI = workers[_iCI]; if(!_wCI) continue;
+        var _wEmpCI = String(_wCI.empNum||'').trim();
+        var _wNmCI  = String(_wCI.name||'').toLowerCase().trim();
+        if((_qrEmpCI && _wEmpCI && _qrEmpCI === _wEmpCI) || (_qrNmCI && _wNmCI && _qrNmCI === _wNmCI)){
+          _foundCI = _wCI; break;
+        }
+      }
+      if(!_foundCI){
+        setQRStatus('⚠️ '+esc(qrName||'Worker')+' no está registrado hoy','err');
+        _scheduleQRStatusReset(3000);
+        return;
+      }
+      if(_foundCI.checkOutLocked){
+        setQRStatus('⚠️ '+esc(_foundCI.name)+' ya cerró su día','err');
+        _scheduleQRStatusReset(3000);
+        return;
+      }
+      var _hhCI = (typeof _hhmmNow==='function') ? _hhmmNow() : '';
+      if(typeof _applyCheckOutForWorker === 'function'){
+        _applyCheckOutForWorker(_foundCI, _hhCI);
+      }
+      if(typeof autoSave === 'function') autoSave();
+      try { updCheckInOutDisplay(_foundCI.id); } catch(_){}
+      try { _renderWorkerCheckOutBtn(_foundCI.id); } catch(_){}
+      try { _renderHorarioLocks(); } catch(_){}
+      try { _renderCheckOutBtn(); } catch(_){}
+      try { _updCheckInBtnState(); } catch(_){}
+      try { renderActiveWorkersInAbsences(); } catch(_){}
+      // Refresh tarjeta del worker (act rows con fin readonly)
+      try {
+        var _acCI = gEl('ac'+_foundCI.id);
+        if(_acCI){
+          _acCI.innerHTML = '';
+          for(var _iaCI=0; _iaCI<_foundCI.acts.length; _iaCI++) mkActRow(_foundCI.id, _iaCI);
+        }
+      } catch(_){}
+      setQRStatus('✓ '+_foundCI.name+' cerrado a las '+_hhCI,'ok');
+      _scheduleQRStatusReset(2000);
+      // NO cierra cámara — modo continuo (el surquero cierra el modal cuando termine).
+      return;
+    } catch(e){
+      console.warn('[V20_160] coIndividual error', e);
+      setQRStatus('⚠️ Error al cerrar individual','err');
+      _scheduleQRStatusReset(3000);
       return;
     }
   }
@@ -8407,13 +8507,13 @@ function renderWlistByActivity(){
       html += '<div class="w-row-act">';
       html += '  <div class="nm-full">'+esc(wkr.name)+'</div>';
       if(wkr.empNum) html += '  <span class="num">#'+esc(wkr.empNum)+'</span>';
-      // V20_156: cuadrito qty redundante eliminado del render (el botón Editar ya permite cambiar qty via prompt).
-      // onActQtyChange, editActivityWorker, CSS .qty-input-act preservados (pueden usarse en otros lados).
-      html += '  <span class="pay-act">$'+(+wkr.pay||0).toFixed(2)+'</span>';
-      // V20_152 FIX 4: botón Quitar + botón Editar individual (pedido de Serafín "POR SI HAY QUE CAMBIAR LAS PIEZAS!").
-      // V20_157: ocultar "Editar" individual cuando la actividad es Hora — pay se calcula desde horario (ini-fin × rate),
-      // no hay qty manual que editar. Para cambiar horario usar el botón Editar del HEADER (V20_141) que afecta a todo el grupo.
-      // Detección 3 capas: (1) g.tipo === 'hora', (2) g.payType === 'hours', (3) act resuelto + _derivarTipoActividad.
+      // V20_161: render condicional según estado del worker.
+      //   - Hora: solo nombre + #empNum + pay + Quitar (sin cuadrito, sin Editar).
+      //   - No-Hora con qty=0 / vacío: cuadrito qty con placeholder data-driven (col H MASTER) + Quitar (sin Editar).
+      //   - No-Hora con qty>0: pay $X.XX + Quitar + ✏️ Editar.
+      // V20_157: detección Hora 3 capas (1) g.tipo === 'hora', (2) g.payType === 'hours', (3) act resuelto + _derivarTipoActividad.
+      // V20_139: placeholder del cuadrito leído desde col H del MASTER via getRequiredInputs (motor V20_27).
+      // V20_152: editActivityWorker individual via prompt (qty>0).
       var _tipoLow = (g.tipo || '').toString().toLowerCase().trim();
       var _isHora = (_tipoLow === 'hora');
       if(!_isHora && (g.payType || '').toString().toLowerCase().trim() === 'hours') _isHora = true;
@@ -8426,9 +8526,34 @@ function renderWlistByActivity(){
           }
         } catch(e){}
       }
+      // V20_161: detectar si worker ya tiene qty capturada
+      var _wkrQty = parseFloat(wkr.qty) || 0;
+      var _hasQty = _wkrQty > 0;
+      if(_isHora || _hasQty){
+        // Hora siempre muestra pay; no-Hora con qty>0 también muestra pay calculado.
+        html += '  <span class="pay-act">$'+(+wkr.pay||0).toFixed(2)+'</span>';
+      } else {
+        // No-Hora sin qty → cuadrito para teclear directo (placeholder data-driven col H MASTER).
+        var phText = '0';
+        try {
+          var actDef2 = (g.ai != null && ACTS[g.ai]) ? ACTS[g.ai] : null;
+          if(!actDef2 && g.actName && typeof _resolveActByName === 'function') actDef2 = _resolveActByName(g.actName);
+          if(actDef2 && typeof getRequiredInputs === 'function'){
+            var reqInps = getRequiredInputs(actDef2);
+            if(reqInps && reqInps[0]){
+              phText = reqInps[0].label || reqInps[0].placeholder || '0';
+            }
+          }
+        } catch(e){}
+        // Daywork: default 1 día (no placeholder)
+        var isDay = (g.payType||'').toString().toLowerCase().trim() === 'daywork';
+        var inputAttrs = isDay ? 'value="1"' : 'placeholder="'+esc(phText)+'"';
+        html += '  <input class="qty-input-act" type="number" min="0" step="any" ' + inputAttrs + ' onchange="onActQtyChange(' + wkr.id + ',' + wkr.actIdx + ',this.value,this)">';
+      }
       html += '  <div class="w-row-act-btns">';
       html += '    <button class="del-act" onclick="onActWorkerRemove('+wkr.id+','+wkr.actIdx+')">Quitar</button>';
-      if(!_isHora){
+      // V20_161: Editar solo si NO es Hora Y SÍ tiene qty (qty>0).
+      if(!_isHora && _hasQty){
         html += '    <button class="edit-act-worker" onclick="editActivityWorker('+wkr.id+','+wkr.actIdx+')" title="Editar la cantidad de este trabajador">✏️ Editar</button>';
       }
       html += '  </div>';
@@ -12951,16 +13076,12 @@ function renderActiveWorkersInAbsences(){
     var role = w.role || '';
     var roleEm = (role === 'chofer' ? '🚌 ' : (role === 'surquero' ? '👤 ' : (role === 'choferSurquero' ? '🚌👤 ' : '')));
     var empNumTxt = w.empNum ? ' · #' + esc(w.empNum) : '';
-    // V20_154: botón check-out individual aparece si worker tiene check-in pero NO check-out lockeado
-    var canCheckOut = w.checkInTime && !w.checkOutLocked;
-    var coBtn = '';
-    if(canCheckOut){
-      coBtn = '<button class="active-worker-co" data-wid="' + w.id + '">🏁 Cerrar día</button>';
-    }
+    // V20_160: botones individuales `.active-worker-co` eliminados. El flujo de check-out
+    // ahora vive solo en Parámetros (botón único "🏁 Check-out" + modal coOptionsOv con
+    // 2 opciones Individual/Grupal). El botón "🗑️ Quitar" se conserva.
     html += '<div class="active-worker-row" data-wid="' + w.id + '">'
       + '<div class="active-worker-info">' + roleEm + esc(w.name) + empNumTxt + ckIn + ckOut + '</div>'
       + '<div class="active-worker-btns">'
-      + coBtn
       + '<button class="active-worker-rm" data-wid="' + w.id + '">🗑️ Quitar</button>'
       + '</div>'
       + '</div>';
@@ -12976,21 +13097,7 @@ function renderActiveWorkersInAbsences(){
       else if(typeof rmWorker === 'function') rmWorker(wid);
     });
   }
-  // V20_154: Wire botón Check-out individual
-  var coBtns = cont.querySelectorAll('.active-worker-co');
-  for(var c=0; c<coBtns.length; c++){
-    coBtns[c].addEventListener('click', function(ev){
-      var wid = parseInt(ev.currentTarget.getAttribute('data-wid'), 10);
-      if(isNaN(wid)) return;
-      if(typeof confirmCheckOutWorker === 'function'){
-        confirmCheckOutWorker(wid);
-        // Refresh list tras la acción (confirmCheckOutWorker es síncrono salvo el confirm)
-        setTimeout(function(){ try{ renderActiveWorkersInAbsences(); }catch(e){} }, 200);
-      } else {
-        if(typeof toast === 'function') toast('⚠️ Función check-out no disponible');
-      }
-    });
-  }
+  // V20_160: listener `.active-worker-co` eliminado (los botones ya no se generan).
 }
 
 function toggleAusCard(header){
@@ -16551,6 +16658,7 @@ var _pendingManualRole = null;   // V20_91_16: rol que se va a registrar (chofer
 var _reopenAfterAdd    = false;  // bandera: reabrir el sheet tras un add exitoso (solo trabajador)
 var _skipSheetReopen   = true;   // V20_134_b1: si true, no se reabre el bottom-sheet entre escaneos (velocidad de captura). Cambiar a false para volver al flujo V20_91_14.
 var _cisRole           = 'trabajador'; // V20_91_16: rol activo del bottom-sheet
+var _cisMode           = '';            // V20_160: '' = check-in normal | 'checkOut' = sheet en modo check-out individual
 
 function _updCheckInBtnState(){
   var btn = gEl('btnOpenCheckIn'); if(!btn) return;
@@ -16655,12 +16763,22 @@ function closeCheckInSheet(){
     var pop = gEl('checkInACPop'); if(pop){ pop.style.display='none'; pop.innerHTML=''; }
     var hint = gEl('checkInConfirmHint'); if(hint) hint.style.display='none';
     _cisRole = 'trabajador'; // V20_91_16: reset al cerrar para no heredar modo
+    _cisMode = '';            // V20_160: reset al cerrar para no heredar modo check-out
     // V20_105 FASE A: ref a _forceLapiz eliminada
   }catch(e){ console.warn('closeCheckInSheet',e); }
 }
 
 function checkInScanQR(){
   try{
+    // V20_160: rama check-out individual — arranca cámara con _qrMode='coIndividual'
+    if(_cisMode === 'checkOut'){
+      _cisMode = ''; // reset antes de cerrar el sheet (closeCheckInSheet también limpia)
+      _reopenAfterAdd = false;
+      var sheetCO = gEl('checkInSheet'); if(sheetCO) sheetCO.classList.remove('show');
+      _qrMode = 'coIndividual';
+      if(typeof startQR === 'function') startQR();
+      return;
+    }
     var roleSnapshot = _cisRole || 'trabajador';
     _reopenAfterAdd = (roleSnapshot === 'trabajador'); // chofer/surquero/dual son one-shot
     closeCheckInSheet();
@@ -16695,6 +16813,39 @@ function onCheckInManualAC(value){
         if(nameLower.indexOf(words[wi])<0) return false;
       }
       return true;
+    }
+
+    // V20_160: rama check-out individual — solo workers de workers[] que NO estén cerrados.
+    if(_cisMode === 'checkOut'){
+      var coRes = [];
+      for(var iCO=0; iCO<workers.length; iCO++){
+        var wCO = workers[iCO]; if(!wCO || !wCO.name) continue;
+        if(wCO.checkOutLocked) continue;
+        if(!matchesAllWords(wCO.name.toLowerCase())) continue;
+        coRes.push(wCO);
+        if(coRes.length >= 8) break;
+      }
+      if(!coRes.length){
+        pop.innerHTML = '<div style="padding:12px;color:var(--gr);font-size:13px">Sin trabajadores por cerrar que coincidan</div>';
+        pop.style.display='block'; return;
+      }
+      var rxPartsCO=[];
+      for(var rpCO=0; rpCO<words.length; rpCO++){
+        rxPartsCO.push(words[rpCO].replace(/[.*+?^${}()|[\]\\]/g,'\\$&'));
+      }
+      var rxHiCO; try { rxHiCO = new RegExp('('+rxPartsCO.join('|')+')','gi'); } catch(_){ rxHiCO = null; }
+      var htmlCO = '';
+      for(var kCO=0; kCO<coRes.length; kCO++){
+        var wInfoCO = coRes[kCO];
+        var nmEscCO = esc(wInfoCO.name).replace(/'/g,"\\'");
+        var nmHiCO  = (rxHiCO && typeof safeHighlight==='function') ? safeHighlight(wInfoCO.name, rxHiCO) : esc(wInfoCO.name);
+        var ckInTxt = wInfoCO.checkInTime ? ' · 🔒 '+esc(wInfoCO.checkInTime) : '';
+        htmlCO += '<div class="acItem" onclick="checkInManualSelect(\''+nmEscCO+'\')">'+nmHiCO
+          +'<span style="font-size:10px;color:var(--gr);margin-left:6px">'+ckInTxt+'</span></div>';
+      }
+      pop.innerHTML = htmlCO;
+      pop.style.display='block';
+      return;
     }
 
     var hiddenAlreadyIn = 0; // V20_150: contador de workers omitidos por estar ya en workers[]
@@ -16779,6 +16930,23 @@ function onCheckInManualAC(value){
 function checkInManualSelect(name){
   try{
     if(!name) return;
+    // V20_160: rama check-out individual — busca el worker en workers[] y cierra su día.
+    // NO valida `_isAlreadyCheckedIn` (al revés, EXIGE que esté registrado).
+    if(_cisMode === 'checkOut'){
+      var wMatch = null;
+      var nameLow = (name||'').toLowerCase().trim();
+      for(var iCO=0; iCO<workers.length; iCO++){
+        if(((workers[iCO].name||'').toLowerCase().trim()) === nameLow){ wMatch = workers[iCO]; break; }
+      }
+      if(!wMatch){ toast('⚠️ '+name+' no está registrado hoy'); return; }
+      if(wMatch.checkOutLocked){ toast('⚠️ '+wMatch.name+' ya cerró su día a las '+(wMatch.checkOutTime||'')); return; }
+      // Cerrar la UI del bottom-sheet antes de tocar globales (closeCheckInSheet resetea _cisMode)
+      try { closeCheckInSheet(); } catch(_){}
+      try {
+        if(typeof confirmCheckOutWorker === 'function') confirmCheckOutWorker(wMatch.id);
+      } catch(eCO){ console.warn('[V20_160] checkInManualSelect checkOut',eCO); }
+      return;
+    }
     // V20_150: segunda línea de defensa anti-duplicado. El antiguo `alreadyAdded` era local a onAC()
     // y nunca se ejecutaba aquí (typeof === 'undefined'). Ahora usamos el helper global.
     if(_isAlreadyCheckedIn(name)){ toast('⚠️ '+name+' ya está en la lista'); return; }
@@ -16821,6 +16989,17 @@ function checkInManualSelect(name){
 
 function checkInFaceID(){
   try{
+    // V20_160: rama check-out individual — FaceID arranca con _qrMode='coIndividual'
+    if(_cisMode === 'checkOut'){
+      _cisMode = '';
+      _reopenAfterAdd = false;
+      var sheet = gEl('checkInSheet'); if(sheet) sheet.classList.remove('show');
+      if(typeof startFaceID==='function'){
+        _qrMode = 'coIndividual';
+        startFaceID();
+      } else { toast('⚠️ FaceID no disponible'); }
+      return;
+    }
     var roleSnapshot = _cisRole || 'trabajador';
     _reopenAfterAdd = (roleSnapshot === 'trabajador');
     closeCheckInSheet();
@@ -16855,6 +17034,20 @@ function checkInFaceID(){
 })();
 
 </script>
+
+<!-- V20_160: Check-out Options Modal — 2 opciones (Individual / Grupal) -->
+<div class="ov" id="coOptionsOv" role="dialog" aria-modal="true">
+  <div class="ovBox" style="padding:24px;max-width:380px">
+    <h3 style="margin:0 0 18px;font-size:18px;color:#1a2b8c">🏁 Check-out — ¿cómo?</h3>
+    <button onclick="coOptionIndividual()" style="display:block;width:100%;margin-bottom:12px;padding:14px;background:#27ae60;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer">
+      🧑 Individual<br><span style="font-size:11px;font-weight:400">Un solo trabajador</span>
+    </button>
+    <button onclick="coOptionGrupal()" style="display:block;width:100%;margin-bottom:12px;padding:14px;background:#c0392b;color:#fff;border:none;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer">
+      👥 Grupal<br><span style="font-size:11px;font-weight:400">Toda la cuadrilla restante</span>
+    </button>
+    <button onclick="gEl('coOptionsOv').classList.remove('on')" style="display:block;width:100%;padding:10px;background:#fff;color:#666;border:1px solid #ccc;border-radius:6px;font-size:13px;cursor:pointer">Cancelar</button>
+  </div>
+</div>
 
 <!-- V20_91_14: Check-in Bottom Sheet -->
 <div id="checkInSheet" role="dialog" aria-modal="true" aria-labelledby="cisTitle" onclick="if(event.target===this)closeCheckInSheet()">
