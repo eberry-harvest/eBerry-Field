@@ -35,7 +35,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_171';
+window.APP_VERSION = 'V20_172';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -1725,13 +1725,7 @@ body.readOnly [onclick*="openNewDay"]{display:none !important}
     <button class="btn" style="background:#3a7fd4;color:#fff" onclick="openNewDay()"><span style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;background:#1a7a4a;color:#fff;font-weight:900;font-size:12px;margin-right:6px">4</span>🌅 Nuevo Día</button>
     <!-- V20_83: bloque "📲 Compartir datos entre dispositivos" eliminado — duplicaba la pestaña ⑨ Archivos -->
   </div>
-  <!-- 🧪 TEST: solo visible para admin — quitar en producción -->
-  <div id="testCard" class="card" style="display:none;border:2px dashed #e74c3c">
-    <div class="ct" style="color:#e74c3c">🧪 Modo Prueba (solo Admin)</div>
-    <button class="btn" style="background:#e74c3c;color:#fff" onclick="testFill()">🧪 Llenar datos ficticios</button>
-    <button class="btn" style="background:#95a5a6;color:#fff" onclick="testClear()">🗑️ Limpiar datos de prueba</button>
-    <p style="font-size:11px;color:#e74c3c;text-align:center">Agrega 4 trabajadores + 2 ausencias con datos ficticios para probar el flujo completo</p>
-  </div>
+  <!-- V20_172: bloque "🧪 Modo Prueba" eliminado — usaba valores hardcoded (5.67 anchoCama, surcos 500/10, "Test Ausente Uno") que rompían el principio data-driven. Si se necesita probar el flujo, captura datos reales del MASTER como cualquier surquero. -->
 </div>
 
 <!-- PAGE 4 — AUSENCIAS -->
@@ -2448,9 +2442,7 @@ function loginSuccess(user){
   var crewBase = user.crew ? user.crew.replace(/\s*\d+$/,'').trim() : '';
   populateRanchoDropdown(surqIOE, crewBase, user.isAdmin);
 
-  // 🧪 Mostrar/ocultar card de pruebas
-  var testCard = gEl('testCard');
-  if(testCard) testCard.style.display = user.isAdmin ? 'block' : 'none';
+  // V20_172: bloque testCard eliminado del HTML — toggle innecesario.
 
   // 👤 Mostrar botón registro facial si es admin
   showFaceRegBtn();
@@ -3816,9 +3808,17 @@ function _renderCheckOutBtn(){
   var st = _coState();
   var html = '';
   var baseStyle = 'width:100%;min-height:50px;border:0;border-radius:8px;font-family:DM Sans,sans-serif;font-weight:700;font-size:15px;cursor:pointer';
-  if(st === 1 || st === 2 || st === 3){
-    // V20_160: botón único — el modal coOptionsOv decide Individual vs Grupal
+  if(st === 1){
+    // V20_172: estado 1 — cuadrilla pendiente. Botón único con modal Individual/Grupal (V20_160 conservado).
+    // Solo aplica a trabajadores normales.
     html = '<button class="btn" style="'+baseStyle+';background:#c0392b;color:#fff;border:1.5px solid #c0392b" onclick="openCheckOutOptions()">🏁 Check-out</button>';
+  } else if(st === 2){
+    // V20_172: estado 2 — cuadrilla cerrada, surquero pendiente. Botón directo a coSurq (sin modal).
+    // Inverso del check-in: cuadrilla → surquero → chofer.
+    html = '<button class="btn" style="'+baseStyle+';background:#1a2b8c;color:#fff;border:1.5px solid #1a2b8c" onclick="confirmCheckOut(\'coSurq\')">👤 Cerrar surquero</button>';
+  } else if(st === 3){
+    // V20_172: estado 3 — surquero cerrado, chofer pendiente. Botón directo a coChofer.
+    html = '<button class="btn" style="'+baseStyle+';background:#3a7fd4;color:#fff;border:1.5px solid #3a7fd4" onclick="confirmCheckOut(\'coChofer\')">🚌 Cerrar chofer</button>';
   } else if(st === 4){
     // V20_132: chip "día cerrado" + botón "Re-abrir día" (admin o PIN admin)
     html = '<button disabled class="btn" style="'+baseStyle+';background:#95a5a6;color:#fff;cursor:not-allowed">🔒 Día cerrado</button>'+
@@ -14126,213 +14126,9 @@ window.addEventListener('DOMContentLoaded', function(){
   setTimeout(function(){ try { archCheckYearChange(); } catch(e){} }, 2500);
 });
 
-// ════════════════════════════════════════════════════════════
-// 🧪 TEST FILL — datos ficticios para probar flujo completo
-// Quitar este bloque completo cuando ya no se necesite
-// ════════════════════════════════════════════════════════════
-// V20_91_12: PEINADO EXHAUSTIVO — 2 workers por cada actividad individual del rancho
-// + 1 grupal con 3 participantes por cada GRUPAL_ACT del rancho + simula check-in del día
-// Mantener actualizado al agregar features nuevas (regla Serafín 2026-04-29)
-function testFill(){
-  if(!currentUser || !currentUser.isAdmin){ toast('⚠️ Solo para admin'); return; }
-  if(!gVal('surquero')){ toast('⚠️ Primero selecciona un surquero'); return; }
-  if(!ACTS.length && !GRUPAL_ACTS.length){
-    toast('⚠️ El rancho no tiene actividades. Selecciona un rancho primero.');
-    return;
-  }
-
-  var defaultHE = gVal('hEnt') || '07:00';
-  var defaultHS = gVal('hSal') || '15:00';
-  var fincaVal = gVal('finca') || '';
-
-  // ── 0. V20_91_24: Crear chofer + surquero de prueba con _applyCheckInForMode (testea flujo completo de cierre) ──
-  if(typeof _dayFlow === 'object' && _dayFlow && !_dayFlow.diaIniciado){
-    // Chofer de prueba
-    var wChTest = {
-      id: wid++, name: 'Test Chofer', empNum: 'TEST-CHF', contractRate: 16.23,
-      open: false, totalPay: 0, acts: [], role: 'trabajador',
-      checkInTime: '', checkInTs: 0, checkInLocked: false,
-      checkOutTime: '', checkOutLocked: false, canUndoUntil: 0
-    };
-    workers.push(wChTest);
-    if(typeof _applyCheckInForMode === 'function'){ try{ _applyCheckInForMode(wChTest, 'chofer'); }catch(e){ console.warn('peinado chofer',e); } }
-    var listC = gEl('wlist'); if(listC) listC.appendChild(mkCard(wChTest, workers.length-1));
-    // Surquero de prueba (= currentUser, lo que sería el admin)
-    var wSqTest = {
-      id: wid++, name: (currentUser && currentUser.name) || 'Test Surquero', empNum: (currentUser && currentUser.empNum) || 'TEST-SQR', contractRate: 16.23,
-      open: false, totalPay: 0, acts: [], role: 'trabajador',
-      checkInTime: '', checkInTs: 0, checkInLocked: false,
-      checkOutTime: '', checkOutLocked: false, canUndoUntil: 0
-    };
-    workers.push(wSqTest);
-    if(typeof _applyCheckInForMode === 'function'){ try{ _applyCheckInForMode(wSqTest, 'surquero'); }catch(e){ console.warn('peinado surquero',e); } }
-    var listS = gEl('wlist'); if(listS) listS.appendChild(mkCard(wSqTest, workers.length-1));
-    var hE = gEl('hEnt'); if(hE && !hE.value) hE.value = defaultHE;
-    if(typeof _renderIniciarDia === 'function'){ try{ _renderIniciarDia(); }catch(e){} }
-    if(typeof _renderHorarioLocks === 'function'){ try{ _renderHorarioLocks(); }catch(e){} }
-  }
-
-  var addedWids = [];
-  var counter = 1;
-  var nIndAct = 0;
-
-  // ── 1. Por cada actividad individual: 2 workers ──
-  for(var ai=0; ai<ACTS.length; ai++){
-    var act = ACTS[ai];
-    if(!act) continue;
-    if(act.modo && act.modo !== 'Individual') continue;
-    nIndAct++;
-
-    for(var dup=0; dup<2; dup++){
-      var lblShort = (act.es||'?').slice(0,18);
-      var nameW = 'Test W' + counter + ' (' + lblShort + ')';
-      var empNumW = 'TEST-' + ('000'+counter).slice(-3);
-      counter++;
-
-      var w = {
-        id: wid++,
-        name: nameW,
-        empNum: empNumW,
-        contractRate: 16.23,
-        open: false,
-        totalPay: 0,
-        acts: [],
-        role: 'trabajador',
-        checkInTime: defaultHE,
-        checkInTs: Date.now(),
-        checkInLocked: true,
-        checkOutTime: '',
-        checkOutLocked: false,
-        canUndoUntil: 0
-      };
-
-      var a = {
-        localRowId: _genRowId(), // V20_127: ID único por act (peinado)
-        ai: ai,
-        esName: act.es,
-        tipo: act.tipo || '',
-        qty: '',
-        ini: defaultHE,
-        fin: defaultHS,
-        showTime: true,
-        pay: 0,
-        shifts: [{ini: defaultHE, fin: defaultHS}],
-        finca: fincaVal,
-        _iniLocked: true
-      };
-
-      if(act.hr){
-        a.qty = '';
-        try { a.pay = totalShiftHours(a) * getHRate(w, act); } catch(e){ a.pay = 8 * (w.contractRate||16.23); }
-      } else if(typeof isActPuertas === 'function' && isActPuertas(act)){
-        var _largo = '500', _num = '6';
-        var _tp = parseFloat(_largo) * parseFloat(_num);
-        a.surcos = [{lbl:'A', largo:_largo, num:_num, totalPies:_tp.toFixed(1), totalAcres:'', mode:'surco'}];
-        a.indPies = _tp.toFixed(1);
-        a.indAncho = '5.67';
-        a.qty = (_tp/100);
-        a.pay = a.qty * (act.p || 1);
-      } else {
-        // Pieces / Daywork / Caja / $ — 1er worker supera mínimo, 2do bajo (para análisis OK vs Pérdida)
-        a.qty = (dup===0) ? '250' : '120';
-        a.pay = (parseFloat(a.qty)||0) * (act.p || 1);
-      }
-
-      w.acts.push(a);
-      w.totalPay = a.pay;
-      workers.push(w);
-      addedWids.push(w.id);
-
-      var list = gEl('wlist');
-      if(list) list.appendChild(mkCard(w, workers.length-1));
-    }
-  }
-
-  // ── 2. Por cada actividad grupal: 1 grupal con hasta 3 participantes ──
-  if(GRUPAL_ACTS.length && addedWids.length){
-    for(var gai=0; gai<GRUPAL_ACTS.length; gai++){
-      var gact = GRUPAL_ACTS[gai];
-      if(!gact) continue;
-      var alreadyG = false;
-      for(var gi=0; gi<grpActs.length; gi++){
-        if(grpActs[gi].gai === gai){ alreadyG = true; break; }
-      }
-      if(alreadyG) continue;
-
-      var ct = (typeof grpCalcType === 'function') ? grpCalcType(gact) : 'pieza';
-      var vars = {ini: defaultHE, fin: defaultHS, finca: fincaVal};
-
-      if(ct === 'puertas'){
-        vars.surcos = [
-          {lbl:'A1', largo:'500', num:'10', totalPies:'5000.0', totalAcres:'', mode:'surco'},
-          {lbl:'B2', largo:'400', num:'8',  totalPies:'3200.0', totalAcres:'', mode:'surco'}
-        ];
-        vars.anchoCama = '5.67';
-      } else if(ct === 'cajas'){
-        vars.totalCajas = '120';
-        vars.precioC = String(gact.p || gact.unitPrice || 1);
-      } else if(ct === 'hora'){
-        // solo horario, sin qty
-      } else {
-        vars.qty = '50';
-      }
-
-      var nParts = Math.min(3, addedWids.length);
-      var parts = addedWids.slice(0, nParts);
-      grpActs.push({localRowId: _genRowId(), gai: gai, participantes: parts, vars: vars}); // V20_127: ID único grupal (peinado)
-    }
-    if(typeof renderGrpActs === 'function') renderGrpActs();
-  }
-
-  // ── 3. Ausencias (2 con motivos distintos) ──
-  ausencias.push({localRowId: _genRowId(), name:'Test Ausente Uno', empNum:'T001', motivo:'enfermedad'}); // V20_127
-  ausencias.push({localRowId: _genRowId(), name:'Test Ausente Dos', empNum:'T002', motivo:'cambio'}); // V20_127
-  if(typeof renderAusencias === 'function') renderAusencias();
-
-  // ── 4. Recalcular y guardar ──
-  if(typeof updParam === 'function') updParam();
-  if(typeof updParts === 'function') updParts();
-  if(typeof buildSum === 'function') buildSum();
-  saveQuiet();
-
-  toast('🧪 Peinado: '+addedWids.length+' workers en '+nIndAct+' actividades + '+grpActs.length+' grupales + 2 ausencias');
-}
-
-function testClear(){
-  if(!currentUser || !currentUser.isAdmin){ toast('⚠️ Solo para admin'); return; }
-  // Quitar test workers (nombres que empiezan con "Test ")
-  var testWids = [];
-  for(var i=workers.length-1;i>=0;i--){
-    if(workers[i].name.indexOf('Test ')===0){ testWids.push(workers[i].id); workers.splice(i,1); }
-  }
-  // Quitar test workers de participantes grupales, y quitar grupales vacías
-  for(var gi=grpActs.length-1;gi>=0;gi--){
-    var parts = grpActs[gi].participantes;
-    for(var pi=parts.length-1;pi>=0;pi--){
-      if(testWids.indexOf(parts[pi])>=0) parts.splice(pi,1);
-    }
-    if(!parts.length) grpActs.splice(gi,1);
-  }
-  // Quitar ausencias de prueba
-  for(var j=ausencias.length-1;j>=0;j--){
-    if(ausencias[j].name.indexOf('Test ')===0) ausencias.splice(j,1);
-  }
-  // V20_91_24: testClear ahora SIEMPRE resetea _dayFlow + flags V20 (crewClosed, choferClosed, _modoCombinado)
-  // — antes solo reseteaba si no quedaban workers, pero después de un peinado completo eso falla porque
-  // crearemos chofer+surquero test y al limpiar quedan flags activos para la próxima sesión
-  if(typeof _dayFlow === 'object' && _dayFlow){
-    if(typeof _initDayFlow === 'function') _dayFlow = _initDayFlow();
-    if(typeof _renderIniciarDia === 'function'){ try{ _renderIniciarDia(); }catch(e){} }
-    if(typeof _renderHorarioLocks === 'function'){ try{ _renderHorarioLocks(); }catch(e){} }
-    if(typeof _renderCheckOutBtn === 'function'){ try{ _renderCheckOutBtn(); }catch(e){} }
-  }
-  // Re-render todo
-  var list=gEl('wlist'); list.innerHTML='';
-  for(var k=0;k<workers.length;k++) list.appendChild(mkCard(workers[k],k));
-  renderGrpActs(); renderAusencias();
-  updParam(); updParts(); buildSum(); saveQuiet();
-  toast('🗑️ Datos de prueba eliminados');
-}
+// V20_172: bloque testFill/testClear ELIMINADO completamente (datos hardcoded '5.67',
+// surcos 500/10, "Test Ausente Uno" rompian el principio data-driven). Si se necesita probar el
+// flujo, capturar datos reales del MASTER como cualquier surquero.
 
 // ════════════════════════════════════════════════════════════
 // FACE REGISTRATION SYSTEM (Phase 1)
@@ -16821,8 +16617,8 @@ function adminSyncWorkerTimes(w){
     'confirmCheckOut', // V20_91_20: nuevo flow multi-estado
     'startQRMode','openCheckInSheet','checkInScanQR','checkInManualStart','checkInManualSelect',
     'onCheckInManualAC','checkInFaceID','_undoWorker',
-    // V20_91_24: peinado admin debe bloquearse en modo lectura (no debe modificar día cargado de Sheets)
-    'testFill','testClear','adminBypassQR','activarAdminBypass',
+    // V20_172: testFill/testClear ELIMINADAS (hardcoded data-driven violation).
+    'adminBypassQR','activarAdminBypass',
     // DÍA / NOTAS
     'startNewDay','openNewDay','saveNotaV65','toggleNotaV65','cancelNotaV65',
     // IMPORT / EXPORT
