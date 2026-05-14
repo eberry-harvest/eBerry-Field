@@ -35,7 +35,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_149';
+window.APP_VERSION = 'V20_151';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -6907,7 +6907,26 @@ function getHRate(w, act){
 
 function recalc(wi,ai){
   var w=getW(wi); if(!w||!w.acts[ai])return;
-  var a=w.acts[ai]; var act=ACTS[a.ai]; var pay=0;
+  var a=w.acts[ai]; var pay=0;
+  // V20_151 FIX 2: resolver act preferiendo metadata preservada antes que ACTS[a.ai].
+  // Si MASTER se reordenó entre asignación y recalc, ai puede apuntar a otra actividad.
+  var act = (a.ai != null && ACTS[a.ai]) ? ACTS[a.ai] : null;
+  if(!act && (a._actEs || a.esName)){
+    if(typeof _resolveActByName === 'function'){
+      try { act = _resolveActByName(a._actEs || a.esName); } catch(_e){ act = null; }
+    }
+  }
+  // Si ni por ai ni por nombre, reconstruir act sintético desde metadata congelada.
+  if(!act && (a._unitPrice != null || a._payType || a._actEs)){
+    var _pt = (a._payType || '').toString();
+    act = {
+      es: a._actEs || a.esName || '',
+      payType: _pt,
+      variable: a._variable || '',
+      p: a._unitPrice || 0,
+      hr: (_pt.toLowerCase().trim() === 'hours')
+    };
+  }
   if(!act) return;
   // V13-FIX2: isHourAct() en vez de act.hr — cubre tipo='hora' sin act.hr=true
   if(isHourAct(act)){ pay=totalShiftHours(a)*getHRate(w,act); }
@@ -8020,6 +8039,24 @@ function load(){
         }
       }
     }
+    // V20_151 FIX 2 (migración): rellenar metadata preservada (_actEs/_payType/_unitPrice/_variable)
+    // para acts viejas creadas antes del fix. Sin esto, acts pre-V20_151 NO tendrían los campos
+    // preservados y al reordenar MASTER se romperían igual que antes. Aquí copiamos desde
+    // esName/payType/p/ACTS[ai].variable cuando estén disponibles.
+    for(var iM=0; iM<workers.length; iM++){
+      var wM = workers[iM];
+      if(!wM || !wM.acts) continue;
+      for(var jM=0; jM<wM.acts.length; jM++){
+        var aM = wM.acts[jM];
+        if(!aM) continue;
+        if(!aM._actEs && aM.esName) aM._actEs = aM.esName;
+        if(!aM._payType && aM.payType) aM._payType = aM.payType;
+        if((aM._unitPrice == null || aM._unitPrice === '') && aM.p != null) aM._unitPrice = aM.p;
+        if(!aM._variable && (aM.ai != null && typeof ACTS !== 'undefined' && ACTS[aM.ai])) {
+          aM._variable = ACTS[aM.ai].variable || '';
+        }
+      }
+    }
     var list=gEl('wlist'); list.innerHTML='';
     for(var i=0;i<workers.length;i++) list.appendChild(mkCard(workers[i],i));
     setTimeout(function(){ for(var i=0;i<workers.length;i++) updTot(workers[i].id); }, 50);
@@ -8248,11 +8285,14 @@ function buildActViewGroups(){
           continue;
         }
       }
-      // Si no hay act, sintetizar fallback mínimo para no perder la fila
-      var actName = (act && act.es) ? act.es : (a.esName || '(actividad sin nombre)');
-      var variable = (act && act.variable) || '';
-      var payType = (act && act.payType) || a.payType || a._payType || '';
-      var rate = (act && act.p != null) ? act.p : (a.p || a._unitPrice || 0);
+      // V20_151 FIX 2: PREFERIR metadata preservada (a._actEs/_payType/_unitPrice/_variable) ANTES de
+      // resolver por a.ai. Si MASTER se reordena y a.ai apunta a otra act, igual usamos los valores
+      // congelados al momento de asignar. La act real solo se usa como fallback secundario.
+      var actName = a._actEs || a.esName || (act && act.es) || '(actividad sin nombre)';
+      var variable = a._variable || (act && act.variable) || '';
+      var payType = a._payType || a.payType || (act && act.payType) || '';
+      var rate = (a._unitPrice != null && a._unitPrice !== '') ? a._unitPrice
+               : (a.p != null ? a.p : ((act && act.p != null) ? act.p : 0));
       var tipo = a.tipo || (act && act.hr ? 'hora' : 'pieza');
       var ini = a.ini || (a.shifts && a.shifts[0] && a.shifts[0].ini) || '';
       var fin = a.fin || (a.shifts && a.shifts[0] && a.shifts[0].fin) || '';
@@ -8347,7 +8387,22 @@ function renderWlistByActivity(){
       html += '<div class="w-row-act">';
       html += '  <div class="nm-full">'+esc(wkr.name)+'</div>';
       if(wkr.empNum) html += '  <span class="num">#'+esc(wkr.empNum)+'</span>';
-      if(g.tipo !== 'hora'){
+      // V20_151 FIX 1: detección Hora 3-capas case-insensitive (bug cuadrito aparecía en Hora).
+      // Causa: g.tipo viene 'Hora' (capital del tipoMap) -> '!== "hora"' (lower) NUNCA matcheaba.
+      // Capas: 1) string lowercase, 2) payType='Hours', 3) motor data-driven _derivarTipoActividad.
+      var _tipoLow = (g.tipo || '').toString().toLowerCase().trim();
+      var _isHora = (_tipoLow === 'hora');
+      if(!_isHora && (g.payType || '').toString().toLowerCase().trim() === 'hours') _isHora = true;
+      if(!_isHora){
+        try {
+          var _actDefH = (g.ai != null && typeof ACTS !== 'undefined' && ACTS[g.ai]) ? ACTS[g.ai] : null;
+          if(!_actDefH && g.actName && typeof _resolveActByName === 'function') _actDefH = _resolveActByName(g.actName);
+          if(_actDefH && typeof _derivarTipoActividad === 'function'){
+            if(_derivarTipoActividad(_actDefH) === 'hora') _isHora = true;
+          }
+        } catch(eH){}
+      }
+      if(!_isHora){
         // V20_139: placeholder data-driven desde col H del MASTER (motor V20_27)
         var _qtyRaw = +wkr.qty || 0;
         var _qtyAttrs;
@@ -8994,6 +9049,13 @@ function confirmAssignMany(){
       localRowId: _genRowId(), // V20_127: ID único por act (UPSERT FIELD_DROP) — cada worker recibe su propio ID
       ai: _assignCurrentActIdx,
       esName: act.es,
+      // V20_151 FIX 2: preservar metadata derivada para que la act NO cambie aunque MASTER se reordene
+      // (bug: 2 filas "Cosecha de pepino" Hora+Pieza con mismo nombre; al recargar MASTER ai=5 ahora apunta
+      //  a la otra fila → render veía actividad equivocada). Copias estables de esName/payType/precio/Variable.
+      _actEs: act.es,
+      _payType: act.payType || '',
+      _unitPrice: act.p || 0,
+      _variable: act.variable || '',
       tipo: _derivarTipoActividad(act), // V20_133_a: data-driven (col G + col J)
       p: act.p,
       payType: act.payType||'',
@@ -16377,6 +16439,31 @@ function _updCheckInBtnState(){
   }
 }
 
+// V20_150: helper global anti-duplicado para check-in manual.
+// Antes, onCheckInManualAC/checkInManualSelect llamaban `alreadyAdded` que es local a onAC() →
+// `typeof alreadyAdded==='function'` daba 'undefined' → el filtro NO se ejecutaba → workers ya
+// registrados seguían apareciendo en la lista → Serafín los re-seleccionaba → duplicados.
+// Match por empNum si existe (más confiable), fallback por name case-insensitive trimmed.
+function _isAlreadyCheckedIn(workerName, workerEmpNum){
+  try{
+    if(!workers || !workers.length) return false;
+    var nameLow = (workerName || '').toString().toLowerCase().trim();
+    var empLow = (workerEmpNum == null) ? '' : workerEmpNum.toString().trim();
+    for(var i=0; i<workers.length; i++){
+      var w = workers[i]; if(!w) continue;
+      if(empLow){
+        var wEmp = (w.empNum == null) ? '' : w.empNum.toString().trim();
+        if(wEmp && wEmp === empLow) return true;
+      }
+      if(nameLow){
+        var wName = (w.name || '').toString().toLowerCase().trim();
+        if(wName && wName === nameLow) return true;
+      }
+    }
+    return false;
+  }catch(e){ console.warn('_isAlreadyCheckedIn',e); return false; }
+}
+
 // V20_91_16: openCheckInSheet ahora acepta rol (trabajador/chofer/surquero/choferSurquero)
 function openCheckInSheet(role){
   try{
@@ -16468,6 +16555,7 @@ function onCheckInManualAC(value){
     try{ crewKey = ((currentUser && currentUser.crew)||'').toString().toLowerCase().replace(/\s*\d+\s*$/,'').trim(); }catch(_){}
     var isAdm = !!(currentUser && currentUser.isAdmin);
     var matches = [];
+    var hiddenAlreadyIn = 0; // V20_150: contador de workers omitidos por estar ya en workers[]
     for(var i=0; i<ALL_WORKERS.length && matches.length<12; i++){
       var w = ALL_WORKERS[i]; if(!w || !w.name) continue;
       if(!isAdm && crewKey){
@@ -16476,11 +16564,18 @@ function onCheckInManualAC(value){
       }
       var nm = w.name.toLowerCase();
       if(nm.indexOf(v) === -1) continue;
-      if(typeof alreadyAdded==='function' && alreadyAdded(w.name)) continue;
+      // V20_150: filtro REAL anti-duplicado (antes alreadyAdded era local a onAC() → typeof daba 'undefined'
+      // → filtro no se aplicaba → Serafín re-seleccionaba workers ya registrados).
+      if(_isAlreadyCheckedIn(w.name, w.empNum)){ hiddenAlreadyIn++; continue; }
       matches.push(w);
     }
     if(!matches.length){
-      pop.innerHTML = '<div style="padding:12px;color:var(--gr);font-size:13px">Sin coincidencias</div>';
+      // V20_150: si la única razón de "sin coincidencias" es que ya están todos registrados,
+      // mostrar mensaje informativo en vez del genérico "Sin coincidencias".
+      var emptyMsg = (hiddenAlreadyIn > 0)
+        ? 'ℹ️ '+hiddenAlreadyIn+' trabajador(es) coinciden, pero ya están registrados hoy.'
+        : 'Sin coincidencias';
+      pop.innerHTML = '<div style="padding:12px;color:var(--gr);font-size:13px">'+esc(emptyMsg)+'</div>';
       pop.style.display='block'; return;
     }
     // V20_91_17: safeHighlight necesita RegExp con grupo de captura, no string crudo.
@@ -16494,6 +16589,12 @@ function onCheckInManualAC(value){
       var nmHi  = (rxHi && typeof safeHighlight==='function') ? safeHighlight(matches[k].name, rxHi) : esc(matches[k].name);
       html += '<div class="acItem" onclick="checkInManualSelect(\''+nmEsc+'\')">'+nmHi+'</div>';
     }
+    // V20_150: nota informativa si se ocultaron workers ya registrados
+    if(hiddenAlreadyIn > 0){
+      html += '<div style="text-align:center;padding:8px 10px;color:#666;font-size:11px;font-style:italic;border-top:1px solid #eee">'+
+        'ℹ️ '+hiddenAlreadyIn+' trabajador(es) ya registrado(s) hoy se ocultaron.'+
+      '</div>';
+    }
     pop.innerHTML = html;
     pop.style.display='block';
   }catch(e){ console.warn('onCheckInManualAC',e); }
@@ -16502,7 +16603,9 @@ function onCheckInManualAC(value){
 function checkInManualSelect(name){
   try{
     if(!name) return;
-    if(typeof alreadyAdded==='function' && alreadyAdded(name)){ toast('⚠️ '+name+' ya está en la lista'); return; }
+    // V20_150: segunda línea de defensa anti-duplicado. El antiguo `alreadyAdded` era local a onAC()
+    // y nunca se ejecutaba aquí (typeof === 'undefined'). Ahora usamos el helper global.
+    if(_isAlreadyCheckedIn(name)){ toast('⚠️ '+name+' ya está en la lista'); return; }
     // V20_108: bloquear manual para surquero/choferSurquero (paridad con openCheckInSheet)
     if(_cisRole === 'surquero' || _cisRole === 'choferSurquero'){
       toast('⚠️ Surquero solo se identifica con QR, FaceID o tu PIN — no por nombre');
