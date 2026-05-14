@@ -35,7 +35,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_169';
+window.APP_VERSION = 'V20_171';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -3552,7 +3552,7 @@ function _checkDayCarryover(){
   info += '<b>Trabajadores:</b> ' + nTrab + ' · <b>Chofer:</b> ' + nChofer + ' · <b>Surquero:</b> ' + nSurq + '<br>';
   if(grpActs && grpActs.length) info += '<b>Actividades grupales:</b> ' + grpActs.length + '<br>';
   if(ausencias && ausencias.length) info += '<b>Ausencias:</b> ' + ausencias.length + '<br>';
-  if(_dayFlow.checkOutDone) info += '<i>Día cerrado a las ' + esc(_dayFlow.checkOutTime||'') + '</i>';
+  if(_dayFlow.checkOutDone) info += '<i>Día cerrado</i>';  // V20_170: sin hora
   else info += '<i style="color:#c0392b">⚠️ El día NO se cerró</i>';
 
   var infoEl = gEl('dayCarryInfo');
@@ -3626,7 +3626,10 @@ function updCheckInOutDisplay(id){
   if(w.checkInTime){
     html += '<span style="display:inline-block;background:#fff3c4;border:1px solid #e6a700;color:#7a5c00;font-size:10px;padding:2px 6px;border-radius:5px;margin-right:4px">✏️ '+esc(w.checkInTime)+'</span>';
   }
-  if(w.checkOutTime){
+  // V20_170: prioridad — checkOutLocked sin hora (✓ Cerrado) > checkOutTime (legacy histórico con hora) > "Salida pendiente".
+  if(w.checkOutLocked && !w.checkOutTime){
+    html += '<span style="display:inline-block;background:#eef9ee;border:1px solid var(--g);color:#1a5d1a;font-size:10px;padding:2px 6px;border-radius:5px">🔒 Cerrado</span>';
+  } else if(w.checkOutTime){
     html += '<span style="display:inline-block;background:#fff3c4;border:1px solid #e6a700;color:#7a5c00;font-size:10px;padding:2px 6px;border-radius:5px">✏️ '+esc(w.checkOutTime)+'</span>';
   } else if(w.checkInTime){
     html += '<span style="display:inline-block;color:var(--gr);font-size:10px;padding:2px 6px">⏳ Salida pendiente</span>';
@@ -3818,7 +3821,7 @@ function _renderCheckOutBtn(){
     html = '<button class="btn" style="'+baseStyle+';background:#c0392b;color:#fff;border:1.5px solid #c0392b" onclick="openCheckOutOptions()">🏁 Check-out</button>';
   } else if(st === 4){
     // V20_132: chip "día cerrado" + botón "Re-abrir día" (admin o PIN admin)
-    html = '<button disabled class="btn" style="'+baseStyle+';background:#95a5a6;color:#fff;cursor:not-allowed">🔒 Día cerrado a las '+esc(_dayFlow.checkOutTime||'--:--')+'</button>'+
+    html = '<button disabled class="btn" style="'+baseStyle+';background:#95a5a6;color:#fff;cursor:not-allowed">🔒 Día cerrado</button>'+
            '<button class="btn" style="'+baseStyle+';margin-top:8px;background:#fff;color:#c0392b;border:1.5px solid #c0392b" onclick="reopenDay()">🔓 Re-abrir día (admin)</button>';
   }
   slot.innerHTML = html;
@@ -3905,42 +3908,28 @@ function confirmCheckOut(mode){
   if(typeof startQR === 'function') startQR();
 }
 
-// V20_91_09: aplica check-out a UN worker — congela checkOutTime + popula fin de la última activity
+// V20_170: DESCONECTADO el guardado de hora del check-out (Serafín 2026-05-14, fase de entrenamiento).
+// El check-out se conserva solo como flujo UX para que surqueros se acostumbren al método.
+// La hora real de salida es la que el surquero captura manualmente en el `fin` de la última
+// actividad de cada worker (eso rige payroll/FIELD_DROP). Para reactivar escritura automática
+// en el futuro, restaurar el bloque V20_91_09 (worker.checkOutTime/checkOutTs + lastAct.shifts[].fin/_finLocked).
 function _applyCheckOutForWorker(worker, hhmm){
   if(!worker) return;
-  var ts = Date.now();
-  worker.checkOutTime = hhmm;
-  worker.checkOutTs = ts;
   worker.checkOutLocked = true;
-  // V20_91_09: popular `fin` del último shift de la última activity con checkOutTime
-  // Paralelo a la lógica de check-in (ini de primer activity)
-  if(worker.acts && worker.acts.length){
-    var lastAi = worker.acts.length - 1;
-    var lastAct = worker.acts[lastAi];
-    if(lastAct){
-      if(!lastAct.shifts || !lastAct.shifts.length){
-        lastAct.shifts = [{ini: lastAct.ini||'', fin: lastAct.fin||''}];
-      }
-      var lastSi = lastAct.shifts.length - 1;
-      lastAct.shifts[lastSi].fin = hhmm;
-      lastAct.fin = hhmm;
-      lastAct.showTime = true;
-      lastAct._finLocked = true;
-    }
-  }
 }
 
 // V20_91_09: cierra check-out individual de UN worker (botón en tarjeta)
 function confirmCheckOutWorker(id){
   var w = (typeof getW==='function') ? getW(id) : null;
   if(!w) return;
-  if(w.checkOutLocked){ toast('⚠️ ' + w.name + ' ya cerró su día a las ' + (w.checkOutTime||'')); return; }
+  // V20_170: la hora ya no se escribe — confirm message + toast actualizados.
+  if(w.checkOutLocked){ toast('⚠️ ' + w.name + ' ya cerró su día'); return; }
   if(window._readOnlyMode){ toast('🔒 Modo lectura'); return; }
-  var ok = confirm('¿Cerrar día de '+w.name+'?\n\nLa hora actual quedará congelada como su salida y no se podrá editar.');
+  var ok = confirm('¿Cerrar día de '+w.name+'?\n\nQuedará marcado como cerrado. La hora de salida la rigen los horarios capturados en sus actividades.');
   if(!ok) return;
   var hhmm = _hhmmNow();
   _applyCheckOutForWorker(w, hhmm);
-  toast('🏁 ' + w.name + ' cerrado a las ' + hhmm);
+  toast('🏁 ' + w.name + ' cerrado');
   if(typeof autoSave === 'function') autoSave();
   try { updCheckInOutDisplay(id); } catch(e){}
   try {
@@ -3961,8 +3950,9 @@ function _renderWorkerCheckOutBtn(id){
   if(!slot) return;
   var w = (typeof getW==='function') ? getW(id) : null;
   if(!w){ slot.innerHTML=''; return; }
-  if(w.checkOutLocked && w.checkOutTime){
-    slot.innerHTML = '<div style="padding:6px 10px;background:#eef9ee;border:1px solid var(--g);border-radius:6px;color:#1a5d1a;font-size:11px;font-weight:600;text-align:center">🔒 Cerrado a las '+esc(w.checkOutTime)+'</div>';
+  // V20_170: chip ya no muestra hora — la condición ahora es solo checkOutLocked.
+  if(w.checkOutLocked){
+    slot.innerHTML = '<div style="padding:6px 10px;background:#eef9ee;border:1px solid var(--g);border-radius:6px;color:#1a5d1a;font-size:11px;font-weight:600;text-align:center">🔒 Cerrado</div>';
   } else {
     slot.innerHTML = '';
   }
@@ -3972,14 +3962,17 @@ function _renderWorkerCheckOutBtn(id){
 // Congela checkOutTime para todos los workers con la MISMA hora (la del botón).
 function confirmCheckOutDia(){
   if(_dayFlow && _dayFlow.checkOutDone){
-    toast('⚠️ El día ya fue cerrado a las ' + _dayFlow.checkOutTime);
+    // V20_170: ya no mostramos hora — checkOutTime ya no se escribe.
+    toast('⚠️ El día ya fue cerrado');
     return;
   }
   if(!workers || !workers.length){
     toast('⚠️ No hay trabajadores registrados');
     return;
   }
-  // V20_93: validación de horarios antes del cierre — todo worker debe tener ini+fin
+  // V20_93: validación de horarios antes del cierre — todo worker debe tener ini+fin.
+  // V20_170 NOTA: esta validación AÚN aplica — la hora real de salida es el `fin` de cada act
+  // que el surquero captura manualmente. Sin horarios completos no se puede cerrar.
   var _hr = _validateAllHorariosPre();
   if(!_hr.ok){
     alert('⚠️ FALTAN HORARIOS\n\nNo puedes cerrar el día hasta que TODOS los trabajadores tengan hora de inicio y fin:\n\n• ' +
@@ -3987,22 +3980,20 @@ function confirmCheckOutDia(){
           (_hr.missing.length>15 ? '\n• ... y '+(_hr.missing.length-15)+' más' : ''));
     return;
   }
-  var ok = confirm('Vas a registrar la HORA DE FINALIZACIÓN del día para TODOS los trabajadores ('+workers.length+'). Esta acción es definitiva.\n\n¿Continuar?');
+  // V20_170: confirm reescrito — la hora la rigen las actividades, el botón solo marca el día como cerrado.
+  var ok = confirm('Vas a cerrar el día para TODOS los trabajadores ('+workers.length+').\n\nLa hora de salida la rige el horario que ya capturaste en sus actividades. Esta acción marca el día como cerrado y no podrás agregar más trabajadores.\n\n¿Continuar?');
   if(!ok) return;
   var hhmm = _hhmmNow();
-  // V20_91_09: usar helper _applyCheckOutForWorker (popula fin de última activity + congela)
-  // Solo aplicar a workers que NO estén ya cerrados individualmente.
+  // V20_170: aún llamamos _applyCheckOutForWorker pero ahora solo setea checkOutLocked (sin hora).
   for(var i=0;i<workers.length;i++){
     if(!workers[i].checkOutLocked){
       _applyCheckOutForWorker(workers[i], hhmm);
     }
   }
   _dayFlow.checkOutDone = true;
-  _dayFlow.checkOutTime = hhmm;
-  // V20_91_04 FIX: SIEMPRE sobrescribir hSal con la hora de cierre del día.
-  var hS = gEl('hSal');
-  if(hS) hS.value = hhmm;
-  toast('🏁 Día cerrado a las ' + hhmm);
+  // V20_170: checkOutTime/hSal YA NO se sobrescriben con la hora del botón.
+  // _dayFlow.checkOutTime queda vacío. hSal mantiene lo que el surquero capturó en Parámetros.
+  toast('🏁 Día cerrado');
   if(typeof autoSave === 'function') autoSave();
   // V20_91_09: re-render completo de tarjetas de workers para que el `fin` readonly aplique
   for(var wi=0; wi<workers.length; wi++){
@@ -5978,7 +5969,7 @@ function onQRSuccess(decoded){
       try { _renderHorarioLocks(); } catch(_){}
       try { _renderCheckOutBtn(); } catch(_){}
       try { _updCheckInBtnState(); } catch(_){}
-      toast('✅ Cuadrilla cerrada a las '+_hh1+' ('+_n1+' trabajadores). Faltan: surquero y chofer.');
+      toast('✅ Cuadrilla cerrada ('+_n1+' trabajadores). Faltan: surquero y chofer.');
       return;
     } catch(e){
       console.warn('[V20_91_20] coCuadrilla error', e);
@@ -6024,8 +6015,7 @@ function onQRSuccess(decoded){
       }
       if(_surqClS){
         _dayFlow.checkOutDone = true;
-        _dayFlow.checkOutTime = _hh2;
-        var _hSc = gEl('hSal'); if(_hSc) _hSc.value = _hh2;
+        // V20_170: checkOutTime/hSal YA NO se escriben — la hora la rigen los `fin` de actividades.
       }
       _qrMode = 'trabajador';
       if(typeof autoSave === 'function') autoSave();
@@ -6035,9 +6025,9 @@ function onQRSuccess(decoded){
       try { _renderCheckOutBtn(); } catch(_){}
       try { _updCheckInBtnState(); } catch(_){}
       if(_dayFlow.checkOutDone){
-        toast('🔒 Día cerrado a las '+_hh2);
+        toast('🔒 Día cerrado');
       } else {
-        toast('✅ Chofer cerrado a las '+_hh2);
+        toast('✅ Chofer cerrado');
       }
       return;
     } catch(e){
@@ -6080,8 +6070,7 @@ function onQRSuccess(decoded){
                             _dayFlow.choferWorkerId !== _dayFlow.surqueroWorkerId);
       if(_dayFlow._modoCombinado || !_hayChoferSepS){
         _dayFlow.checkOutDone = true;
-        _dayFlow.checkOutTime = _hh3;
-        var _hS = gEl('hSal'); if(_hS) _hS.value = _hh3;
+        // V20_170: checkOutTime/hSal YA NO se escriben.
       }
       _qrMode = 'trabajador';
       if(typeof autoSave === 'function') autoSave();
@@ -6094,9 +6083,9 @@ function onQRSuccess(decoded){
       try { _updCheckInBtnState(); } catch(_){}
       // V20_149: mensaje contextual — si falta chofer, dilo. Si no, día cerrado.
       if(_dayFlow.checkOutDone){
-        toast('🔒 Día cerrado a las '+_hh3);
+        toast('🔒 Día cerrado');
       } else {
-        toast('✅ Surquero cerrado a las '+_hh3+'. Falta: chofer.');
+        toast('✅ Surquero cerrado. Falta: chofer.');
       }
       return;
     } catch(e){
@@ -6154,7 +6143,7 @@ function onQRSuccess(decoded){
           for(var _iaCI=0; _iaCI<_foundCI.acts.length; _iaCI++) mkActRow(_foundCI.id, _iaCI);
         }
       } catch(_){}
-      setQRStatus('✓ '+_foundCI.name+' cerrado a las '+_hhCI,'ok');
+      setQRStatus('✓ '+_foundCI.name+' cerrado','ok');
       _scheduleQRStatusReset(2000);
       // NO cierra cámara — modo continuo (el surquero cierra el modal cuando termine).
       return;
@@ -6191,7 +6180,7 @@ function onQRSuccess(decoded){
   }
   // V20_91_09: bloquear escaneo si el día ya fue cerrado
   if(_qrMode === 'trabajador' && _dayFlow && _dayFlow.checkOutDone){
-    setQRStatus('⚠️ Día cerrado a las ' + (_dayFlow.checkOutTime||'') + ' — no se pueden agregar más trabajadores','err');
+    setQRStatus('⚠️ Día cerrado — no se pueden agregar más trabajadores','err');
     _scheduleQRStatusReset(4000);
     return;
   }
@@ -6476,7 +6465,7 @@ function doAddConfirmed(name){
   var _modeAtAdd = _qrMode || 'trabajador';
   // V20_91_09: bloquear si el día ya fue cerrado (no se pueden agregar más trabajadores)
   if(_modeAtAdd === 'trabajador' && _dayFlow && _dayFlow.checkOutDone){
-    toast('⚠️ Día cerrado a las ' + (_dayFlow.checkOutTime||'') + ' — no se pueden agregar más trabajadores');
+    toast('⚠️ Día cerrado — no se pueden agregar más trabajadores');
     return;
   }
   // V20_27: regla HORARIO OBLIGATORIO — no aplica para chofer/surquero (van sin actividades inicialmente)
@@ -10897,7 +10886,80 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
           wHasAn=true;
           if(diff<0){
             wLossAmt+=Math.abs(diff);
-            wDetails+='<div style="font-size:9px;color:#c00;margin-left:12px">'+esc(act.es)+': hizo '+smartNum(pzReal)+' de '+pzExp.toFixed(0)+' min &rarr; <b>-$'+Math.abs(diff).toFixed(2)+'</b></div>';
+            // V20_171 Fix 1: "min" cambiado a unidad real (pzas/cajas) — antes parecía "minutos" y confundía.
+            // Paridad con UI buildAnalisis L7525.
+            var _tipoLbl171 = (act.tipo==='Caja' ? 'cajas' : 'pzas');
+            wDetails+='<div style="font-size:9px;color:#c00;margin-left:12px">'+esc(act.es)+': hizo '+smartNum(pzReal)+' de '+pzExp.toFixed(0)+' '+_tipoLbl171+' &rarr; <b>-$'+Math.abs(diff).toFixed(2)+'</b></div>';
+          }
+        }
+        // V20_171 Fix 2: análisis de grupales (paridad con UI buildAnalisis L7550-7650).
+        // Antes el PDF solo procesaba individuales — las pérdidas grupales se omitían silenciosamente.
+        for(var gi171=0; gi171<grpActs_.length; gi171++){
+          var ga171 = grpActs_[gi171];
+          if(!ga171 || !ga171.participantes || !ga171.participantes.length) continue;
+          var _isPart171 = false;
+          for(var pi171=0; pi171<ga171.participantes.length; pi171++){
+            if(ga171.participantes[pi171] === w.id){ _isPart171 = true; break; }
+          }
+          if(!_isPart171) continue;
+          var gact171 = GRUPAL_ACTS[ga171.gai]; if(!gact171) continue;
+          var ct171 = grpCalcType(gact171);
+          if(ct171 === 'hora') continue;
+          if(gact171.payType === 'Daywork') continue;
+          var price171 = gact171.p;
+          var np171 = ga171.participantes.length;
+          var qtyPP171 = 0;
+          if(ct171 === 'puertas'){
+            var metros171 = 0;
+            var surcos171 = (ga171.vars && ga171.vars.surcos) || [];
+            for(var si171=0; si171<surcos171.length; si171++){
+              metros171 += (parseFloat(surcos171[si171].largo)||0) * (parseFloat(surcos171[si171].num)||0);
+            }
+            var _factor171 = (typeof getActFactorAcres === 'function') ? getActFactorAcres(gact171) : 0;
+            var _grandAcres171 = parseFloat(ga171.vars && ga171.vars.pennAcres)||0;
+            if(!_grandAcres171 && surcos171.length){
+              for(var sa171=0; sa171<surcos171.length; sa171++) _grandAcres171 += parseFloat(surcos171[sa171].totalAcres)||0;
+            }
+            var puertas171 = 0;
+            if(_grandAcres171>0 && _factor171>0) puertas171 = _grandAcres171 * _factor171;
+            else puertas171 = metros171/100;
+            qtyPP171 = puertas171/np171;
+          } else if(ct171 === 'cajas'){
+            var totalC171 = parseFloat(ga171.vars && ga171.vars.totalC)||0;
+            qtyPP171 = totalC171/np171;
+            price171 = parseFloat(ga171.vars && ga171.vars.precioC) || price171;
+          } else {
+            var totalP171 = parseFloat(ga171.vars && ga171.vars.totalP)||0;
+            qtyPP171 = totalP171/np171;
+          }
+          if(!price171 || price171<=0) continue;
+          if(!qtyPP171) continue;
+          var hRate171 = baseRate;
+          if(!hRate171 || hRate171<=0){
+            for(var rk171=0; rk171<w.acts.length; rk171++){
+              var rAct171=null;
+              if(w.acts[rk171].esName){
+                for(var rk2_171=0; rk2_171<ACTS.length; rk2_171++){
+                  if(ACTS[rk2_171].es===w.acts[rk171].esName){ rAct171=ACTS[rk2_171]; break; }
+                }
+              }
+              if(!rAct171 && w.acts[rk171].ai>=0 && w.acts[rk171].ai<ACTS.length) rAct171=ACTS[w.acts[rk171].ai];
+              if(rAct171 && rAct171.hr){ hRate171 = rAct171.p; break; }
+            }
+          }
+          if(!hRate171 || hRate171<=0) continue;
+          var horas171 = nh((ga171.vars && ga171.vars.ini)||'', (ga171.vars && ga171.vars.fin)||'') || 0;
+          if(!horas171 || horas171<=0) horas171 = globalH;
+          if(!horas171 || horas171<=0) continue;
+          var pzH171 = hRate171/price171;
+          var pzExp171 = pzH171*horas171;
+          var pzReal171 = qtyPP171;
+          var diff171 = pzReal171*price171 - pzExp171*price171;
+          wHasAn = true;
+          if(diff171 < 0){
+            wLossAmt += Math.abs(diff171);
+            var tipoLblG171 = ct171==='cajas' ? 'cajas' : (ct171==='puertas' ? 'puertas' : 'pzas');
+            wDetails += '<div style="font-size:9px;color:#c00;margin-left:12px">[GRUPAL] '+esc(gact171.es)+': hizo '+smartNum(pzReal171)+' de '+pzExp171.toFixed(0)+' '+tipoLblG171+' (su porci&oacute;n de '+np171+') &rarr; <b>-$'+Math.abs(diff171).toFixed(2)+'</b></div>';
           }
         }
         if(!wHasAn) continue;
@@ -17077,7 +17139,7 @@ function checkInManualSelect(name){
         if(((workers[iCO].name||'').toLowerCase().trim()) === nameLow){ wMatch = workers[iCO]; break; }
       }
       if(!wMatch){ toast('⚠️ '+name+' no está registrado hoy'); return; }
-      if(wMatch.checkOutLocked){ toast('⚠️ '+wMatch.name+' ya cerró su día a las '+(wMatch.checkOutTime||'')); return; }
+      if(wMatch.checkOutLocked){ toast('⚠️ '+wMatch.name+' ya cerró su día'); return; }
       // Cerrar la UI del bottom-sheet antes de tocar globales (closeCheckInSheet resetea _cisMode)
       try { closeCheckInSheet(); } catch(_){}
       try {
