@@ -35,7 +35,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_161';
+window.APP_VERSION = 'V20_164';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -1364,12 +1364,20 @@ body.readOnly [onclick*="openNewDay"]{display:none !important}
 .w-row-act .num{font-size:11px;color:#888;background:#f0f2f5;padding:2px 6px;border-radius:8px}
 .w-row-act .qty-input-act{width:70px;padding:4px;text-align:center;border:1px solid #ddd;border-radius:4px;font-size:12px}
 .w-row-act .pay-act{font-weight:700;color:#155724;font-size:12px;background:#d4edda;padding:2px 8px;border-radius:8px;white-space:nowrap}
+.w-row-act .pay-aside{font-size:11px;color:#666;margin-left:6px;font-weight:600;white-space:nowrap}
 .w-row-act .del-act{background:#dc3545;color:#fff;border:none;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:11px;font-weight:600}
 /* V20_152 FIX 4: botones apilados Quitar + Editar individual por trabajador (pedido de Serafín). */
 .w-row-act-btns{display:flex;flex-direction:column;gap:4px;align-items:stretch;min-width:84px}
 .w-row-act-btns .del-act{width:100%;text-align:center}
 .edit-act-worker{background:#fff;color:#1a2b8c;border:1.5px solid #1a2b8c;border-radius:4px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer;min-height:32px;width:100%;text-align:center}
 .edit-act-worker:hover{background:#1a2b8c;color:#fff}
+/* V20_164: columna derecha apilada (qty/pay arriba, $ debajo, botones abajo) — alineación consistente independiente del largo del nombre. */
+.w-row-act-right{display:flex;flex-direction:column;gap:5px;align-items:stretch;min-width:110px;flex-shrink:0;margin-left:auto}
+.w-row-act-right .pay-act{text-align:center;margin:0}
+.w-row-act-right .pay-aside{text-align:center;font-size:11px;color:#666;margin:0;font-weight:600;white-space:nowrap}
+.w-row-act-right .qty-input-act{width:100%}
+.w-row-act-right .del-act{width:100%;text-align:center;margin:0}
+.w-row-act-right .edit-act-worker{width:100%;margin:0}
 .del-act-group{background:#fff;color:#c0392b;border:1.5px solid #c0392b;border-radius:4px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0;margin-left:6px}
 .del-act-group:hover{background:#c0392b;color:#fff}
 /* V20_141: botón Editar grupo actividad — gemelo del Eliminar, color azul */
@@ -4129,7 +4137,16 @@ function smartNum(n){
 // V8: helper unificado — resuelve actividad por nombre+tipo (antes repetido 6 veces)
 function resolveAct(a, assign){
   var act=null;
-  if(a.esName){
+  // V20_162 FIX: priorizar match por esName + _payType (Hours vs Pieces homónimas).
+  // Sin esto, dos filas del MASTER con mismo nombre colapsaban en la primera (típicamente Hours)
+  // → PDF mostraba la fila equivocada después de cualquier reload de la app.
+  var _aPT = a._payType || a.payType || '';
+  if(a.esName && _aPT){
+    for(var akP=0;akP<ACTS.length;akP++){
+      if(ACTS[akP].es===a.esName && (ACTS[akP].payType||'')===_aPT){ act=ACTS[akP]; if(assign) a.ai=akP; break; }
+    }
+  }
+  if(!act && a.esName){
     for(var ak=0;ak<ACTS.length;ak++){
       if(ACTS[ak].es===a.esName && (!a.tipo || ACTS[ak].tipo===a.tipo)){ act=ACTS[ak]; if(assign) a.ai=ak; break; }
     }
@@ -7802,17 +7819,45 @@ function _serializeState(){
       var sa=workers[si].acts[sj];
       // V20-FIX1: buscar en ALL_ACTS por esName+tipo (estable entre ranchos)
       // ACTS filtrado puede tener índices diferentes al cambiar rancho → corrupción
+      // V20_162 FIX: match estable por esName + payType (Hours vs Pieces homónimas).
+      // Antes el match por `tipo` (Hora/Ficha/etc) fallaba porque sa.tipo viene de
+      // _derivarTipoActividad (pieza/hora/daywork) mientras ALL_ACTS[].tipo viene de tipoMap
+      // (Hora/Ficha/Caja/$). 'pieza' !== 'Ficha' → fallback nombre-solo retornaba la PRIMERA
+      // fila (típicamente Hours) → actSv.tipo quedaba como 'Hora' y los campos preservados
+      // _payType/_unitPrice NO se persistían → al recargar el día, ACTS[ai] apuntaba a la
+      // fila equivocada → PDF mostraba "HOURS" con TOTAL 0 cuando el usuario había asignado Pieces.
       var sact=null;
+      var _saPT = sa._payType || sa.payType || '';
       if(sa.esName){
-        for(var _si2=0;_si2<ALL_ACTS.length;_si2++){
-          if(ALL_ACTS[_si2].es===sa.esName && (!sa.tipo || ALL_ACTS[_si2].tipo===sa.tipo)){ sact=ALL_ACTS[_si2]; break; }
+        // 1) Match estricto: nombre + payType (cubre Hours vs Pieces homónimas)
+        if(_saPT){
+          for(var _si1p=0;_si1p<ALL_ACTS.length;_si1p++){
+            if(ALL_ACTS[_si1p].es===sa.esName && (ALL_ACTS[_si1p].payType||'')===_saPT){ sact=ALL_ACTS[_si1p]; break; }
+          }
         }
+        // 2) Match clásico por nombre + tipo (legacy)
+        if(!sact){
+          for(var _si2=0;_si2<ALL_ACTS.length;_si2++){
+            if(ALL_ACTS[_si2].es===sa.esName && (!sa.tipo || ALL_ACTS[_si2].tipo===sa.tipo)){ sact=ALL_ACTS[_si2]; break; }
+          }
+        }
+        // 3) Match último: solo nombre
         if(!sact){ for(var _si3=0;_si3<ALL_ACTS.length;_si3++){
           if(ALL_ACTS[_si3].es===sa.esName){ sact=ALL_ACTS[_si3]; break; }
         }}
       }
       if(!sact && sa.ai>=0 && sa.ai<ACTS.length) sact=ACTS[sa.ai];
       var actSv={ai:sa.ai,esName:sact?sact.es:(sa.esName||''),tipo:sact?sact.tipo:(sa.tipo||''),qty:sa.qty,ini:sa.ini,fin:sa.fin,showTime:sa.showTime,pay:sa.pay,shifts:sa.shifts,finca:sa.finca||''};
+      // V20_162 FIX: persistir metadata preservada (_actEs/_payType/_unitPrice/_variable).
+      // Sin esto, autoSave + load borraba TODA la identidad y el PDF se rompía después de
+      // recargar (Hours vs Pieces homónimas colapsaban en la primera fila del MASTER).
+      // Estos campos los pone confirmAssignMany al asignar; aquí los persistimos a localStorage.
+      // Fallback: si el act no los tiene, usar sact (resuelto por nombre+payType arriba) o el sa directo.
+      actSv._actEs     = sa._actEs || (sact ? (sact.es||'') : (sa.esName||''));
+      actSv._payType   = sa._payType || (sact ? (sact.payType||'') : (sa.payType||''));
+      actSv._unitPrice = (sa._unitPrice != null && sa._unitPrice !== '') ? sa._unitPrice
+                        : (sact ? (parseFloat(sact.p)||0) : (parseFloat(sa.p)||0));
+      actSv._variable  = sa._variable || (sact ? (sact.variable||'') : '');
       if(sa.surcos&&sa.surcos.length) actSv.surcos=sa.surcos;
       if(sa.anchoCama) actSv.anchoCama=sa.anchoCama;
       if(sa.indPies) actSv.indPies=sa.indPies;
@@ -8155,6 +8200,9 @@ function load(){
     // para acts viejas creadas antes del fix. Sin esto, acts pre-V20_151 NO tendrían los campos
     // preservados y al reordenar MASTER se romperían igual que antes. Aquí copiamos desde
     // esName/payType/p/ACTS[ai].variable cuando estén disponibles.
+    // V20_162 FIX: si payType/p están vacíos en a, caer a ACTS[a.ai] o ALL_ACTS por nombre.
+    // Antes _serializeState NO persistía estos → migración solo copiaba aM.payType (vacío) → no resolvía.
+    // Ahora la migración resuelve el MASTER y rellena lo que falte para que acts pre-V20_162 sigan vivos.
     for(var iM=0; iM<workers.length; iM++){
       var wM = workers[iM];
       if(!wM || !wM.acts) continue;
@@ -8162,10 +8210,35 @@ function load(){
         var aM = wM.acts[jM];
         if(!aM) continue;
         if(!aM._actEs && aM.esName) aM._actEs = aM.esName;
-        if(!aM._payType && aM.payType) aM._payType = aM.payType;
-        if((aM._unitPrice == null || aM._unitPrice === '') && aM.p != null) aM._unitPrice = aM.p;
-        if(!aM._variable && (aM.ai != null && typeof ACTS !== 'undefined' && ACTS[aM.ai])) {
-          aM._variable = ACTS[aM.ai].variable || '';
+        // Resolver desde ACTS/ALL_ACTS si faltan campos de metadata
+        var _mRef = null;
+        if((!aM._payType || aM._unitPrice == null || !aM._variable)){
+          if(aM.ai != null && typeof ACTS !== 'undefined' && ACTS[aM.ai] && (ACTS[aM.ai].es === aM.esName || !aM.esName)){
+            _mRef = ACTS[aM.ai];
+          } else if(aM.esName && typeof ALL_ACTS !== 'undefined' && ALL_ACTS){
+            // Buscar primero por nombre + payType si lo conocemos; sino por nombre solo
+            for(var _miA=0; _miA<ALL_ACTS.length; _miA++){
+              if(ALL_ACTS[_miA].es===aM.esName){
+                if(!aM._payType || (ALL_ACTS[_miA].payType||'')===aM._payType){ _mRef = ALL_ACTS[_miA]; break; }
+              }
+            }
+            if(!_mRef){
+              for(var _miA2=0; _miA2<ALL_ACTS.length; _miA2++){
+                if(ALL_ACTS[_miA2].es===aM.esName){ _mRef = ALL_ACTS[_miA2]; break; }
+              }
+            }
+          }
+        }
+        if(!aM._payType){
+          aM._payType = aM.payType || (_mRef ? (_mRef.payType||'') : '');
+        }
+        if(aM._unitPrice == null || aM._unitPrice === ''){
+          if(aM.p != null) aM._unitPrice = aM.p;
+          else if(_mRef && _mRef.p != null) aM._unitPrice = _mRef.p;
+        }
+        if(!aM._variable){
+          if(_mRef && _mRef.variable) aM._variable = _mRef.variable;
+          else if(aM.ai != null && typeof ACTS !== 'undefined' && ACTS[aM.ai]) aM._variable = ACTS[aM.ai].variable || '';
         }
       }
     }
@@ -8462,6 +8535,30 @@ function _getTypeTagFromAct(act) {
   return _v152TypeTag(act && act.payType);
 }
 
+// V20_163: helper para formatear qty + unidad dentro del cuadro verde de la fila worker.
+// Cuadro verde muestra QTY (piezas/cajas/días/horas/puertas), pay $X.XX va al lado en .pay-aside.
+// Pedido de Serafín: ver lo capturado en grande, no el pago (que es derivado).
+function _formatQtyForCell(wkr, g, isHora){
+  if(isHora){
+    // Hora: la qty mostrada es horas calculadas desde shifts del worker. Si no hay qty
+    // explícita en wkr (porque la vista por actividad solo trae a.qty/a.pay), usamos wkr.qty.
+    var hCalc = (parseFloat(wkr.qty) || 0);
+    return hCalc.toFixed(2) + ' h';
+  }
+  var q = parseFloat(wkr.qty) || 0;
+  if(!q) return '0';
+  var pt = (g && g.payType || '').toString().toLowerCase().trim();
+  var unit = '';
+  if(pt === 'pieces' || pt === 'piece') unit = ' piezas';
+  else if(pt === 'boxes' || pt === 'box') unit = ' cajas';
+  else if(pt === 'daywork') unit = (q === 1 ? ' día' : ' días');
+  else {
+    var v = (g && g.variable || '').toString().toUpperCase();
+    if(v === 'VARDOOR') unit = ' puertas';
+  }
+  return q + unit;
+}
+
 // V20_126: vista por actividad — acordeones agrupados con tipo, horario, conteo, finca, rate
 function renderWlistByActivity(){
   var cont = gEl('wlist'); if(!cont) return;
@@ -8514,6 +8611,9 @@ function renderWlistByActivity(){
       // V20_157: detección Hora 3 capas (1) g.tipo === 'hora', (2) g.payType === 'hours', (3) act resuelto + _derivarTipoActividad.
       // V20_139: placeholder del cuadrito leído desde col H del MASTER via getRequiredInputs (motor V20_27).
       // V20_152: editActivityWorker individual via prompt (qty>0).
+      // V20_164: TODO el lado derecho (qty/pay + $ + botones) se envuelve en .w-row-act-right para alineación
+      //          consistente independiente del largo del nombre del worker. El $pay-aside ahora va DEBAJO del cuadro verde,
+      //          no al lado. Botones apilados (Quitar arriba, Editar abajo) ocupan el ancho completo de la columna.
       var _tipoLow = (g.tipo || '').toString().toLowerCase().trim();
       var _isHora = (_tipoLow === 'hora');
       if(!_isHora && (g.payType || '').toString().toLowerCase().trim() === 'hours') _isHora = true;
@@ -8529,9 +8629,14 @@ function renderWlistByActivity(){
       // V20_161: detectar si worker ya tiene qty capturada
       var _wkrQty = parseFloat(wkr.qty) || 0;
       var _hasQty = _wkrQty > 0;
+      // V20_164: abrir contenedor columna derecha (qty/pay arriba, $ debajo, botones abajo, alineados a la derecha)
+      html += '  <div class="w-row-act-right">';
       if(_isHora || _hasQty){
-        // Hora siempre muestra pay; no-Hora con qty>0 también muestra pay calculado.
-        html += '  <span class="pay-act">$'+(+wkr.pay||0).toFixed(2)+'</span>';
+        // V20_163: el cuadro verde ahora muestra QTY con unidad (piezas/cajas/días/horas/puertas);
+        // el pago $X.XX va DEBAJO en .pay-aside (gris/sutil). V20_164: el .pay-aside ya no va al lado, va abajo (flex column).
+        var _qtyTxt = _formatQtyForCell(wkr, g, _isHora);
+        html += '    <span class="pay-act">'+esc(_qtyTxt)+'</span>';
+        html += '    <span class="pay-aside">$'+(+wkr.pay||0).toFixed(2)+'</span>';
       } else {
         // No-Hora sin qty → cuadrito para teclear directo (placeholder data-driven col H MASTER).
         var phText = '0';
@@ -8548,15 +8653,14 @@ function renderWlistByActivity(){
         // Daywork: default 1 día (no placeholder)
         var isDay = (g.payType||'').toString().toLowerCase().trim() === 'daywork';
         var inputAttrs = isDay ? 'value="1"' : 'placeholder="'+esc(phText)+'"';
-        html += '  <input class="qty-input-act" type="number" min="0" step="any" ' + inputAttrs + ' onchange="onActQtyChange(' + wkr.id + ',' + wkr.actIdx + ',this.value,this)">';
+        html += '    <input class="qty-input-act" type="number" min="0" step="any" ' + inputAttrs + ' onchange="onActQtyChange(' + wkr.id + ',' + wkr.actIdx + ',this.value,this)">';
       }
-      html += '  <div class="w-row-act-btns">';
       html += '    <button class="del-act" onclick="onActWorkerRemove('+wkr.id+','+wkr.actIdx+')">Quitar</button>';
       // V20_161: Editar solo si NO es Hora Y SÍ tiene qty (qty>0).
       if(!_isHora && _hasQty){
         html += '    <button class="edit-act-worker" onclick="editActivityWorker('+wkr.id+','+wkr.actIdx+')" title="Editar la cantidad de este trabajador">✏️ Editar</button>';
       }
-      html += '  </div>';
+      html += '  </div>'; // close w-row-act-right (V20_164)
       html += '</div>';
     }
     html += '  </div>';
@@ -8598,13 +8702,45 @@ function onActQtyChange(wid_, actIdx, val, inpEl){
   try { autoSave(); } catch(e){}
   // Bug 6: NO llamar renderWlistByActivity() completo — destruía el DOM y cerraba todos los acordeones.
   // Actualizar quirúrgicamente solo el pago del worker afectado, manteniendo el acordeón abierto.
+  // V20_163: ahora .pay-act muestra QTY con unidad; el $pay vive en .pay-aside.
+  // Si la fila aún no tiene .pay-aside (estado previo: cuadrito input vacío sin pay-aside),
+  // el render del próximo refresh de pestaña lo reconstruirá. Aquí actualizamos lo que exista.
   try {
-    var newPay = (+w.acts[actIdx].pay) || 0;
+    var aRef = w.acts[actIdx];
+    var newPay = (+aRef.pay) || 0;
     if(inpEl && inpEl.closest){
       var row = inpEl.closest('.w-row-act');
       if(row){
-        var payEl = row.querySelector('.pay-act');
-        if(payEl) payEl.textContent = '$' + newPay.toFixed(2);
+        // Construir qty con unidad usando _formatQtyForCell (mismo formato del render).
+        // Necesitamos g.payType / g.variable / isHora — derivamos de la act resuelta.
+        var _qtyTxtNew = '';
+        try {
+          var _actR = (typeof _resolveActStable === 'function') ? _resolveActStable(aRef) : null;
+          if(!_actR){
+            _actR = (aRef.ai != null && typeof ACTS !== 'undefined' && ACTS[aRef.ai]) ? ACTS[aRef.ai] : null;
+          }
+          var _gShim = {
+            payType: (_actR && _actR.payType) || aRef._payType || aRef.payType || '',
+            variable: (_actR && _actR.variable) || aRef._variable || '',
+            tipo: aRef.tipo || (_actR && _actR.hr ? 'hora' : '')
+          };
+          var _isHoraR = (_actR && _actR.hr === true) || ((_gShim.payType || '').toString().toLowerCase().trim() === 'hours');
+          var _wkrShim = { qty: aRef.qty || 0 };
+          _qtyTxtNew = _formatQtyForCell(_wkrShim, _gShim, _isHoraR);
+        } catch(eF){ _qtyTxtNew = String((parseFloat(aRef.qty)||0)); }
+        var payActEl = row.querySelector('.pay-act');
+        if(payActEl) payActEl.textContent = _qtyTxtNew;
+        var asideEl = row.querySelector('.pay-aside');
+        if(asideEl){
+          asideEl.textContent = '$' + newPay.toFixed(2);
+        } else if(payActEl){
+          // Si el render anterior no incluyó .pay-aside (porque venía del estado "cuadrito input"),
+          // insertarlo justo después del .pay-act para que el pay sea visible sin perder el acordeón.
+          var sp = document.createElement('span');
+          sp.className = 'pay-aside';
+          sp.textContent = '$' + newPay.toFixed(2);
+          payActEl.parentNode.insertBefore(sp, payActEl.nextSibling);
+        }
       }
     }
   } catch(e){ console.warn('onActQtyChange DOM update fallo:', e); }
