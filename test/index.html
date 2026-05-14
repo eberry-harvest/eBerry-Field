@@ -35,7 +35,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_167';
+window.APP_VERSION = 'V20_168';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -8496,7 +8496,12 @@ function buildActViewGroups(){
         };
         order.push(key);
       }
-      groups[key].workers.push({ id:w.id, name:w.name, empNum:w.empNum||'', qty:a.qty||0, pay:a.pay||0, actIdx:ai });
+      // V20_168 Fix 1: para Hora, calcular qty como totalShiftHours(a) — recalc NO escribe
+      // las horas calculadas a a.qty (solo a.pay). Sin esto el cuadrito verde lee a.qty=0
+      // mientras el pay aside muestra $X.XX, inconsistente. _formatQtyForCell formatea "X.XX h".
+      var _isHoraTmp168 = (tipo==='hora' || (act && act.hr) || ((payType||'').toString().toLowerCase().trim() === 'hours'));
+      var _qtyForView168 = _isHoraTmp168 ? (typeof totalShiftHours === 'function' ? totalShiftHours(a) : 0) : (a.qty||0);
+      groups[key].workers.push({ id:w.id, name:w.name, empNum:w.empNum||'', qty:_qtyForView168, pay:a.pay||0, actIdx:ai });
     }
   }
   var out = [];
@@ -8650,10 +8655,9 @@ function renderWlistByActivity(){
             }
           }
         } catch(e){}
-        // Daywork: default 1 día (no placeholder)
-        var isDay = (g.payType||'').toString().toLowerCase().trim() === 'daywork';
-        var inputAttrs = isDay ? 'value="1"' : 'placeholder="'+esc(phText)+'"';
-        html += '    <input class="qty-input-act" type="number" min="0" step="any" ' + inputAttrs + ' onchange="onActQtyChange(' + wkr.id + ',' + wkr.actIdx + ',this.value,this)">';
+        // V20_168 Fix 2: Daywork ahora usa 0 fantasma (placeholder) como piezas/cajas
+        // (antes V20_161: value="1" default). Surquero teclea cantidad explícita igual que en VarPsc/BoxesPsc.
+        html += '    <input class="qty-input-act" type="number" min="0" step="any" placeholder="'+esc(phText)+'" onchange="onActQtyChange(' + wkr.id + ',' + wkr.actIdx + ',this.value,this)">';
       }
       html += '    <button class="del-act" onclick="onActWorkerRemove('+wkr.id+','+wkr.actIdx+')">Quitar</button>';
       // V20_161: Editar solo si NO es Hora Y SÍ tiene qty (qty>0).
