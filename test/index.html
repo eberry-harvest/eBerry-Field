@@ -35,7 +35,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_172';
+window.APP_VERSION = 'V20_173';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -9087,7 +9087,7 @@ function _saveEditedActivityGroup(){
       p: newAct.p,
       payType: newAct.payType||'',
       ini: newIni, fin: newFin, finca: newFinca,
-      qty: preserved ? preserved.qty : ((newAct.payType === 'Daywork') ? 1 : 0),
+      qty: preserved ? preserved.qty : 0,  // V20_173: Daywork ya NO se preasigna con 1 — usa 0 fantasma como piezas/cajas (Serafín 2026-05-14).
       showTime: true,
       shifts: [{ini:newIni, fin:newFin}],
       inputs: preserved && preserved.inputs ? preserved.inputs : JSON.parse(JSON.stringify(commonVars))
@@ -9357,7 +9357,7 @@ function confirmAssignMany(){
       p: act.p,
       payType: act.payType||'',
       ini: ini, fin: fin, finca: finca,
-      qty: (act.payType === 'Daywork') ? 1 : 0,
+      qty: 0,  // V20_173: Daywork ya NO se preasigna con 1 — surquero teclea explícito como piezas/cajas.
       showTime: true,
       shifts: [{ini:ini, fin:fin}],
       inputs: JSON.parse(JSON.stringify(commonVars))
@@ -9416,7 +9416,7 @@ function renderResumenV20_126(){
         var hr = !!(act && act.hr) || (pType.toString().toLowerCase().trim() === 'hours');
         var qtyLabel = '';
         if(hr) qtyLabel = (+hh).toFixed(2)+'h';
-        else if(pType === 'Daywork') qtyLabel = '1 día';
+        // V20_173: Daywork ya NO asume 1 día — muestra qty real igual que piezas.
         else qtyLabel = (+a.qty||0) + ' u';
         var rate = (act && act.p != null) ? act.p : (a._unitPrice != null ? a._unitPrice : (a.p || 0));
         var rateLabel = '$'+(+rate||0).toFixed(2) + (hr?'/hr':(pType==='Daywork'?'/día':'/u'));
