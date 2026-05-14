@@ -35,7 +35,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_155';
+window.APP_VERSION = 'V20_157';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -8407,48 +8407,30 @@ function renderWlistByActivity(){
       html += '<div class="w-row-act">';
       html += '  <div class="nm-full">'+esc(wkr.name)+'</div>';
       if(wkr.empNum) html += '  <span class="num">#'+esc(wkr.empNum)+'</span>';
-      // V20_151 FIX 1: detección Hora 3-capas case-insensitive (bug cuadrito aparecía en Hora).
-      // Causa: g.tipo viene 'Hora' (capital del tipoMap) -> '!== "hora"' (lower) NUNCA matcheaba.
-      // Capas: 1) string lowercase, 2) payType='Hours', 3) motor data-driven _derivarTipoActividad.
+      // V20_156: cuadrito qty redundante eliminado del render (el botón Editar ya permite cambiar qty via prompt).
+      // onActQtyChange, editActivityWorker, CSS .qty-input-act preservados (pueden usarse en otros lados).
+      html += '  <span class="pay-act">$'+(+wkr.pay||0).toFixed(2)+'</span>';
+      // V20_152 FIX 4: botón Quitar + botón Editar individual (pedido de Serafín "POR SI HAY QUE CAMBIAR LAS PIEZAS!").
+      // V20_157: ocultar "Editar" individual cuando la actividad es Hora — pay se calcula desde horario (ini-fin × rate),
+      // no hay qty manual que editar. Para cambiar horario usar el botón Editar del HEADER (V20_141) que afecta a todo el grupo.
+      // Detección 3 capas: (1) g.tipo === 'hora', (2) g.payType === 'hours', (3) act resuelto + _derivarTipoActividad.
       var _tipoLow = (g.tipo || '').toString().toLowerCase().trim();
       var _isHora = (_tipoLow === 'hora');
       if(!_isHora && (g.payType || '').toString().toLowerCase().trim() === 'hours') _isHora = true;
       if(!_isHora){
         try {
-          var _actDefH = (g.ai != null && typeof ACTS !== 'undefined' && ACTS[g.ai]) ? ACTS[g.ai] : null;
-          if(!_actDefH && g.actName && typeof _resolveActByName === 'function') _actDefH = _resolveActByName(g.actName);
-          if(_actDefH && typeof _derivarTipoActividad === 'function'){
-            if(_derivarTipoActividad(_actDefH) === 'hora') _isHora = true;
+          var actDef = (g.ai != null && ACTS[g.ai]) ? ACTS[g.ai] : null;
+          if(!actDef && g.actName && typeof _resolveActByName === 'function') actDef = _resolveActByName(g.actName);
+          if(actDef && typeof _derivarTipoActividad === 'function'){
+            if(_derivarTipoActividad(actDef) === 'hora') _isHora = true;
           }
-        } catch(eH){}
+        } catch(e){}
       }
-      if(!_isHora){
-        // V20_139: placeholder data-driven desde col H del MASTER (motor V20_27)
-        var _qtyRaw = +wkr.qty || 0;
-        var _qtyAttrs;
-        if(_qtyRaw > 0){
-          _qtyAttrs = 'value="'+_qtyRaw+'"';
-        } else if(g.payType === 'Daywork'){
-          _qtyAttrs = 'value="1"';
-        } else {
-          var _phTxt = '0';
-          try {
-            var _actDef = (g.ai != null && typeof ACTS !== 'undefined' && ACTS[g.ai]) ? ACTS[g.ai] : null;
-            if(!_actDef && g.actName && typeof _resolveActByName === 'function') _actDef = _resolveActByName(g.actName);
-            if(_actDef && typeof getRequiredInputs === 'function'){
-              var _req = getRequiredInputs(_actDef);
-              if(_req && _req[0]) _phTxt = _req[0].label || _req[0].placeholder || '0';
-            }
-          } catch(e){}
-          _qtyAttrs = 'placeholder="'+esc(_phTxt)+'"';
-        }
-        html += '  <input class="qty-input-act" type="number" min="0" step="any" '+_qtyAttrs+' onchange="onActQtyChange('+wkr.id+','+wkr.actIdx+',this.value,this)">';
-      }
-      html += '  <span class="pay-act">$'+(+wkr.pay||0).toFixed(2)+'</span>';
-      // V20_152 FIX 4: botón Quitar + botón Editar individual (pedido de Serafín "POR SI HAY QUE CAMBIAR LAS PIEZAS!").
       html += '  <div class="w-row-act-btns">';
       html += '    <button class="del-act" onclick="onActWorkerRemove('+wkr.id+','+wkr.actIdx+')">Quitar</button>';
-      html += '    <button class="edit-act-worker" onclick="editActivityWorker('+wkr.id+','+wkr.actIdx+')" title="Editar la cantidad de este trabajador">✏️ Editar</button>';
+      if(!_isHora){
+        html += '    <button class="edit-act-worker" onclick="editActivityWorker('+wkr.id+','+wkr.actIdx+')" title="Editar la cantidad de este trabajador">✏️ Editar</button>';
+      }
       html += '  </div>';
       html += '</div>';
     }
