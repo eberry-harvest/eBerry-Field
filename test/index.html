@@ -35,7 +35,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_164';
+window.APP_VERSION = 'V20_166';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -1519,14 +1519,14 @@ body.readOnly [onclick*="openNewDay"]{display:none !important}
 <!-- DELETE ALL MODAL -->
 <div class="ov" id="delAllOv">
   <div class="md">
-    <div class="mt">🗑️ Eliminar todos</div>
-    <div class="ms">¿Estás seguro que deseas eliminar a TODOS los trabajadores y sus actividades?</div>
+    <div class="mt">🗑️ Eliminar todas las actividades</div><!-- V20_165 -->
+    <div class="ms">¿Estás seguro que deseas eliminar TODAS las actividades capturadas?<br><br>Los trabajadores se mantienen registrados. Solo se vacían las actividades para volver a asignar.</div><!-- V20_165 -->
     <div class="mbox" style="background:var(--rp);border:1.5px solid var(--r)">
       <div class="ml" style="color:var(--r)">Esta acción no se puede deshacer</div>
       <div class="mv" id="delAllCount" style="color:var(--r);font-size:28px">0 trabajadores</div>
     </div>
     <div class="mbs">
-      <button class="mok" style="background:var(--r)" onclick="confirmDelAll()">🗑️ Sí, eliminar todos</button>
+      <button class="mok" style="background:var(--r)" onclick="confirmDelAll()">🗑️ Sí, eliminar actividades</button><!-- V20_165 -->
       <button class="mca" onclick="gEl('delAllOv').classList.remove('on')">No, cancelar</button>
     </div>
   </div>
@@ -1669,7 +1669,7 @@ body.readOnly [onclick*="openNewDay"]{display:none !important}
 <div class="pg" id="p2w">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:3px">
     <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px">Act. Individuales</div><!-- V20_126: renombrado Trabajadores → Act. Individuales -->
-    <button onclick="askDelAll()" style="background:var(--rp);color:var(--r);border:1.5px solid var(--r);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer">🗑️ Eliminar todos</button>
+    <button onclick="askDelAll()" style="background:var(--rp);color:var(--r);border:1.5px solid var(--r);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer">🗑️ Eliminar todas las actividades</button><!-- V20_165: rename - solo borra actividades, no workers -->
   </div>
   <!-- V20_91_14: agregar trabajadores ahora se hace desde Parámetros → Check-in cuadrilla -->
   <div style="font-size:13px;color:var(--gr);margin-bottom:11px">Toca <b>✅ Check-in cuadrilla</b> en Parámetros para registrar trabajadores.</div>
@@ -11272,20 +11272,20 @@ function askDelAll(){
   gEl('delAllOv').classList.add('on');
 }
 function confirmDelAll(){
-  // Mu: reset de workers + grpActs (no ausencias)
-  workers=[]; wid=0; estP=[]; hilP=[]; cajasP=[]; grpActs=[];
-  var list=gEl('wlist'); list.innerHTML='';
-  var ph=document.createElement('div'); ph.id='wph';
-  ph.style.cssText='text-align:center;padding:40px 18px;color:var(--gr);font-size:14px';
-  ph.textContent='Escribe un nombre en la barra de abajo 👇';
-  list.appendChild(ph);
-  updParts(); renderGrpActs(); gEl('delAllOv').classList.remove('on');
-  // Bug 4: refrescar UI completa para que el botón "Asignar actividades" reaparezca sin cambiar de pestaña
+  // V20_165: solo vaciar actividades INDIVIDUALES de cada worker.
+  // NO tocar workers, grpActs, ausencias (estP/hilP/cajasP), wid.
+  // Para eliminar personal, el surquero usa la pestaña Check-in/ausencias.
+  for(var i=0; i<workers.length; i++){
+    if(workers[i] && workers[i].acts) workers[i].acts = [];
+  }
+  gEl('delAllOv').classList.remove('on');
+  try { autoSave(); } catch(e){}
+  // Refresh UI completa (mantener llamadas previas para no romper visual)
   try { renderWlistByActivity(); } catch(e){ console.warn('confirmDelAll renderWlistByActivity fallo:', e); }
   try { if (typeof _renderCheckOutBtn === 'function') _renderCheckOutBtn(); } catch(e){}
   try { if (typeof _renderIniciarDia === 'function') _renderIniciarDia(); } catch(e){}
   try { if (typeof renderResumenV20_126 === 'function') renderResumenV20_126(); } catch(e){}
-  toast('✓ Lista limpia'); autoSave();
+  try { toast('✅ Actividades eliminadas'); } catch(e){}
 }
 
 // ── SEND TO PAYROLL FIELD MASTER ─────────────────────────────
@@ -17096,10 +17096,14 @@ function checkInManualSelect(name){
     // Antes (V20_105 FASE B) se exigía confirmación con el QR del surquero después del manual.
     // Ahora: trabajador/chofer manuales entran directo, como en V20_91. Surquero/dual siguen bloqueados arriba.
     var roleSnapshot = _cisRole || 'trabajador';
-    // Cerrar la UI del bottom-sheet/manual ANTES de tocar globales (closeCheckInSheet resetea _cisRole).
-    var box = gEl('checkInManualBox'); if(box) box.style.display='none';
-    var pop = gEl('checkInACPop'); if(pop){ pop.style.display='none'; pop.innerHTML=''; }
-    try { if(typeof closeCheckInSheet === 'function') closeCheckInSheet(); } catch(_){}
+    // V20_166: modo continuo Manual — para trabajador, el sheet NO se cierra entre altas.
+    // Limpia input + popup, refocus, actualiza contador. Chofer es one-shot (sí cierra).
+    var isTrabajadorContinuo166 = (roleSnapshot === 'trabajador');
+    if(!isTrabajadorContinuo166){
+      var box = gEl('checkInManualBox'); if(box) box.style.display='none';
+      var pop = gEl('checkInACPop'); if(pop){ pop.style.display='none'; pop.innerHTML=''; }
+      try { if(typeof closeCheckInSheet === 'function') closeCheckInSheet(); } catch(_){}
+    }
     // Limpiar cualquier "pending" residual de flujos previos (manualConfirm legacy) para evitar
     // que un escaneo posterior dispare la rama vieja en onQRSuccess.
     _pendingManualAdd = null;
@@ -17120,6 +17124,17 @@ function checkInManualSelect(name){
     // doAddConfirmed ya resetea _qrMode='trabajador' al final, pero lo reforzamos por defensa.
     _qrMode = 'trabajador';
     // NOTA: doAddConfirmed muestra su propio toast '✓ Nombre agregado'. Aquí NO duplicamos.
+    // V20_166: en modo continuo trabajador, limpiar input + popup, refocus y actualizar contador
+    // para que el surquero pueda seguir registrando sin tocar "Check-in" otra vez.
+    if(isTrabajadorContinuo166){
+      try {
+        var srch166 = gEl('checkInSrch');
+        if(srch166){ srch166.value=''; setTimeout(function(){ try{ srch166.focus(); }catch(_){} }, 80); }
+        var pop166 = gEl('checkInACPop'); if(pop166){ pop166.style.display='none'; pop166.innerHTML=''; }
+        var cnt166 = gEl('cisCount');
+        if(cnt166){ cnt166.style.display=''; cnt166.textContent = '('+((workers&&workers.length)||0)+' registrados hoy)'; }
+      } catch(_){}
+    }
   }catch(e){ console.warn('checkInManualSelect',e); _pendingManualAdd=null; _pendingManualRole=null; _qrMode='trabajador'; }
 }
 
