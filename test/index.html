@@ -35,7 +35,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_151';
+window.APP_VERSION = 'V20_152';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -1361,6 +1361,11 @@ body.readOnly [onclick*="openNewDay"]{display:none !important}
 .w-row-act .qty-input-act{width:70px;padding:4px;text-align:center;border:1px solid #ddd;border-radius:4px;font-size:12px}
 .w-row-act .pay-act{font-weight:700;color:#155724;font-size:12px;background:#d4edda;padding:2px 8px;border-radius:8px;white-space:nowrap}
 .w-row-act .del-act{background:#dc3545;color:#fff;border:none;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:11px;font-weight:600}
+/* V20_152 FIX 4: botones apilados Quitar + Editar individual por trabajador (pedido de Serafín). */
+.w-row-act-btns{display:flex;flex-direction:column;gap:4px;align-items:stretch;min-width:84px}
+.w-row-act-btns .del-act{width:100%;text-align:center}
+.edit-act-worker{background:#fff;color:#1a2b8c;border:1.5px solid #1a2b8c;border-radius:4px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer;min-height:32px;width:100%;text-align:center}
+.edit-act-worker:hover{background:#1a2b8c;color:#fff}
 .del-act-group{background:#fff;color:#c0392b;border:1.5px solid #c0392b;border-radius:4px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer;flex-shrink:0;margin-left:6px}
 .del-act-group:hover{background:#c0392b;color:#fff}
 /* V20_141: botón Editar grupo actividad — gemelo del Eliminar, color azul */
@@ -7309,10 +7314,13 @@ function buildSum(){
     var w=workers[i]; var dets=[];
     for(var j=0;j<w.acts.length;j++){
       var a=w.acts[j];
-      var act=resolveAct(a, true); // V8
+      // V20_152: preferir metadata preservada (a._actEs/_payType/_unitPrice) sobre ACTS[a.ai].
+      // Sin esto, 2 filas MASTER homónimas (Hours+Pieces) hacían que el resumen mostrara
+      // tipo equivocado (ej. Pieces aparecía con "h" en vez de cantidad).
+      var act = _resolveActStable(a) || resolveAct(a, true);
       if(!act){ dets.push((a.esName||'Act.#'+a.ai)+'($'+(a.pay||0).toFixed(2)+')'); continue; }
-      var u=act.hr?(a.ini&&a.fin?to12h(a.ini)+'→'+to12h(a.fin)+'('+nh(a.ini,a.fin)+'h)':'sin horario'):act.tipo==='$'?'$'+smartNum(a.qty):smartNum(a.qty)+' '+act.tipo;
-      dets.push(esc(act.es.split(' ').slice(0,2).join(' '))+'('+u+')'); // V9
+      var u=act.hr?(a.ini&&a.fin?to12h(a.ini)+'→'+to12h(a.fin)+'('+nh(a.ini,a.fin)+'h)':'sin horario'):act.tipo==='$'?'$'+smartNum(a.qty):smartNum(a.qty)+' '+(act.tipo||(act.payType||'u'));
+      dets.push(esc((act.es||'').split(' ').slice(0,2).join(' '))+'('+u+')'); // V9
     }
     var exD=grpPayDetail(w.id); var ex=exD.pay;
     h+='<div class="sr"><span class="sn">'+(i+1)+'. '+esc(w.name)+'</span><span class="sd">'+(dets.join(' + ')||'—')+(ex>0?' +Grp('+exD.label+')':'')+
@@ -8319,27 +8327,35 @@ function buildActViewGroups(){
   return out;
 }
 
-// V20_138: tag visual 100% data-driven — label = payType del MASTER (col D) en MAYÚSCULAS, color por hash a paleta de 6
-function _getTypeTag(g) {
-  var pt = (g && g.payType ? g.payType : '?').toString().trim().toUpperCase();
+// V20_138: tag visual 100% data-driven — label = payType del MASTER (col D) en MAYÚSCULAS.
+// V20_152 FIX 3: paleta fija para los 5 payTypes principales para evitar colisiones de hash.
+// Antes (V20_138) hash de 'HOURS' y 'DAYWORK' caía en el mismo color 6 → Serafín los veía iguales.
+// Lista de mapeos: HOURS=1 azul, BOXES=2 verde, DAYWORK=3 rojo, PIECES=4 amarillo/naranja,
+// EXTRA=6 morado. Color 5 (verde oscuro) queda libre para futuros payTypes.
+// Para payTypes desconocidos (raros, ej. surquero agregó tipo nuevo en MASTER), hash dinámico fallback.
+var _V152_FIXED_TYPE_COLORS = {
+  'HOURS':   {cls:'type-tag tag-color-1', label:'HOURS'},   // azul marino
+  'BOXES':   {cls:'type-tag tag-color-2', label:'BOXES'},   // verde
+  'DAYWORK': {cls:'type-tag tag-color-3', label:'DAYWORK'}, // rojo
+  'PIECES':  {cls:'type-tag tag-color-4', label:'PIECES'},  // amarillo/naranja
+  'EXTRA':   {cls:'type-tag tag-color-6', label:'EXTRA'}    // morado
+};
+function _v152TypeTag(pt) {
+  pt = (pt || '?').toString().trim();
+  var ptUp = pt.toUpperCase();
+  if(_V152_FIXED_TYPE_COLORS[ptUp]) return _V152_FIXED_TYPE_COLORS[ptUp];
+  // Hash dinámico para payTypes desconocidos (label es ptUp tal cual del MASTER, no hardcoded).
   var hash = 0;
-  for (var i = 0; i < pt.length; i++) hash = (hash + pt.charCodeAt(i)) | 0;
+  for (var i = 0; i < ptUp.length; i++) hash = (hash + ptUp.charCodeAt(i)) | 0;
   var colorIdx = (Math.abs(hash) % 6) + 1;
-  return {
-    cls: 'type-tag tag-color-' + colorIdx,
-    label: pt || '?'
-  };
+  return { cls: 'type-tag tag-color-' + colorIdx, label: ptUp || '?' };
+}
+function _getTypeTag(g) {
+  return _v152TypeTag(g && g.payType);
 }
 
 function _getTypeTagFromAct(act) {
-  var pt = (act && act.payType ? act.payType : '?').toString().trim().toUpperCase();
-  var hash = 0;
-  for (var i = 0; i < pt.length; i++) hash = (hash + pt.charCodeAt(i)) | 0;
-  var colorIdx = (Math.abs(hash) % 6) + 1;
-  return {
-    cls: 'type-tag tag-color-' + colorIdx,
-    label: pt || '?'
-  };
+  return _v152TypeTag(act && act.payType);
 }
 
 // V20_126: vista por actividad — acordeones agrupados con tipo, horario, conteo, finca, rate
@@ -8425,7 +8441,11 @@ function renderWlistByActivity(){
         html += '  <input class="qty-input-act" type="number" min="0" step="any" '+_qtyAttrs+' onchange="onActQtyChange('+wkr.id+','+wkr.actIdx+',this.value,this)">';
       }
       html += '  <span class="pay-act">$'+(+wkr.pay||0).toFixed(2)+'</span>';
-      html += '  <button class="del-act" onclick="onActWorkerRemove('+wkr.id+','+wkr.actIdx+')">Quitar</button>';
+      // V20_152 FIX 4: botón Quitar + botón Editar individual (pedido de Serafín "POR SI HAY QUE CAMBIAR LAS PIEZAS!").
+      html += '  <div class="w-row-act-btns">';
+      html += '    <button class="del-act" onclick="onActWorkerRemove('+wkr.id+','+wkr.actIdx+')">Quitar</button>';
+      html += '    <button class="edit-act-worker" onclick="editActivityWorker('+wkr.id+','+wkr.actIdx+')" title="Editar la cantidad de este trabajador">✏️ Editar</button>';
+      html += '  </div>';
       html += '</div>';
     }
     html += '  </div>';
@@ -8488,6 +8508,43 @@ function onActWorkerRemove(wid_, actIdx){
   try { recalc(wid_); } catch(e){}
   try { autoSave(); } catch(e){}
   renderWlistByActivity();
+}
+
+// V20_152 FIX 4: Editar la cantidad de UN solo trabajador en una actividad (sin afectar al grupo).
+// Pedido de Serafín: "POR SI HAY QUE CAMBIAR LAS PIEZAS!". Usa prompt simple — luego recalc + autoSave.
+// Alimenta a.inputs[primer_col_motor] (paridad con onActQtyChange V20_134_b1) para que computePay funcione.
+function editActivityWorker(wid_, actIdx){
+  if(_readOnlyMode){ toast && toast('🔒 Modo lectura'); return; }
+  var w = getW(wid_); if(!w) return;
+  if(!w.acts || !w.acts[actIdx]){ toast && toast('⚠️ Actividad no encontrada'); return; }
+  var a = w.acts[actIdx];
+  var actName = a._actEs || a.esName || '(actividad)';
+  var currentQty = a.qty || 0;
+  var newVal = prompt('Editar cantidad para ' + w.name + ' en ' + actName + ':', currentQty);
+  if(newVal === null) return; // cancelado
+  var parsed = parseFloat(newVal);
+  if(isNaN(parsed) || parsed < 0){
+    toast && toast('⚠️ Valor inválido');
+    return;
+  }
+  a.qty = parsed;
+  // Alimentar a.inputs[primer_col_motor] (paridad con onActQtyChange V20_134_b1).
+  try {
+    var act = (typeof _resolveActStable === 'function') ? _resolveActStable(a)
+              : ((a.ai != null && ACTS[a.ai]) ? ACTS[a.ai] : null);
+    if(act && typeof getRequiredInputs === 'function'){
+      var reqInputs = getRequiredInputs(act);
+      if(reqInputs && reqInputs[0]){
+        if(!a.inputs) a.inputs = {};
+        var firstCol = reqInputs[0].column;
+        if(firstCol) a.inputs[firstCol] = parsed;
+      }
+    }
+  } catch(e){ console.warn('[V20_152] editActivityWorker feed a.inputs fallo:', e); }
+  try { recalc(wid_, actIdx); } catch(e){ console.warn('[V20_152] editActivityWorker recalc fallo:', e); }
+  try { autoSave(); } catch(e){}
+  renderWlistByActivity();
+  toast && toast('✅ Cantidad actualizada para ' + w.name);
 }
 
 // Bug 3: eliminar UNA actividad de TODOS los trabajadores asignados (no quita workers)
@@ -9100,21 +9157,28 @@ function renderResumenV20_126(){
     } else {
       for(var ai=0; ai<w.acts.length; ai++){
         var a = w.acts[ai];
-        var act = (a.ai != null && ACTS[a.ai]) ? ACTS[a.ai] : null;
-        if(!act && (a.esName || a._actEs)){
-          try { act = _resolveActByName(a.esName || a._actEs); } catch(e){}
+        // V20_152: usar _resolveActStable — preserva la identidad (Hours vs Pieces homónimas).
+        // Si MASTER tiene 2 filas con mismo nombre y el surquero asignó Pieces, debe mostrar Pieces,
+        // no cualquiera de las 2 dependiendo del orden del MASTER.
+        var act = _resolveActStable(a);
+        if(!act){
+          act = (a.ai != null && ACTS[a.ai]) ? ACTS[a.ai] : null;
+          if(!act && (a.esName || a._actEs)){
+            try { act = _resolveActByName(a.esName || a._actEs); } catch(e){}
+          }
         }
         var nm = act ? (act.es||'') : (a.esName||'(act sin nombre)');
         var ini = a.ini||''; var fin = a.fin||'';
         var hh = 0;
         try { if(typeof nh === 'function' && ini && fin) hh = nh(ini, fin) || 0; } catch(e){}
-        var hr = (act && act.hr) ? true : false;
-        var pType = (act && act.payType) || a.payType || '';
+        // V20_152: hr derivada de la metadata estable (payType==='Hours' es la verdad).
+        var pType = (act && act.payType) || a._payType || a.payType || '';
+        var hr = !!(act && act.hr) || (pType.toString().toLowerCase().trim() === 'hours');
         var qtyLabel = '';
         if(hr) qtyLabel = (+hh).toFixed(2)+'h';
         else if(pType === 'Daywork') qtyLabel = '1 día';
         else qtyLabel = (+a.qty||0) + ' u';
-        var rate = (act && act.p != null) ? act.p : (a.p || 0);
+        var rate = (act && act.p != null) ? act.p : (a._unitPrice != null ? a._unitPrice : (a.p || 0));
         var rateLabel = '$'+(+rate||0).toFixed(2) + (hr?'/hr':(pType==='Daywork'?'/día':'/u'));
         var pay = +a.pay || 0;
         wTotal += pay;
@@ -9682,21 +9746,45 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
   // Construir columnas: Hora agrupa por actividad+horario, otros por actividad
   // V20_38 FIX: si ai=-1 (actividad no está en ACTS del rancho actual, ej: admin revisa otro día),
   // usar datos preservados del worker (esName, tipo, _unitPrice) como fallback robusto
+  // V20_152 FIX 1: PREFERIR metadata preservada (a._actEs/_payType/_unitPrice/_variable).
+  // Sin esto, 2 filas del MASTER con mismo nombre (ej "Cosecha de pepino" Hours + Pieces) colapsaban
+  // en 1 sola columna y el PDF mostraba la otra fila vacía. La metadata se congela en confirmAssignMany.
   for(i=0;i<wks.length;i++){
     for(j=0;j<wks[i].acts.length;j++){
       var a_=wks[i].acts[j];
       var ai=a_.ai;
+      // V20_152: resolver act ESTABLE (prefiere metadata preservada antes que ACTS[ai])
+      var _stableAct = _resolveActStable(a_);
       var actDef=ACTS[ai];
-      // V20_38 FIX: NO usar continue — construir columna con datos del worker
       var actName, actTipo, actPayT, actHr, actLabel;
-      if(actDef){
+      // V20_152: si hay metadata preservada en a_, usarla como verdad absoluta.
+      if(a_._actEs || a_._payType || a_._unitPrice != null){
+        actName  = a_._actEs || a_.esName || '';
+        actTipo  = a_.tipo || (_stableAct && _stableAct.hr ? 'hora' : '');
+        actPayT  = a_._payType || '';
+        actHr    = !!(_stableAct && _stableAct.hr);
+        // Para label en inglés (PDF para Cindy), intentar ALL_ACTS por nombre+payType estable
+        actLabel = actName;
+        try {
+          if(typeof ALL_ACTS !== 'undefined' && ALL_ACTS && ALL_ACTS.length){
+            for(var _aaI=0; _aaI<ALL_ACTS.length; _aaI++){
+              var _aa = ALL_ACTS[_aaI];
+              if(_aa && (_aa.es||'').trim() === actName.trim()
+                 && (!actPayT || (_aa.payType||'').trim() === actPayT.trim())){
+                actLabel = _aa.en || _aa.es || actName;
+                break;
+              }
+            }
+          }
+        } catch(_eL){}
+      } else if(actDef){
         actName = actDef.es || actDef.en || (''+ai);
         actTipo = actDef.tipo || '';
         actPayT = actDef.payType || '';
         actHr   = !!actDef.hr;
         actLabel= actDef.en || actDef.es;
       } else {
-        // Fallback: actividad no existe en ACTS del rancho actual
+        // Fallback: actividad no existe en ACTS del rancho actual ni hay metadata
         if(!a_.esName) continue; // sin esName tampoco, saltar
         actName = a_.esName;
         actTipo = a_.tipo || '';
@@ -9707,8 +9795,9 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
       var colKey;
       // V20_05 FIX1: colKey = nombre + tipo + finca. Separa columnas cuando la misma actividad
       // se hace en 2 fincas distintas del mismo rancho (antes se fusionaba y la 2da finca desaparecía del PDF).
+      // V20_152 FIX 1: agregar payType al colKey para separar Hours vs Pieces con MISMO nombre.
       var _fincaKey=(a_.finca||'').trim();
-      colKey = actName + '|' + actTipo + '|' + _fincaKey;
+      colKey = actName + '|' + actTipo + '|' + _fincaKey + '|' + (actPayT||'');
       var found=false;
       for(var k=0;k<actCols.length;k++){ if(actCols[k].colKey===colKey){found=true;break;} }
       if(!found) actCols.push({
@@ -9718,16 +9807,39 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
       });
     }
   }
+  // V20_152: helper interno — identidad estable de un worker-act (prefiere metadata preservada).
+  // Devuelve {name, tipo, finca, payType}. Usar en TODOS los lookups que matchean act vs columna.
+  function _wActIdent(wa){
+    if(!wa) return {name:'',tipo:'',finca:'',payType:''};
+    var name = wa._actEs || wa.esName || (ACTS[wa.ai]?ACTS[wa.ai].es:'') || '';
+    var tipo = wa.tipo || (ACTS[wa.ai]?ACTS[wa.ai].tipo:'') || '';
+    var finca = (wa.finca||'').trim();
+    var payT = wa._payType || wa.payType || (ACTS[wa.ai]?ACTS[wa.ai].payType:'') || '';
+    return {name:name, tipo:tipo, finca:finca, payType:payT};
+  }
+  // V20_152: comparación columna-vs-worker-act incluyendo payType para separar Hours/Pieces homónimas.
+  function _colMatchesWAct(col, wa){
+    var ident = _wActIdent(wa);
+    var cName = col.esName || (ACTS[col.ai]?ACTS[col.ai].es:'') || '';
+    var cTipo = col.tipo || '';
+    var cFinca = (col.finca||'').trim();
+    var cPT = col.payType || '';
+    if(ident.name !== cName) return false;
+    if(ident.tipo !== cTipo) return false;
+    if(ident.finca !== cFinca) return false;
+    // payType match: estricto si ambos lados lo definen; si col sin payType (legacy), aceptar.
+    if(cPT && ident.payType && cPT !== ident.payType) return false;
+    return true;
+  }
+
   // Adjuntar hora de entrada a cada columna para ordenar cronológicamente
+  // V20_152: usar _colMatchesWAct para incluir payType en el match (Hours vs Pieces homónimas).
   for(var ci=0;ci<actCols.length;ci++){
     var firstIni='99:99';
     for(var wi2=0;wi2<wks.length;wi2++){
       for(var ai2b=0;ai2b<wks[wi2].acts.length;ai2b++){
         var act_=wks[wi2].acts[ai2b];
-        // Alpha2-fix5: eliminado matchW dead code (wid siempre es null)
-        var actName_ci=actCols[ci].esName||(ACTS[actCols[ci].ai]?ACTS[actCols[ci].ai].es:'');
-        var actName_w=(act_.esName||(ACTS[act_.ai]?ACTS[act_.ai].es:''));
-        if(actName_w===actName_ci){
+        if(_colMatchesWAct(actCols[ci], act_)){
           var ini_=act_.ini||((act_.shifts&&act_.shifts.length)?act_.shifts[0].ini:'');
           if(ini_&&ini_<firstIni) firstIni=ini_;
         }
@@ -9745,18 +9857,14 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
   // V20_06: detectar shifts únicos por columna individual.
   // Si workers tienen horarios distintos en la misma actividad+finca, la columna se
   // subdivide internamente (colspan) en sub-columnas con cada horario en el header.
+  // V20_152: usar _colMatchesWAct para incluir payType en el match.
   for(var ci2_=0;ci2_<actCols.length;ci2_++){
     var _col=actCols[ci2_];
     var _uShifts=[];
     for(var wi3_=0;wi3_<wks.length;wi3_++){
       for(var ak3_=0;ak3_<wks[wi3_].acts.length;ak3_++){
         var _act=wks[wi3_].acts[ak3_];
-        var _aName=_act.esName||(ACTS[_act.ai]?ACTS[_act.ai].es:'');
-        var _aTipo=_act.tipo||(ACTS[_act.ai]?ACTS[_act.ai].tipo:'')||'';
-        var _aFinca=(_act.finca||'').trim();
-        if(_aName!==_col.esName) continue;
-        if(_aTipo!==(_col.tipo||'')) continue;
-        if(_aFinca!==(_col.finca||'').trim()) continue;
+        if(!_colMatchesWAct(_col, _act)) continue;
         var _wShifts=[];
         if(_act.shifts&&_act.shifts.length){
           for(var sk_=0;sk_<_act.shifts.length;sk_++){
@@ -9958,22 +10066,16 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
   if(hp&&hp.length&&hilA&&hilAn) th1+='<th rowspan="2" style="text-align:center;min-width:80px">Q. Hilo<br><span style="font-weight:400;font-size:9px">Puertas c/u</span></th>';
 
   // ── Totales por columna — usar colKey para columnas individuales ──
+  // V20_152: matching usa _colMatchesWAct para incluir payType (Hours vs Pieces homónimas).
   var colTotals={};
   for(i=0;i<actCols.length;i++) colTotals[actCols[i].colKey]=0;
   for(i=0;i<wks.length;i++){
     for(j=0;j<actCols.length;j++){
       var col3=actCols[j];
-      // Alpha2-fix5: eliminado dead code (wid siempre es null)
       var found3=null;
-      var col3Name=col3.esName||(ACTS[col3.ai]?ACTS[col3.ai].es:'');
-      var col3Tipo=col3.tipo||'';
-      var col3Finca=(col3.finca||'').trim();
       for(var k3=0;k3<wks[i].acts.length;k3++){
         var wAct3=wks[i].acts[k3];
-        var wActName3=wAct3.esName||(ACTS[wAct3.ai]?ACTS[wAct3.ai].es:'');
-        var wActTipo3=wAct3.tipo||(ACTS[wAct3.ai]?ACTS[wAct3.ai].tipo:'')||'';
-        var wActFinca3=(wAct3.finca||'').trim();
-        if(wActName3===col3Name && wActTipo3===col3Tipo && wActFinca3===col3Finca){found3=wAct3;break;}
+        if(_colMatchesWAct(col3, wAct3)){found3=wAct3;break;}
       }
       if(found3){
         if(col3.hr) colTotals[col3.colKey]+=totalShiftHours(found3)||0;
@@ -10014,30 +10116,23 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     var totLbl=col4.hr?smartNum(tot)+' h':smartNum(tot);
     if(!col4.hr && tot>0){
       var anyQty=false;
-      var _col4Finca=(col4.finca||'').trim();
+      // V20_152: matcher unificado con payType.
       for(var wq=0;wq<wks.length;wq++){
         for(var aq=0;aq<wks[wq].acts.length;aq++){
           var wqAct=wks[wq].acts[aq];
-          var wqn=wqAct.esName||(ACTS[wqAct.ai]?ACTS[wqAct.ai].es:'');
-          var wqt=wqAct.tipo||(ACTS[wqAct.ai]?ACTS[wqAct.ai].tipo:'')||'';
-          var wqf=(wqAct.finca||'').trim();
-          if(wqn===(col4.esName||(ACTS[col4.ai]?ACTS[col4.ai].es:'')) && wqt===(col4.tipo||'') && wqf===_col4Finca && parseFloat(wqAct.qty)){ anyQty=true; break; }
+          if(_colMatchesWAct(col4, wqAct) && parseFloat(wqAct.qty)){ anyQty=true; break; }
         }
         if(anyQty) break;
       }
       if(!anyQty) totLbl=smartNum(tot)+' h';
     }
     // Buscar unitPr y laborLbl (valor único para toda la columna)
+    // V20_152: matcher unificado con payType.
     var unitPr=''; var laborLbl='';
     for(var w2=0;w2<wks.length;w2++){
-      var col4Name=col4.esName||(ACTS[col4.ai]?ACTS[col4.ai].es:'');
-      var col4Finca=(col4.finca||'').trim();
       for(var a2=0;a2<wks[w2].acts.length;a2++){
         var wAct4_=wks[w2].acts[a2];
-        var wActName4=wAct4_.esName||(ACTS[wAct4_.ai]?ACTS[wAct4_.ai].es:'');
-        var wActTipo4=wAct4_.tipo||(ACTS[wAct4_.ai]?ACTS[wAct4_.ai].tipo:'')||'';
-        var wActFinca4=(wAct4_.finca||'').trim();
-        if(wActName4===col4Name && wActTipo4===(col4.tipo||'') && wActFinca4===col4Finca){
+        if(_colMatchesWAct(col4, wAct4_)){
           var act2=wks[w2].acts[a2];
           if(!unitPr){
             // V20_99 FIX: si la columna es Hora, mostrar contractRate del primer worker representativo (puede variar entre workers)
@@ -10120,18 +10215,14 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
         + (_vdPzRow?'<span style="font-size:11px">'+_vdPzRow+'</span>':'')
         + '</td>';
     } else if(col4.hr && _NS>1){
+      // V20_152: matcher unificado con payType.
       for(var sst_=0;sst_<_NS;sst_++){
         var _tarK=col4.shifts[sst_].key;
         var _subTot=0;
         for(var wts=0;wts<wks.length;wts++){
-          var _cN=col4.esName||(ACTS[col4.ai]?ACTS[col4.ai].es:'');
-          var _cF=(col4.finca||'').trim();
           for(var ka=0;ka<wks[wts].acts.length;ka++){
             var _wAct=wks[wts].acts[ka];
-            var _wN=_wAct.esName||(ACTS[_wAct.ai]?ACTS[_wAct.ai].es:'');
-            var _wT=_wAct.tipo||(ACTS[_wAct.ai]?ACTS[_wAct.ai].tipo:'')||'';
-            var _wF=(_wAct.finca||'').trim();
-            if(_wN!==_cN||_wT!==(col4.tipo||'')||_wF!==_cF) continue;
+            if(!_colMatchesWAct(col4, _wAct)) continue;
             // V20_144 FIX B: si shifts existe pero entries están vacíos, fallback a a.ini/a.fin
             var _shHasRealT=false;
             if(_wAct.shifts&&_wAct.shifts.length){
@@ -10154,17 +10245,13 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
       }
     } else if(col4.payType==='Daywork' && _NS>1){
       // V20_55: TOTAL Daywork — pago FIJO del día. Sumar qty UNA vez por worker, 1 celda colspan=N.
+      // V20_152: matcher unificado con payType.
       var _totQUni=0;
       var _anyQtyUni=false;
       for(var wtsD=0;wtsD<wks.length;wtsD++){
-        var _cND=col4.esName||(ACTS[col4.ai]?ACTS[col4.ai].es:'');
-        var _cFD=(col4.finca||'').trim();
         for(var kaD=0;kaD<wks[wtsD].acts.length;kaD++){
           var _wActD=wks[wtsD].acts[kaD];
-          var _wND=_wActD.esName||(ACTS[_wActD.ai]?ACTS[_wActD.ai].es:'');
-          var _wTD=_wActD.tipo||(ACTS[_wActD.ai]?ACTS[_wActD.ai].tipo:'')||'';
-          var _wFD=(_wActD.finca||'').trim();
-          if(_wND!==_cND||_wTD!==(col4.tipo||'')||_wFD!==_cFD) continue;
+          if(!_colMatchesWAct(col4, _wActD)) continue;
           if(parseFloat(_wActD.qty)){ _totQUni+=parseFloat(_wActD.qty); _anyQtyUni=true; }
         }
       }
@@ -10173,20 +10260,16 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     } else if(!col4.hr && _NS>1){
       // V20_26: TOTAL no-Hora por sub-columna. Para cada sub-shift, sumar qty de workers presentes.
       // anyQty=false (sin qty) → fallback a horas referenciales por sub-col.
+      // V20_152: matcher unificado con payType.
       for(var sst2_=0;sst2_<_NS;sst2_++){
         var _tarK2=col4.shifts[sst2_].key;
         var _subTotQ=0;
         var _subTotH=0;
         var _anyQtySub=false;
         for(var wts2=0;wts2<wks.length;wts2++){
-          var _cN2=col4.esName||(ACTS[col4.ai]?ACTS[col4.ai].es:'');
-          var _cF2=(col4.finca||'').trim();
           for(var ka2=0;ka2<wks[wts2].acts.length;ka2++){
             var _wAct2=wks[wts2].acts[ka2];
-            var _wN2=_wAct2.esName||(ACTS[_wAct2.ai]?ACTS[_wAct2.ai].es:'');
-            var _wT2=_wAct2.tipo||(ACTS[_wAct2.ai]?ACTS[_wAct2.ai].tipo:'')||'';
-            var _wF2=(_wAct2.finca||'').trim();
-            if(_wN2!==_cN2||_wT2!==(col4.tipo||'')||_wF2!==_cF2) continue;
+            if(!_colMatchesWAct(col4, _wAct2)) continue;
             var _inShift=false;
             // V20_144 FIX B: si shifts existe pero entries están vacíos, fallback a a.ini/a.fin
             var _shHasRealT2=false;
@@ -10286,12 +10369,11 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
   var sortedWks = wks.slice(); // copia para no mutar original
   sortedWks.sort(function(wa,wb){
     // Encontrar primera columna (más a la izq) donde cada worker tiene actividad
+    // V20_152: usar _colMatchesWAct para incluir payType.
     function firstCol(w_){
       for(var ci_=0;ci_<actCols.length;ci_++){
-        var cName_=actCols[ci_].esName||(ACTS[actCols[ci_].ai]?ACTS[actCols[ci_].ai].es:'');
         for(var ai_=0;ai_<w_.acts.length;ai_++){
-          var wName_=w_.acts[ai_].esName||(ACTS[w_.acts[ai_].ai]?ACTS[w_.acts[ai_].ai].es:'');
-          if(wName_===cName_) return ci_;
+          if(_colMatchesWAct(actCols[ci_], w_.acts[ai_])) return ci_;
         }
       }
       return actCols.length; // sin actividad individual → al final
@@ -10313,19 +10395,14 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     var td='<td class="numcol">'+(i+1)+'</td>'+empCell+'<td class="namecol" style="border-right:2px solid #407623;line-height:1.05;padding:1px 3px;font-size:9px">'+esc(w.name)+'</td>';
     // V20_07: filas con fragmentos contiguos. Si worker tiene sub-shifts adyacentes
     // (fin===ini), se fusionan en 1 celda con colspan mostrando la suma.
+    // V20_152: matcher unificado con payType.
     for(j=0;j<actCols.length;j++){
       var col2=actCols[j];
       var _NW=(col2.shifts&&col2.shifts.length)||1;
       var found2=null;
-      var col2Name=col2.esName||(ACTS[col2.ai]?ACTS[col2.ai].es:'');
-      var col2Tipo=col2.tipo||'';
-      var col2Finca=(col2.finca||'').trim();
       for(var k2=0;k2<w.acts.length;k2++){
         var wAct2=w.acts[k2];
-        var wActName2=wAct2.esName||(ACTS[wAct2.ai]?ACTS[wAct2.ai].es:'');
-        var wActTipo2=wAct2.tipo||(ACTS[wAct2.ai]?ACTS[wAct2.ai].tipo:'')||'';
-        var wActFinca2=(wAct2.finca||'').trim();
-        if(wActName2===col2Name && wActTipo2===col2Tipo && wActFinca2===col2Finca){found2=wAct2;break;}
+        if(_colMatchesWAct(col2, wAct2)){found2=wAct2;break;}
       }
       // V20_55: Daywork = pago FIJO del día — NO subdividir por shift. 1 celda colspan=N con qty UNA vez.
       // Bug previo: V20_26 distribuía qty en cada sub-shift "start" → si shifts NO contiguos (Bus Driver T1+T2),
@@ -11400,6 +11477,37 @@ function sendToSheets() {
 // _resolveActByName: busca un act por nombre en ALL_ACTS o devuelve el objeto si ya lo es.
 // V20_86: si recibe un objeto SIN col P (incompleto), lo enriquece buscando en ALL_ACTS por nombre.
 // Esto cubre el caso donde act viene de ACTS filtrado de otro rancho o de un cache stale sin col P.
+// V20_152: helper que resuelve un act PREFIRIENDO metadata preservada en `a` (a._actEs/_payType/_unitPrice/_variable).
+// Esto evita que el PDF/Resumen colapsen 2 filas del MASTER con mismo nombre (ej. "Cosecha de pepino" Hours+Pieces).
+// Recibe el WORKER-ACT (no el ACT del MASTER). Devuelve un objeto act "estable" con es/payType/p/variable/hr.
+// Si NO hay metadata, cae a ACTS[a.ai] y luego a _resolveActByName.
+function _resolveActStable(a){
+  if(!a) return null;
+  // 1) Si tiene metadata preservada (V20_151+), construir act sintético estable.
+  //    Esta es la verdad de la actividad al momento de asignar — INMUNE a reordenamiento de MASTER.
+  if(a._actEs || a._payType || a._unitPrice != null){
+    var _pt = (a._payType || '').toString();
+    var _ptLow = _pt.toLowerCase().trim();
+    return {
+      es: a._actEs || a.esName || '',
+      en: a.esName || a._actEs || '', // sin mejor opción, usar mismo nombre
+      payType: _pt,
+      variable: a._variable || '',
+      p: (a._unitPrice != null ? a._unitPrice : (a.p || 0)),
+      hr: (_ptLow === 'hours' || _ptLow === 'hora'),
+      modo: 'Individual',
+      tipo: a.tipo || ''
+    };
+  }
+  // 2) Fallback: resolver por a.ai
+  if(a.ai != null && typeof ACTS !== 'undefined' && ACTS[a.ai]) return ACTS[a.ai];
+  // 3) Fallback final: por nombre
+  if(a.esName && typeof _resolveActByName === 'function'){
+    return _resolveActByName(a.esName);
+  }
+  return null;
+}
+
 function _resolveActByName(actOrName){
   if(!actOrName) return null;
   var pool = (typeof ALL_ACTS!=='undefined' && ALL_ACTS) ? ALL_ACTS : (typeof ACTS!=='undefined'?ACTS:[]);
