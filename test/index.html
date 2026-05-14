@@ -35,7 +35,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_157';
+window.APP_VERSION = 'V20_158';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -9607,16 +9607,30 @@ function loadDay(key){
         var _w11=findInArr(ALL_WORKERS,workers[ri].name); if(_w11) workers[ri].contractRate=_w11.contractRate||0; // V12-FIX1
       }
     }
+    // V20_158: preservar metadata original (FIX B V20_146 + FIX 2 V20_151).
+    // Antes loadDay sobrescribía ciegamente a.esName/a.tipo/a.pay con resolveAct(a,true) → si MASTER
+    // tenía 2 versiones del mismo nombre (Hours + Pieces de "Cosecha de pepino"), agarraba la primera
+    // (Hours) y mutaba la act al cargar el día desde historial. Mismo patrón ya aplicado en load() y
+    // confirmAssignMany — faltaba aquí.
     for(var i=0;i<workers.length;i++){
       for(var j=0;j<workers[i].acts.length;j++){
         var a=workers[i].acts[j];
         var act=resolveAct(a, true); // V8
         if(!act)continue;
-        a.esName=act.es;
-        a.tipo=act.tipo;
-        if(act.hr){ a.pay=totalShiftHours(a)*getHRate(workers[i],act); }
-        else if(act.tipo==='$'){ a.pay=parseFloat(a.qty)||0; }
-        else{ a.pay=(parseFloat(a.qty)||0)*(act.p||0); }
+        // V20_158 FIX: preservar esName/tipo si ya vienen poblados desde localStorage
+        if(!a.esName) a.esName = act.es;
+        if(!a.tipo) a.tipo = act.tipo;
+        // V20_158 FIX 2: rellenar metadata preservada V20_151 si falta (migración legacy)
+        if(!a._actEs && a.esName) a._actEs = a.esName;
+        if(!a._payType && act.payType) a._payType = act.payType;
+        if((a._unitPrice == null || a._unitPrice === '') && act.p != null) a._unitPrice = act.p;
+        if(!a._variable && act.variable) a._variable = act.variable;
+        // V20_158 FIX 3: recalcular pay SOLO si está vacío (preservar si viene de localStorage)
+        if(a.pay === undefined || a.pay === null){
+          if(act.hr){ a.pay=totalShiftHours(a)*getHRate(workers[i],act); }
+          else if(act.tipo==='$'){ a.pay=parseFloat(a.qty)||0; }
+          else{ a.pay=(parseFloat(a.qty)||0)*(act.p||0); }
+        }
       }
     }
     updParam(); updParts();
