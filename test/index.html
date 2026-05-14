@@ -35,7 +35,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_173';
+window.APP_VERSION = 'V20_174';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -8043,12 +8043,13 @@ function load(){
       return;
     }
     // Load params — restaurar todo incluyendo hEnt/hSal del día guardado
-    // ✅ Fix: NO saltamos hEnt/hSal — el dato guardado ES del mismo día,
-    // así que si ya tenía horas capturadas, se restauran correctamente.
-    // Solo saltamos surquero/rancho para surqueros (siempre viene del login).
-    // Theta: restaurar campos con restoreSaveFields
+    // ✅ Fix: NO saltamos hEnt/hSal — el dato guardado ES del mismo día.
+    // V20_174: ANTES saltaba 'rancho' para surqueros (asumía rancho siempre del login).
+    // Eso rompía multi-rancho temporal: surquero de Pennrose trabajando en Bedner,
+    // recarga app → rancho volvía a Pennrose default → datos en rancho equivocado.
+    // Ahora 'rancho' SÍ se restaura del día guardado. 'surquero' sigue saltado (defensa login).
     var skip = [];
-    if(currentUser && !currentUser.isAdmin) skip.push('surquero','rancho');
+    if(currentUser && !currentUser.isAdmin) skip.push('surquero');
     restoreSaveFields(d.v, skip);
     if(d.w)workers=d.w; if(d.id)wid=d.id;
     // V20_111 FIX 4: resync wid después de cargar workers desde load() (evita IDs duplicados)
@@ -8266,7 +8267,12 @@ function applyAutoFill(){
     // (a) TypeError de .replace y (b) match accidental con placeholder via indexOf('').
     var crewBase = currentUser.crew ? currentUser.crew.replace(/\s*\d+$/,'').trim() : '';
     var rEl = gEl('rancho');
-    if(rEl && crewBase){
+    // V20_174: si el rancho ya viene restaurado del día guardado (load()), NO sobrescribirlo con crewBase.
+    // Antes applyAutoFill SIEMPRE forzaba el rancho del login → si surquero de Pennrose trabajaba en Bedner,
+    // al recargar se perdía el rancho real y volvía a Pennrose. El filter de ACTS sí se ejecuta SIEMPRE
+    // (basado en rEl.value, ya sea restaurado o aplicado por crewBase).
+    var _ranchoRestaurado174 = !!(rEl && rEl.value);
+    if(rEl && crewBase && !_ranchoRestaurado174){
       // V20_91_08 FIX: si el dropdown está vacío (race condition con loadSheetsData async)
       // o solo tiene el placeholder, repopular con datos actualizados.
       // Antes: dropdown se llenaba en login pero ALL_WORKERS/CONTRATOS aún no estaban → opciones pobres → no match.
@@ -8300,8 +8306,12 @@ function applyAutoFill(){
           if(rEl.options[_oi3].value && rEl.options[_oi3].value.toLowerCase().indexOf(crewBase.toLowerCase())>=0){ rEl.selectedIndex=_oi3; _matched=true; break; }
         }
       }
-      // Solo re-filtrar ACTS, NO guardar
-      // V20_147 FIX: trim consistente para evitar mismatch cuando MASTER tiene farm con espacios
+    }
+    // V20_174: SIEMPRE filtrar ACTS/GRUPAL_ACTS por el rancho actual del dropdown (restaurado o default).
+    // Sin esto, si el rancho viene restaurado de Bedner pero ACTS sigue con datos de Pennrose (rancho del login),
+    // los workers cargados no encontrarían sus actividades.
+    // V20_147 FIX: trim consistente para evitar mismatch cuando MASTER tiene farm con espacios.
+    if(rEl){
       var _rVal = (gVal('rancho')||'').toLowerCase().trim();
       if(_rVal){
         ACTS=[]; GRUPAL_ACTS=[];
