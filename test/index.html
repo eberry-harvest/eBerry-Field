@@ -35,7 +35,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_152';
+window.APP_VERSION = 'V20_154';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -499,6 +499,10 @@ html.login-locked{overflow:hidden!important;height:100%!important}
 .active-worker-info{flex:1;font-size:13px;font-weight:600;color:#222}
 .active-worker-rm{background:#fff;color:#c0392b;border:1.5px solid #c0392b;border-radius:4px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;min-height:36px}
 .active-worker-rm:hover{background:#c0392b;color:#fff}
+/* V20_154: botón Check-out individual junto a Quitar */
+.active-worker-btns{display:flex;flex-direction:column;gap:4px;flex-shrink:0}
+.active-worker-co{background:#fff;color:#c0392b;border:1.5px solid #c0392b;border-radius:4px;padding:6px 10px;font-size:11px;font-weight:700;cursor:pointer;min-height:36px}
+.active-worker-co:hover{background:#c0392b;color:#fff}
 /* ── FACE REGISTRATION ── */
 .faceOv{position:fixed;top:0;right:0;bottom:0;left:0;background:rgba(0,0,0,.92);z-index:700;display:none;flex-direction:column}
 .faceOv.on{display:flex}
@@ -12951,9 +12955,18 @@ function renderActiveWorkersInAbsences(){
     var role = w.role || '';
     var roleEm = (role === 'chofer' ? '🚌 ' : (role === 'surquero' ? '👤 ' : (role === 'choferSurquero' ? '🚌👤 ' : '')));
     var empNumTxt = w.empNum ? ' · #' + esc(w.empNum) : '';
+    // V20_154: botón check-out individual aparece si worker tiene check-in pero NO check-out lockeado
+    var canCheckOut = w.checkInTime && !w.checkOutLocked;
+    var coBtn = '';
+    if(canCheckOut){
+      coBtn = '<button class="active-worker-co" data-wid="' + w.id + '">🏁 Cerrar día</button>';
+    }
     html += '<div class="active-worker-row" data-wid="' + w.id + '">'
       + '<div class="active-worker-info">' + roleEm + esc(w.name) + empNumTxt + ckIn + ckOut + '</div>'
+      + '<div class="active-worker-btns">'
+      + coBtn
       + '<button class="active-worker-rm" data-wid="' + w.id + '">🗑️ Quitar</button>'
+      + '</div>'
       + '</div>';
   }
   cont.innerHTML = html;
@@ -12965,6 +12978,21 @@ function renderActiveWorkersInAbsences(){
       // askDelWorker ya maneja confirm, PIN admin y modo lectura (vía wrapper FN_NAMES)
       if(typeof askDelWorker === 'function') askDelWorker(wid);
       else if(typeof rmWorker === 'function') rmWorker(wid);
+    });
+  }
+  // V20_154: Wire botón Check-out individual
+  var coBtns = cont.querySelectorAll('.active-worker-co');
+  for(var c=0; c<coBtns.length; c++){
+    coBtns[c].addEventListener('click', function(ev){
+      var wid = parseInt(ev.currentTarget.getAttribute('data-wid'), 10);
+      if(isNaN(wid)) return;
+      if(typeof confirmCheckOutWorker === 'function'){
+        confirmCheckOutWorker(wid);
+        // Refresh list tras la acción (confirmCheckOutWorker es síncrono salvo el confirm)
+        setTimeout(function(){ try{ renderActiveWorkersInAbsences(); }catch(e){} }, 200);
+      } else {
+        if(typeof toast === 'function') toast('⚠️ Función check-out no disponible');
+      }
     });
   }
 }
@@ -16715,25 +16743,40 @@ function checkInManualSelect(name){
     // y nunca se ejecutaba aquí (typeof === 'undefined'). Ahora usamos el helper global.
     if(_isAlreadyCheckedIn(name)){ toast('⚠️ '+name+' ya está en la lista'); return; }
     // V20_108: bloquear manual para surquero/choferSurquero (paridad con openCheckInSheet)
+    // Surquero/dual NO pueden ser manuales — necesitan su propio QR/FaceID/PIN (seguridad).
     if(_cisRole === 'surquero' || _cisRole === 'choferSurquero'){
       toast('⚠️ Surquero solo se identifica con QR, FaceID o tu PIN — no por nombre');
       return;
     }
-    // V20_105 FASE B: permitido manual en todos los roles, confirmación se hace después con QR/PIN del surquero
-    _pendingManualAdd = name;
-    _pendingManualRole = _cisRole || 'trabajador'; // V20_91_16: snapshot del rol antes de cerrar sheet
+    // V20_153: alta DIRECTA sin pedir QR del surquero (regresión solicitada por Serafín).
+    // Antes (V20_105 FASE B) se exigía confirmación con el QR del surquero después del manual.
+    // Ahora: trabajador/chofer manuales entran directo, como en V20_91. Surquero/dual siguen bloqueados arriba.
+    var roleSnapshot = _cisRole || 'trabajador';
+    // Cerrar la UI del bottom-sheet/manual ANTES de tocar globales (closeCheckInSheet resetea _cisRole).
     var box = gEl('checkInManualBox'); if(box) box.style.display='none';
     var pop = gEl('checkInACPop'); if(pop){ pop.style.display='none'; pop.innerHTML=''; }
-    var hint = gEl('checkInConfirmHint');
-    if(hint){
-      var roleLbl = (_pendingManualRole === 'chofer') ? ' como CHOFER del bus' : '';
-      hint.innerHTML = '🔐 Confirma con <b>tu QR de surquero</b> para registrar a <b>'+esc(name)+'</b>'+roleLbl+'. La cámara se abre automáticamente.';
-      hint.style.display='block';
+    try { if(typeof closeCheckInSheet === 'function') closeCheckInSheet(); } catch(_){}
+    // Limpiar cualquier "pending" residual de flujos previos (manualConfirm legacy) para evitar
+    // que un escaneo posterior dispare la rama vieja en onQRSuccess.
+    _pendingManualAdd = null;
+    _pendingManualRole = null;
+    // doAddConfirmed lee _qrMode al inicio (var local _modeAtAdd). Setear el modo del rol antes de llamar
+    // para que el worker entre con role='chofer' (y _applyCheckInForMode lo procese) o 'trabajador'.
+    _qrMode = roleSnapshot;
+    try {
+      // Marcas para auditoría/log (consistente con la rama manualConfirm de onQRSuccess).
+      try { window._lastAuthorizedBy = (currentUser && (currentUser.empNum||currentUser.name))||''; window._lastAddedManually = true; } catch(_){}
+      doAddConfirmed(name);
+    } catch(eAdd){
+      console.warn('[V20_153] doAddConfirmed fallo:', eAdd);
+      try { toast('⚠️ Error al agregar: '+(eAdd && eAdd.message ? eAdd.message : '')); } catch(_){}
+      _qrMode = 'trabajador';
+      return;
     }
-    _qrMode = 'manualConfirm';
-    _reopenAfterAdd = (_pendingManualRole === 'trabajador');
-    setTimeout(function(){ try{ closeCheckInSheet(); _qrMode='manualConfirm'; startQR(); }catch(e){ console.warn('manual->startQR',e); } }, 350);
-  }catch(e){ console.warn('checkInManualSelect',e); _pendingManualAdd=null; _pendingManualRole=null; }
+    // doAddConfirmed ya resetea _qrMode='trabajador' al final, pero lo reforzamos por defensa.
+    _qrMode = 'trabajador';
+    // NOTA: doAddConfirmed muestra su propio toast '✓ Nombre agregado'. Aquí NO duplicamos.
+  }catch(e){ console.warn('checkInManualSelect',e); _pendingManualAdd=null; _pendingManualRole=null; _qrMode='trabajador'; }
 }
 
 function checkInFaceID(){
