@@ -35,7 +35,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_176';
+window.APP_VERSION = 'V20_177';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -4245,8 +4245,12 @@ function parseFormulaCell(val){
 }
 
 // getRequiredInputs: qué cuadritos renderizar en la UI
+// V20_177: extendido para incluir N, O (antes solo H-M). El MASTER tiene 4 divisores (L,M,N,O)
+// según la regla universal de Serafin: "todas las cols de multiplicacion multiplican, todas las de
+// division dividen, jerarquia matematica". Para grupales como Bedner Tapando Boquilla con
+// L=12 y M=personas, la formula es (Acres×72.06×2)/(12×personas).
 function getRequiredInputs(actRow){
-  var cols=['H','I','J','K','L','M'];
+  var cols=['H','I','J','K','L','M','N','O'];
   var out=[], seen={};
   for(var i=0;i<cols.length;i++){
     var p=parseFormulaCell(actRow&&actRow[cols[i]]);
@@ -4259,9 +4263,10 @@ function getRequiredInputs(actRow){
 }
 
 // computeQty: intérprete principal. userInputs={H:4.70,I:null,...}
+// V20_177: extendido a 4 divisores (L,M,N,O) para soportar formulas complejas del MASTER.
 function computeQty(actRow,userInputs,np){
   userInputs=userInputs||{};
-  var mulCols=['H','I','J','K'], divCols=['L','M'];
+  var mulCols=['H','I','J','K'], divCols=['L','M','N','O'];
   var num=1, den=1, hasAny=false;
   function resolve(cellVal,userVal,personas){
     var p=parseFormulaCell(cellVal);
@@ -4310,6 +4315,138 @@ function computePay(actRow,userInputs,np,rate,hours){
   var q=computeQty(actRow,userInputs,np);
   if(q===null||q===0) return 0;
   return q*rate;
+}
+
+// ============================================================================
+// V20_177: Motor data-driven extendido a actividades GRUPALES.
+// Hasta V20_176 el motor V20_27 solo se aplicaba a actividades INDIVIDUALES.
+// Las grupales seguian con codigo legacy hardcoded (grandPies/100, input ancho
+// de cama manual). Ahora respetan la formula universal del MASTER:
+//    cantidad_total = (H × I × J × K) / (L × M × N × O)
+//    cantidad_por_persona = cantidad_total (cuando M='label personas' incluido en L-O)
+//    pago_por_persona = cantidad_por_persona × rate
+// Excepcion: isPennrose5Act mantiene su rama legacy (funciona, no tocar).
+// Las grupales SIN Variable (Atlantic/Mecca/Bedner sin VarX) caen al legacy.
+// ============================================================================
+
+// _grpUsesMotor: decide si una grupal usa el motor o cae al codigo legacy.
+// True si tiene Variable + al menos un input requerido + NO es Pennrose5Act.
+function _grpUsesMotor(act){
+  if(!act) return false;
+  if(typeof isPennrose5Act === 'function' && isPennrose5Act(act)) return false;
+  var v = (act.variable||'').toString().trim();
+  if(!v) return false;
+  try {
+    var inputs = getRequiredInputs(act);
+    return !!(inputs && inputs.length);
+  } catch(e){ return false; }
+}
+
+// _grpReadMotorInputs: construye userInputs={H:val, I:val, ...} desde g.vars.inputs.
+function _grpReadMotorInputs(g){
+  var inputs = {};
+  if(g && g.vars && g.vars.inputs){
+    for(var k in g.vars.inputs){
+      if(g.vars.inputs.hasOwnProperty(k)) inputs[k] = g.vars.inputs[k];
+    }
+  }
+  return inputs;
+}
+
+// _grpMotorCompute: calcula cantidad total + por persona + pago con motor data-driven.
+// Retorna {qtyTotal, qtyPerPerson, pago, formulaStr, missingInputs[]}.
+function _grpMotorCompute(g, act){
+  var np = (g && g.participantes) ? g.participantes.length : 0;
+  var inputs = _grpReadMotorInputs(g);
+  var required = getRequiredInputs(act) || [];
+  // Detectar inputs faltantes para mostrar warning amigable
+  var missing = [];
+  for(var i=0;i<required.length;i++){
+    var col = required[i].column;
+    var val = parseFloat(inputs[col]);
+    if(isNaN(val) || val<=0) missing.push(required[i].label);
+  }
+  var qtyPP = computeQty(act, inputs, np);  // cantidad POR PERSONA (motor ya divide entre M=personas)
+  if(qtyPP === null || isNaN(qtyPP)) qtyPP = 0;
+  var rate = parseFloat(act && act.p) || 0;
+  var pago = qtyPP * rate;
+  // Construir formula visual para mostrar al surquero
+  var parts = [];
+  var cols = ['H','I','J','K','L','M','N','O'];
+  for(var c=0;c<cols.length;c++){
+    var pcell = (typeof parseFormulaCell === 'function') ? parseFormulaCell(act && act[cols[c]]) : {type:'empty'};
+    if(pcell.type === 'empty') continue;
+    var isDiv = (cols[c]==='L' || cols[c]==='M' || cols[c]==='N' || cols[c]==='O');
+    var sep = isDiv ? ' ÷ ' : ' × ';
+    var label = '';
+    if(pcell.type === 'const') label = String(pcell.value);
+    else if(pcell.type === 'personas') label = np + ' personas';
+    else if(pcell.type === 'input'){
+      var uv = parseFloat(inputs[cols[c]]);
+      label = (isNaN(uv) ? '?' : uv) + ' ' + pcell.label;
+    }
+    parts.push((parts.length ? sep : '') + label);
+  }
+  return {
+    qtyPerPerson: qtyPP,
+    pago: pago,
+    np: np,
+    formulaStr: parts.join(''),
+    missing: missing,
+    rate: rate
+  };
+}
+
+// _renderGrpMotorInputs: HTML de los cuadritos dinamicos del motor para una grupal.
+// Sustituye los bloques largos/surcos legacy y el input "ancho de cama" hardcoded.
+function _renderGrpMotorInputs(g, act, gi){
+  if(!g.vars) g.vars = {};
+  if(!g.vars.inputs) g.vars.inputs = {};
+  var required = getRequiredInputs(act) || [];
+  var html = '<div style="font-size:11px;font-weight:700;color:var(--gr);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">📐 Datos de la actividad</div>';
+  // Renderizar cuadrito por cada input requerido del MASTER
+  for(var i=0;i<required.length;i++){
+    var inp = required[i];
+    var val = (g.vars.inputs[inp.column]!=null) ? g.vars.inputs[inp.column] : '';
+    html += '<div style="margin-bottom:8px">'
+      +'<label style="font-size:10px;font-weight:700;color:var(--gr)">'+esc(inp.label)+'</label>'
+      +'<input type="text" inputmode="decimal" pattern="[0-9]*\\.?[0-9]*" value="'+esc(String(val))+'"'
+      +' placeholder="'+esc(inp.placeholder||inp.label)+'"'
+      +' data-gi="'+gi+'" data-col="'+inp.column+'" oninput="onGrpMotorInput(this)"'
+      +' style="font-size:18px;font-weight:700;padding:10px;width:100%;margin-top:3px;border:2px solid var(--b);border-radius:8px;color:var(--b);font-family:\'DM Sans\',sans-serif">'
+      +'</div>';
+  }
+  // Horario
+  html += '<div class="r2" style="margin-bottom:8px">'
+    +'<div><label style="font-size:10px">🟢 Entrada</label>'
+    +'<input type="time" step="1800" value="'+(g.vars.ini||'')+'"'
+    +' data-gi="'+gi+'" data-v="ini" onchange="setGrpVar(this)"'
+    +' style="font-size:16px;padding:9px 10px;width:100%"></div>'
+    +'<div><label style="font-size:10px">🏁 Salida</label>'
+    +'<input type="time" step="1800" value="'+(g.vars.fin||'')+'"'
+    +' data-gi="'+gi+'" data-v="fin" onchange="setGrpVar(this)"'
+    +' style="font-size:16px;padding:9px 10px;width:100%"></div>'
+    +'</div>';
+  // Finca
+  html += '<div style="margin-bottom:6px"><label style="font-size:10px">📍 Labor / Finca (aparece en el PDF)</label>'
+    + _fincaGrpHtml(gi, g.vars.finca||'')
+    + '</div>';
+  return html;
+}
+
+// onGrpMotorInput: handler de los cuadritos del motor. Escribe a g.vars.inputs[col].
+function onGrpMotorInput(inp){
+  if(_readOnlyMode){ if(typeof toast === 'function') toast('🔒 Modo lectura'); return; }
+  var gi = parseInt(inp.dataset.gi);
+  var col = inp.dataset.col;
+  if(isNaN(gi) || !col) return;
+  var g = grpActs[gi]; if(!g) return;
+  if(!g.vars) g.vars = {};
+  if(!g.vars.inputs) g.vars.inputs = {};
+  var v = parseFloat(inp.value);
+  g.vars.inputs[col] = isNaN(v) ? null : v;
+  try { calcGrpAct(gi); } catch(e){}
+  try { autoSave(); } catch(e){}
 }
 
 // validateWorkerHasHorario: TODA actividad debe tener ENT/SAL (regla V20_27)
@@ -12073,7 +12210,7 @@ function addGrpAct(gai){
   // para resolver por nombre si MASTER cambia orden (paralelo a esName en individuales).
   var _gact = (typeof GRUPAL_ACTS !== 'undefined' && GRUPAL_ACTS && GRUPAL_ACTS[gai]) ? GRUPAL_ACTS[gai] : null;
   // V20_114: si la grupal es de tipo cajas, sembrar precioC desde el MASTER (ya no editable por surquero).
-  var _initVars = {};
+  var _initVars = {inputs: {}}; // V20_177: motor data-driven inputs object
   if(_gact && (typeof grpCalcType === 'function') && grpCalcType(_gact) === 'cajas'){
     _initVars.precioC = parseFloat(_gact.p) || 0;
   }
@@ -12237,8 +12374,13 @@ function renderGrpActs(){
       +'</div>';
 
     var varsHtml = '';
-    // V20_13: grupal Pennrose5Act → UI simplificada (solo TOTAL ACRES + ancho fijo)
-    if(ct === 'puertas' && isPennrose5Act(act)){
+    // V20_177: rama nueva — motor data-driven para grupales con Variable + inputs configurados.
+    // Reemplaza bloques largos/surcos legacy + input ancho de cama hardcoded por cuadritos
+    // dinamicos segun H-O del MASTER. Aplica a Bedner Tapando Boquilla, Bedner Sacar Plastico,
+    // DeWitt Colocacion estacas, Atlantic VarBox, etc. NO aplica a Pennrose5Act (mantiene legacy).
+    if(_grpUsesMotor(act)){
+      varsHtml = _renderGrpMotorInputs(g, act, gi);
+    } else if(ct === 'puertas' && isPennrose5Act(act)){
       // V20_73 Fase C: ancho desde MASTER col I sin hardcoded; si null → 0 puertas (col I debe llenarse).
       var _ancRen = getActAncho(act);
       var _pA = g.vars.pennAcres || '';
@@ -12364,16 +12506,19 @@ function renderGrpActs(){
         +' data-gi="'+gi+'" data-v="fin" onchange="setGrpVar(this)"'
         +' style="font-size:16px;padding:9px 10px;width:100%"></div>'
         +'</div>'
-        // V20_76: si col P del MASTER tiene FactorAcres → ocultar input + mostrar readonly
+        // V20_177: input "ancho de cama" hardcoded eliminado. Antes (L12373 legacy) si col P
+        // estaba vacia se mostraba un cuadrito manual para que el surquero teclee 5.67 (DeWitt)
+        // o 83 (Mecca). Eso violaba data-driven. Ahora: si col P existe, mostrar readonly;
+        // si NO existe, mostrar warning rojo bloqueante pidiendo que Cindy llene el MASTER.
+        // (Las grupales VarDoor configuradas en MASTER caen al motor antes de llegar aqui.)
         + (function(){
             var _fact = getActFactorAcres(act);
             if(_fact){
               return '<div style="background:#eef;border-radius:6px;padding:8px 10px;margin-bottom:6px;font-size:11px;color:#334;display:flex;justify-content:space-between"><span>🌱 Factor de acres</span><b>'+_fact+' (de MASTER)</b></div>';
             }
-            return '<div style="margin-bottom:6px"><label style="font-size:10px">🌱 Ancho de cama (para pago — ej: 5.67 DeWitt, 83 Mecca)</label>'
-              +'<input type="text" inputmode="decimal" pattern="[0-9]*\\.?[0-9]*" value="'+anchoCama+'" placeholder="ej: 5.67"'
-              +' data-gi="'+gi+'" data-v="anchoCama" oninput="setGrpVar(this)"'
-              +' style="font-size:16px;padding:9px 10px;width:100%"></div>';
+            return '<div style="background:#fee;border:2px solid var(--r);border-radius:6px;padding:10px 12px;margin-bottom:6px;font-size:12px;color:var(--r);font-weight:600">'
+              +'⚠️ Falta FactorAcres (col P) en MASTER para esta actividad. Avisa a Cindy.'
+              +'</div>';
           })()
         +'<div style="margin-bottom:6px"><label style="font-size:10px">📍 Labor / Finca (aparece en el PDF)</label>'
         + _fincaGrpHtml(gi, g.vars.finca||'')
@@ -12477,6 +12622,17 @@ function updGrpPreview(gi){
 
   // Calcular datos del resumen
   var ppp=0, qtyLabel='';
+  // V20_177: rama motor data-driven para preview del header colapsado.
+  if(_grpUsesMotor(act)){
+    var rp = _grpMotorCompute(g, act);
+    if(np && rp.qtyPerPerson && !rp.missing.length){
+      ppp = rp.pago;
+      qtyLabel = rp.qtyPerPerson.toFixed(2)+' c/u';
+    }
+    if(prev) prev.innerHTML = qtyLabel ? '<span style="font-size:11px;color:var(--gr)">'+esc(qtyLabel)+'</span>' : '';
+    if(tot)  tot.innerHTML  = ppp ? '<b style="color:var(--a)">$'+ppp.toFixed(2)+'</b>' : '';
+    return;
+  }
   if(ct==='puertas'){
     var grandPies=0, grandAcres=0;
     // V20_13: Pennrose5Act → pennAcres directo, sin surcos
@@ -12805,6 +12961,25 @@ function calcGrpAct(gi){
   var res = gEl('gaR'+gi); if(!res) return;
   var ppp = 0; // pago por persona
 
+  // V20_177: rama nueva motor data-driven. Calcula usando computeQty + formula universal del MASTER.
+  if(_grpUsesMotor(act)){
+    var r = _grpMotorCompute(g, act);
+    if(!np || r.missing.length){
+      res.style.display='none'; updGrpPreview(gi); return;
+    }
+    if(!r.qtyPerPerson){
+      res.style.display='none'; updGrpPreview(gi); return;
+    }
+    ppp = r.pago;
+    res.innerHTML = r.formulaStr
+      +' = <strong style="color:var(--g)">'+r.qtyPerPerson.toFixed(3)+' c/u</strong>'
+      +' × $'+r.rate.toFixed(2)+' = <strong style="color:var(--a)">$'+ppp.toFixed(2)+' c/u</strong>';
+    res.style.display='block';
+    updGrpPreview(gi);
+    for(var iw=0;iw<workers.length;iw++) updTot(workers[iw].id);
+    return;
+  }
+
   if(ct==='puertas'){
     // V20_13: Pennrose5Act → usa g.vars.pennAcres (no surcos)
     var grandPies=0, grandAcres=0;
@@ -12884,6 +13059,15 @@ function grpPayDetail(wid_){
     if(g.participantes.indexOf(wid_)<0) continue;
     var ct  = grpCalcType(act);
     var np  = g.participantes.length; if(!np) continue;
+    // V20_177: rama motor data-driven.
+    if(_grpUsesMotor(act)){
+      var rm = _grpMotorCompute(g, act);
+      if(rm.qtyPerPerson && !rm.missing.length){
+        ex += rm.pago;
+        parts.push(rm.qtyPerPerson.toFixed(2)+' · $'+rm.pago.toFixed(2));
+      }
+      continue;
+    }
     if(ct==='puertas'){
       // V20_13: Pennrose5Act → pennAcres directo
       var grandPies=0, grandAcres=0;
