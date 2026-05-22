@@ -35,7 +35,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_177';
+window.APP_VERSION = 'V20_181';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -4207,13 +4207,22 @@ function normTimeInput(el){
     el.style.color = 'red'; // indicar error
   }
 }
+// V20_178: regla de 7 minutos DOL (29 CFR §785.48(b)) — redondea entrada/salida al cuarto de hora más cercano.
+// Min 0-7 dentro del cuarto → redondea abajo. Min 8-14 → redondea arriba. Neutral en promedio → legal bajo FLSA.
+// Resuelve el bug del redondeo a 1 decimal en duración (resultados siempre múltiplos de 0.25h).
+// NO se redondea el lonche (lIni/lFin) — típicamente ya es 12:00-12:30 (cuartos exactos).
+function _roundToQuarterMin(min){ return Math.round(min/15)*15; }
 function nh(a,b){
   var e=t2m(a),s=t2m(b); if(e===null||s===null)return 0;
+  // V20_178: aplica regla 7-min antes de calcular duración.
+  e = _roundToQuarterMin(e);
+  s = _roundToQuarterMin(s);
   // Cruce de medianoche: si salida <= entrada, sumar 24h (1440 min)
   if(s<=e) s+=1440;
   var li=t2m(gVal('lIni')),lf=t2m(gVal('lFin')),w=s-e;
   if(li!==null&&lf!==null){ var ov=Math.min(s,lf)-Math.max(e,li); if(ov>0)w-=ov; }
-  return Math.round(Math.max(0,w)*10/60)/10;
+  // V20_178: 2 decimales (cuartos exactos: .00, .25, .50, .75). El bug del .toFixed(1) queda neutralizado.
+  return Math.round(Math.max(0,w)*100/60)/100;
 }
 
 // ============================================================================
@@ -5053,31 +5062,52 @@ function _enterReadOnly(payload){
       canUndoUntil: 0
     };
     (pw.acts||[]).forEach(function(pa){
+      // V20_181: helper de normalización (lowercase + sin acentos + trim) para matching tolerante.
+      // Resuelve bug donde pa.actEs="Mecánico" de FIELD_DROP no matcheaba con ALL_ACTS[i].es="Mecanico"
+      // (sin acento) o variantes de casing → _payType quedaba vacío → buildPDFWindow no podía construir
+      // colKey correcto → celdas vacías en PDF para Samuel/Gerardo. Reportado por Serafín 2026-05-21.
+      var _normActName = function(s){
+        return String(s||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').trim();
+      };
+      var _paActNorm = _normActName(pa.actEs);
       var aiIdx=-1;
       for(var i=0;i<ACTS.length;i++){
-        if(ACTS[i].es===pa.actEs){ aiIdx=i; break; }
+        // V20_181: match tolerante (antes era === estricto)
+        if(_normActName(ACTS[i].es)===_paActNorm){ aiIdx=i; break; }
       }
       var qty = (typeof pa.qty==='number') ? pa.qty : parseFloat(pa.qty)||0;
       var price = parseFloat(pa.unitPrice)||0;
       // V20_37 FIX: fallback robusto — 0 es valor válido, no caer a (qty*price) si payEst fue explícitamente 0
       var _payEstParsed = parseFloat(pa.payEst);
       var payEst = (!isNaN(_payEstParsed) && pa.payEst !== null && pa.payEst !== undefined && pa.payEst !== '') ? _payEstParsed : (qty*price);
-      // V20_38: buscar payType en ALL_ACTS si la actividad no está en ACTS del rancho actual
-      var _payTypeForAct = '';
-      if(aiIdx>=0 && ACTS[aiIdx]) _payTypeForAct = ACTS[aiIdx].payType || '';
-      else {
-        for(var _aai=0; _aai<ALL_ACTS.length; _aai++){
-          if(ALL_ACTS[_aai].es === pa.actEs){ _payTypeForAct = ALL_ACTS[_aai].payType || ''; break; }
+      // V20_181: PRIORIDAD 1 — backend v5.36+ manda pa.payType y pa.variable directamente.
+      // Si vienen poblados, usarlos sin lookup. Frontend defensivo para clientes con backend viejo (v5.35-).
+      var _payTypeForAct = pa.payType || '';
+      var _variableForAct = pa.variable || '';
+      if(!_payTypeForAct){
+        // V20_38 / V20_181: fallback — buscar payType en ACTS o ALL_ACTS con matching tolerante
+        if(aiIdx>=0 && ACTS[aiIdx]) _payTypeForAct = ACTS[aiIdx].payType || '';
+        else {
+          for(var _aai=0; _aai<ALL_ACTS.length; _aai++){
+            if(_normActName(ALL_ACTS[_aai].es) === _paActNorm){ _payTypeForAct = ALL_ACTS[_aai].payType || ''; break; }
+          }
         }
       }
-      // V20_76: si la actividad es VarDoor (puertas) y trae qty desde Sheets, reconstruir bloques
-      // para que la UI muestre el bloque en modo lectura sin quedar vacío.
+      if(!_variableForAct){
+        if(aiIdx>=0 && ACTS[aiIdx]) _variableForAct = ACTS[aiIdx].variable || '';
+        else {
+          for(var _aaiV2=0; _aaiV2<ALL_ACTS.length; _aaiV2++){
+            if(_normActName(ALL_ACTS[_aaiV2].es) === _paActNorm){ _variableForAct = ALL_ACTS[_aaiV2].variable || ''; break; }
+          }
+        }
+      }
+      // V20_76 / V20_181: detección VarDoor con matching tolerante
       var _bloquesRO = null;
-      var _isVarDoorRO = false;
-      if(aiIdx>=0 && ACTS[aiIdx] && (ACTS[aiIdx].variable||'').toLowerCase()==='vardoor') _isVarDoorRO = true;
+      var _isVarDoorRO = (_variableForAct.toLowerCase() === 'vardoor');
+      if(!_isVarDoorRO && aiIdx>=0 && ACTS[aiIdx] && (ACTS[aiIdx].variable||'').toLowerCase()==='vardoor') _isVarDoorRO = true;
       if(!_isVarDoorRO){
         for(var _aaiV=0; _aaiV<ALL_ACTS.length; _aaiV++){
-          if(ALL_ACTS[_aaiV].es === pa.actEs && (ALL_ACTS[_aaiV].variable||'').toLowerCase()==='vardoor'){ _isVarDoorRO=true; break; }
+          if(_normActName(ALL_ACTS[_aaiV].es) === _paActNorm && (ALL_ACTS[_aaiV].variable||'').toLowerCase()==='vardoor'){ _isVarDoorRO=true; break; }
         }
       }
       if(_isVarDoorRO && qty>0){
@@ -5096,7 +5126,18 @@ function _enterReadOnly(payload){
         shifts: (pa.hEnt||pa.hSal) ? [{ini:pa.hEnt||'', fin:pa.hSal||''}] : [],
         bloques: _bloquesRO, // V20_76: bloques reconstruidos para VarDoor (null si no aplica)
         pay: payEst,
-        _frozen: true, _unitPrice: price, _payType: _payTypeForAct
+        // V20_180: preservar _actEs y _variable cuando admin carga día desde Sheets.
+        // Sin esto, los workers hidratados quedan con _actEs=undefined; cuando admin genera
+        // PDF estando en OTRO rancho (ACTS[ai] apunta a actividad distinta), el match en
+        // _wActIdent depende del fallback a ACTS[wa.ai] que difiere del fallback en colKey
+        // → workers como Samuel (Mecánico) y Gerardo (Riego The joyce) salen con celdas vacías
+        // en PDF aunque sí aparezcan en el resumen UI. Bug reportado por Serafín 2026-05-21
+        // sobre PDF Payroll Dewitt 2026-05-19 generado por admin "Payroll" (Cindy).
+        // V20_181: _variable usa _variableForAct (preservado de pa.variable si backend v5.36+ lo manda,
+        // o lookup tolerante en ACTS/ALL_ACTS para clientes con v5.35-). Garantiza valor correcto
+        // independiente de la versión del backend.
+        _frozen: true, _actEs: pa.actEs || '', _variable: _variableForAct,
+        _unitPrice: price, _payType: _payTypeForAct
       });
       if(pa.hEnt) _iniAll.push(pa.hEnt);
       if(pa.hSal) _finAll.push(pa.hSal);
@@ -7676,7 +7717,7 @@ function buildAnalisis(){
         wDetails+='<div class="an-act loss">'
           +'<div style="font-weight:700;font-size:13px;margin-bottom:4px">'+esc(act.es)+' — $'+piecePrice.toFixed(2)+'/'+tipoLbl+'</div>'
           +'<div class="an-step">① $<b>'+hourlyRate.toFixed(2)+'</b>/h ÷ $<b>'+piecePrice.toFixed(2)+'</b>/'+tipoLbl+' = <b>'+pzasHora.toFixed(2)+'</b> '+tipoLbl+'/h</div>'
-          +'<div class="an-step">② '+pzasHora.toFixed(2)+' × <b>'+horas.toFixed(1)+'</b> hrs = <b>'+pzasEsperadas.toFixed(1)+'</b> '+tipoLbl+' mínimo</div>'
+          +'<div class="an-step">② '+pzasHora.toFixed(2)+' × <b>'+horas.toFixed(2)+'</b> hrs = <b>'+pzasEsperadas.toFixed(1)+'</b> '+tipoLbl+' mínimo</div>'
           +'<div class="an-step">③ Real: <b>'+smartNum(pzasReales)+'</b> '+tipoLbl+' × $'+piecePrice.toFixed(2)+' = <b>$'+real.toFixed(2)+'</b></div>'
           +'<div class="an-step">④ Mínimo: '+pzasEsperadas.toFixed(1)+' '+tipoLbl+' × $'+piecePrice.toFixed(2)+' = <b>$'+esperado.toFixed(2)+'</b></div>'
           +'<div class="an-bar"><div class="an-bar-fill red" style="width:'+Math.min(pct,100)+'%"></div></div>'
@@ -7779,7 +7820,7 @@ function buildAnalisis(){
         wDetails+='<div class="an-act loss">'
           +'<div style="font-weight:700;font-size:13px;margin-bottom:4px">[GRUPAL] '+esc(gact82.es)+' — $'+price82.toFixed(2)+'/'+tipoLbl82+'</div>'
           +'<div class="an-step">① $<b>'+hRate82.toFixed(2)+'</b>/h ÷ $<b>'+price82.toFixed(2)+'</b>/'+tipoLbl82+' = <b>'+pzasHora82.toFixed(2)+'</b> '+tipoLbl82+'/h</div>'
-          +'<div class="an-step">② '+pzasHora82.toFixed(2)+' × <b>'+horas82.toFixed(1)+'</b> hrs = <b>'+pzasEsperadas82.toFixed(1)+'</b> '+tipoLbl82+' mínimo (su porción)</div>'
+          +'<div class="an-step">② '+pzasHora82.toFixed(2)+' × <b>'+horas82.toFixed(2)+'</b> hrs = <b>'+pzasEsperadas82.toFixed(1)+'</b> '+tipoLbl82+' mínimo (su porción)</div>'
           +'<div class="an-step">③ Su porción real: <b>'+smartNum(pzasReales82)+'</b> '+tipoLbl82+' × $'+price82.toFixed(2)+' = <b>$'+real82.toFixed(2)+'</b> (de '+np82+' personas)</div>'
           +'<div class="an-step">④ Su porción mínima: '+pzasEsperadas82.toFixed(1)+' '+tipoLbl82+' × $'+price82.toFixed(2)+' = <b>$'+esperado82.toFixed(2)+'</b></div>'
           +'<div class="an-bar"><div class="an-bar-fill red" style="width:'+Math.min(pct82,100)+'%"></div></div>'
@@ -7839,7 +7880,7 @@ function buildAnalisis(){
           +'<span style="font-weight:600;font-size:13px">'+esc(s.name)+' ($'+s.price.toFixed(2)+'/'+s.tipo+')</span>'
           +'<span style="font-family:\'Bebas Neue\',sans-serif;font-size:17px;color:'+(sIsLoss?'var(--r)':'var(--b)')+'">'+(sIsLoss?'🔻 -$'+Math.abs(sDiff).toFixed(2):'✅ OK')+'</span>'
         +'</div>'
-        +'<div style="font-size:11px;color:var(--gr)">'+s.workers+' trabajadores · '+s.horas.toFixed(1)+' hrs totales'+(sIsLoss?' · Pérdida: $'+Math.abs(sDiff).toFixed(2):'')+'</div>'
+        +'<div style="font-size:11px;color:var(--gr)">'+s.workers+' trabajadores · '+s.horas.toFixed(2)+' hrs totales'+(sIsLoss?' · Pérdida: $'+Math.abs(sDiff).toFixed(2):'')+'</div>'
       +'</div>';
     }
     gHTML+='</div>';
@@ -10173,7 +10214,11 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
       // V20_152: si hay metadata preservada en a_, usarla como verdad absoluta.
       if(a_._actEs || a_._payType || a_._unitPrice != null){
         actName  = a_._actEs || a_.esName || '';
-        actTipo  = a_.tipo || (_stableAct && _stableAct.hr ? 'hora' : '');
+        // V20_179: alinear fallback con _wActIdent L10237 — si a_.tipo está vacío, usar ACTS[ai].tipo
+        // (capitalizado del MASTER, ej "Hora") en lugar de 'hora' hardcoded lowercase.
+        // Sin esto: colKey='hora' pero _wActIdent='Hora' → match falla → workers con tipo='' aparecen con celdas vacías en PDF
+        // (caso reportado: Samuel Mecánico y Gerardo Riego del PDF Dewitt 2026-05-19).
+        actTipo  = a_.tipo || (ACTS[ai] ? ACTS[ai].tipo : '') || (_stableAct && _stableAct.hr ? 'hora' : '');
         actPayT  = a_._payType || '';
         actHr    = !!(_stableAct && _stableAct.hr);
         // Para label en inglés (PDF para Cindy), intentar ALL_ACTS por nombre+payType estable
@@ -11370,7 +11415,8 @@ function totalShiftHours(a){
   if(!a.shifts||!a.shifts.length) return nh(a.ini||'',a.fin||'');
   var total=0;
   for(var s=0;s<a.shifts.length;s++) total+=nh(a.shifts[s].ini||'',a.shifts[s].fin||'');
-  return Math.round(total*10)/10;
+  // V20_178: 2 decimales para preservar precisión de cuartos (2.25 + 2.25 = 4.50, no 4.5)
+  return Math.round(total*100)/100;
 }
 
 var _prevSurquero = '';
