@@ -35,7 +35,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_186';
+window.APP_VERSION = 'V20_187';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -8682,6 +8682,10 @@ function buildActViewGroups(){
       var finca = a.finca || '';
       var key = (a.ai != null ? a.ai : actName) + '|' + ini + '|' + fin + '|' + finca;
       if(!groups[key]){
+        // V20_187: copiar shifts del act para que la vista pueda mostrar todos los turnos.
+        // Si el worker tiene multi-shift (busero mañana+tarde), todos los workers del grupo
+        // comparten los mismos shifts porque se asignan juntos en confirmAssignMany.
+        var _grpShifts = (a.shifts && a.shifts.length) ? JSON.parse(JSON.stringify(a.shifts)) : [{ini:ini, fin:fin}];
         groups[key] = {
           ai: a.ai,
           actName: actName,
@@ -8690,6 +8694,7 @@ function buildActViewGroups(){
           rate: rate,
           tipo: tipo,
           ini: ini, fin: fin, finca: finca,
+          shifts: _grpShifts,  // V20_187: lista de turnos para que renderWlistByActivity y Editar los conozcan
           workers: []
         };
         order.push(key);
@@ -8794,7 +8799,19 @@ function renderWlistByActivity(){
     html += '    <div class="acc-act-right">';
     html += '      <div class="acc-nm">'+esc(g.actName)+'</div>';
     html += '      <div class="acc-meta">';
-    if(g.ini && g.fin) html += '<span class="pill pill-time">🕐 '+esc(g.ini)+'-'+esc(g.fin)+'</span> ';
+    // V20_187: mostrar TODOS los turnos del grupo (busero mañana + tarde aparece como T1: 7-12, T2: 13-18).
+    // Para 1 turno se muestra sin prefijo (compat con UX anterior). Para 2+ se prefija "T1:", "T2:".
+    if(g.shifts && g.shifts.length){
+      for(var sg=0; sg<g.shifts.length; sg++){
+        var sh = g.shifts[sg];
+        if(sh.ini && sh.fin){
+          var _shLbl = g.shifts.length > 1 ? 'T'+(sg+1)+': ' : '';
+          html += '<span class="pill pill-time">🕐 '+esc(_shLbl)+esc(sh.ini)+'-'+esc(sh.fin)+'</span> ';
+        }
+      }
+    } else if(g.ini && g.fin){
+      html += '<span class="pill pill-time">🕐 '+esc(g.ini)+'-'+esc(g.fin)+'</span> ';
+    }
     html += '<span class="pill pill-cnt">👥 '+g.workers.length+'</span> ';
     if(g.finca) html += '<span class="pill pill-finca">📍 '+esc(g.finca)+'</span> ';
     html += '<span class="pill pill-rate">$'+(+g.rate||0).toFixed(2)+'</span>';
@@ -9134,9 +9151,21 @@ function editActivityGroup(groupKey){
       // Disparar onAssignActChange manualmente — pinta finca + inputs + tag
       try { onAssignActChange(); } catch(e){ console.warn('V20_141 onAssignActChange fallo:', e); }
     }
-    // Pre-poblar horarios
+    // Pre-poblar horarios (turno 1)
     var iniEl = gEl('assignIni'); if(iniEl) iniEl.value = ini;
     var finEl = gEl('assignFin'); if(finEl) finEl.value = fin;
+    // V20_187: pre-poblar turnos EXTRAS desde firstAct.shifts[1..n]. Bug reportado por Serafín
+    // 2026-06-01: al editar busero con multi-shift solo se veía 1 turno y los extras se perdían.
+    _assignExtraShifts = [];
+    if(firstAct && firstAct.shifts && firstAct.shifts.length > 1){
+      for(var _sex=1; _sex<firstAct.shifts.length; _sex++){
+        var _shEx = firstAct.shifts[_sex];
+        if(_shEx && (_shEx.ini || _shEx.fin)){
+          _assignExtraShifts.push({ini: _shEx.ini||'', fin: _shEx.fin||''});
+        }
+      }
+    }
+    try { renderAssignExtraShifts(); } catch(eR){ console.warn('V20_187 renderAssignExtraShifts fallo:', eR); }
     // Pre-poblar finca (después de onAssignActChange que la pintó)
     var fincaSel = gEl('assignFincaSel');
     var fincaInp = gEl('assignFincaInput');
@@ -9181,6 +9210,13 @@ function _saveEditedActivityGroup(){
   var newIni = (gEl('assignIni')||{}).value || '';
   var newFin = (gEl('assignFin')||{}).value || '';
   if(!newIni || !newFin){ toast && toast('⚠️ Captura horario inicio y fin'); return; }
+  // V20_187: construir lista de shifts (T1 + extras del modal) al GUARDAR la edición.
+  var _newShifts = [{ini: newIni, fin: newFin}];
+  for(var _esx=0; _esx<_assignExtraShifts.length; _esx++){
+    var _esE = _assignExtraShifts[_esx];
+    if(!_esE.ini || !_esE.fin){ toast && toast('⚠️ Captura inicio y fin de TODOS los turnos extras'); return; }
+    _newShifts.push({ini: _esE.ini, fin: _esE.fin});
+  }
   var fincaSel = gEl('assignFincaSel'); var fincaInp = gEl('assignFincaInput');
   var newFinca = fincaSel ? (fincaSel.value||'') : (fincaInp ? (fincaInp.value||'') : '');
   if(!newFinca){ toast && toast('⚠️ Selecciona finca'); return; }
@@ -9235,7 +9271,7 @@ function _saveEditedActivityGroup(){
       tipo: _derivarTipoActividad(newAct),
       p: newAct.p, payType: newAct.payType||'',
       ini: newIni, fin: newFin, finca: newFinca,
-      qty: 0, showTime: true, shifts: [{ini:newIni, fin:newFin}], inputs:{}
+      qty: 0, showTime: true, shifts: _newShifts.slice(), inputs:{}  // V20_187: T1 + extras
     });
     var savedActs = wC.acts;
     wC.acts = tempActs;
@@ -9298,7 +9334,8 @@ function _saveEditedActivityGroup(){
       ini: newIni, fin: newFin, finca: newFinca,
       qty: preserved ? preserved.qty : 0,  // V20_173: Daywork ya NO se preasigna con 1 — usa 0 fantasma como piezas/cajas (Serafín 2026-05-14).
       showTime: true,
-      shifts: [{ini:newIni, fin:newFin}],
+      // V20_187: shifts incluye turnos extras del modal (deep copy)
+      shifts: JSON.parse(JSON.stringify(_newShifts)),
       inputs: preserved && preserved.inputs ? preserved.inputs : JSON.parse(JSON.stringify(commonVars))
     };
     var newIdx = wTarget.acts.length;
