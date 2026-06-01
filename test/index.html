@@ -35,7 +35,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_183';
+window.APP_VERSION = 'V20_184';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -9386,14 +9386,20 @@ function onAssignActChange(){
 }
 
 function _renderAssignFinca(act){
-  // Usar el catálogo FINCAS_POR_RANCHO del MASTER, fallback a input libre si no hay
+  // Usar el catálogo FINCAS_POR_RANCHO del MASTER. Regla V20_91_13: si el rancho NO tiene
+  // catálogo → ocultar el bloque completo (NO permitir input libre). Paridad con
+  // renderParamsFinca L5573 y _fincaGrpHtml L12353.
+  // V20_184: bug reportado por Serafín 2026-06-01 — el fallback a input libre violaba la regla.
   // V20_134_a FIX 2: pre-seleccionar la finca actual de Parámetros para no obligar al usuario
   var slot = gEl('assignFincaSlot'); if(!slot) return;
+  var wrap = gEl('assignFincaWrap');
   var rancho = (gVal('rancho')||'').trim();
   var fincaActual = (gVal('finca')||'').trim();
   var fincaActualLc = fincaActual.toLowerCase();
   var fincas = (typeof FINCAS_POR_RANCHO !== 'undefined' && FINCAS_POR_RANCHO && FINCAS_POR_RANCHO[rancho]) ? FINCAS_POR_RANCHO[rancho] : null;
   if(fincas && fincas.length){
+    // V20_184: rancho con catálogo → mostrar wrap + dropdown
+    if(wrap) wrap.style.display = '';
     var html = '<select id="assignFincaSel" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:14px"><option value="">— Selecciona finca —</option>';
     var matched = false;
     for(var i=0; i<fincas.length; i++){
@@ -9407,7 +9413,10 @@ function _renderAssignFinca(act){
     html += '</select>';
     slot.innerHTML = html;
   } else {
-    slot.innerHTML = '<input id="assignFincaInput" type="text" placeholder="Nombre de la finca" value="'+esc(fincaActual)+'" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:6px;font-size:14px">';
+    // V20_184: rancho sin catálogo → ocultar bloque completo (paridad V20_91_13).
+    // Antes había fallback a <input type="text"> libre que violaba la regla.
+    if(wrap) wrap.style.display = 'none';
+    slot.innerHTML = '';
   }
 }
 
