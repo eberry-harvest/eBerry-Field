@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_91';
+window.APP_VERSION = 'V20_92';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -723,7 +723,7 @@ html.login-locked{overflow:hidden!important;height:100%!important}
     <button class="tab" onclick="go(2)">③ Trabajadores</button>
     <button class="tab" onclick="go(3)">④ Act. Grupales</button>
     <button class="tab" onclick="go(4)">⑤ Resumen</button>
-    <button class="tab" onclick="go(5)">⑥ Ausencias</button>
+    <button class="tab" onclick="go(5)">⑥ Ausencias y Rechazos</button>
     <button class="tab" onclick="go(6)">⑦ Invoice</button>
     <button class="tab" onclick="go(7)">⑧ Semanal</button>
     <button class="tab" onclick="go(8)">⑨ Archivos</button>
@@ -1328,8 +1328,16 @@ body.readOnly [onclick*="openNewDay"]{display:none !important}
   </div>
 </div>
 
-<!-- PAGE 4 — AUSENCIAS -->
+<!-- PAGE 4 — AUSENCIAS Y RECHAZOS -->
 <div class="pg" id="p4">
+  <!-- V20_92: subtab toggle Ausencias / Rechazos -->
+  <div style="display:flex;gap:6px;background:#f1f5f1;padding:5px;border-radius:10px;margin-bottom:14px">
+    <button id="subtabAusBtn" onclick="showAusSubtab('aus')" style="flex:1;padding:9px 8px;border:none;border-radius:7px;background:#fff;color:#0F4C2E;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer;box-shadow:0 1px 2px rgba(0,0,0,.06)"><span id="subtabAusLbl">Ausencias</span></button>
+    <button id="subtabRecBtn" onclick="showAusSubtab('rec')" style="flex:1;padding:9px 8px;border:none;border-radius:7px;background:transparent;color:#666;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer"><span id="subtabRecLbl">Rechazos</span></button>
+  </div>
+
+  <!-- Original Ausencias section -->
+  <div id="subtabAusContent">
   <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px;margin-bottom:3px">Ausencias del Día</div>
   <div id="ausHdr" style="font-size:13px;color:var(--gr);margin-bottom:14px">Personas de tu equipo que no trabajaron hoy</div>
   <div id="ausenciasList" class="resp-grid resp-grid-ausencias"></div>
@@ -1337,6 +1345,25 @@ body.readOnly [onclick*="openNewDay"]{display:none !important}
     <div style="font-size:40px;margin-bottom:12px">✅</div>
     <div style="font-size:15px;font-weight:600;margin-bottom:6px">Sin ausencias registradas</div>
     <div style="font-size:13px">Usa la barra de abajo para agregar</div>
+  </div>
+  </div>
+
+  <!-- V20_92: new Rechazos de Horas section -->
+  <div id="subtabRecContent" style="display:none">
+    <div style="font-family:'Bebas Neue',sans-serif;font-size:22px;letter-spacing:1px;margin-bottom:3px">Rechazos de Horas</div>
+    <div id="recHdr" style="font-size:13px;color:var(--gr);margin-bottom:14px">Trabajadores que rechazaron horas hoy (impacta garantía 3/4)</div>
+    <div id="recList"></div>
+    <div id="recEmpty" style="text-align:center;padding:40px 20px;color:var(--gr)">
+      <div style="font-size:40px;margin-bottom:12px">📋</div>
+      <div style="font-size:15px;font-weight:600;margin-bottom:6px">Sin rechazos registrados</div>
+      <div style="font-size:13px">Agrega desde la tarjeta de cada trabajador en ③ Trabajadores</div>
+    </div>
+    <div style="margin-top:18px;padding:12px;background:#FFF7D6;border:1px solid #C8A415;border-radius:8px;font-size:12px;color:#5A4500;line-height:1.5">
+      <strong>ℹ️ ¿Cómo funciona?</strong><br>
+      Un <b>rechazo</b> se registra cuando un trabajador NO trabajó las horas ofrecidas en su día.<br>
+      Esto se exige para cumplir con la <b>garantía 3/4</b> del contrato H-2A.<br>
+      Las razones <span style="color:#c0392b">🙅 Rechazó el trabajo</span>, <span style="color:#c0392b">💤 Llegó tarde o se fue</span> y <span style="color:#c0392b">❌ No se presentó</span> sí reducen la garantía. Otras razones se registran pero no la reducen.
+    </div>
   </div>
   <!-- Search bar same style as workers tab -->
   <div style="position:fixed;bottom:70px;left:0;right:0;z-index:150;background:#fff;border-top:1px solid var(--bd);padding:8px 12px 4px;display:none" id="ausBar">
@@ -8365,6 +8392,180 @@ function getAusenciaCandidates(){
     result.push({name:name, empNum:empNum});
   }
   return result;
+}
+
+// ===========================================================================
+// V20_92 — Hours Refused / Rechazos de Horas
+// Phase B Day 1: subtab toggle, Supabase config, reason catalog hydration
+// ===========================================================================
+window.SUPABASE_URL = 'https://opdwtijyropzoyeseoij.supabase.co';
+window.SUPABASE_ANON = 'sb_publishable_7nQMmXiQRYGzvmTJ6YZ4tQ_6u2XsVs9';
+window.TENANT_ID    = '00000000-0000-0000-0000-000000000001';
+
+window.REASON_CATALOG_FALLBACK = [
+  {reason_code:'worked_other_crew',label_en:'Worked with other crew', label_es:'Trabajó con otro surquero',  emoji:'🔄', counts_as_offered:true,  counts_as_refused:false, display_order:10},
+  {reason_code:'refused_work',    label_en:'Refused work',           label_es:'Rechazó el trabajo',         emoji:'🙅', counts_as_offered:true,  counts_as_refused:true,  display_order:20},
+  {reason_code:'illness',         label_en:'Sick',                   label_es:'Enfermo',                    emoji:'🤒', counts_as_offered:true,  counts_as_refused:false, display_order:30},
+  {reason_code:'personal',        label_en:'Personal matter',        label_es:'Asunto personal',            emoji:'👤', counts_as_offered:true,  counts_as_refused:false, display_order:40},
+  {reason_code:'no_transport',    label_en:'No transport',           label_es:'Sin transporte',             emoji:'🚐', counts_as_offered:true,  counts_as_refused:false, display_order:50},
+  {reason_code:'late_left_early', label_en:'Late / left early',      label_es:'Llegó tarde o se fue',       emoji:'💤', counts_as_offered:true,  counts_as_refused:true,  display_order:55},
+  {reason_code:'weather',         label_en:'Weather suspended',      label_es:'Clima / suspendido',         emoji:'🌧️', counts_as_offered:false, counts_as_refused:false, display_order:60},
+  {reason_code:'no_show',         label_en:'No show no call',        label_es:'No se presentó sin aviso',   emoji:'❌', counts_as_offered:true,  counts_as_refused:true,  display_order:70},
+  {reason_code:'ranch_suspended', label_en:'Ranch gave no work',     label_es:'Rancho no dio trabajo',      emoji:'🚫', counts_as_offered:false, counts_as_refused:false, display_order:80},
+  {reason_code:'medical_leave',   label_en:'Medical leave',          label_es:'Incapacidad médica',         emoji:'🏥', counts_as_offered:true,  counts_as_refused:false, display_order:90},
+  {reason_code:'other',           label_en:'Other',                  label_es:'Otro',                       emoji:'📋', counts_as_offered:true,  counts_as_refused:false, display_order:999}
+];
+window.REASON_CATALOG = window.REASON_CATALOG_FALLBACK.slice();
+
+var REASON_CATALOG_KEY = 'REASON_CATALOG_V1';
+var REASON_CATALOG_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+function loadCachedReasonCatalog(){
+  try{
+    var raw = localStorage.getItem(REASON_CATALOG_KEY);
+    if(!raw) return false;
+    var obj = JSON.parse(raw);
+    if(!obj || !obj.data || !obj.fetched_at) return false;
+    if((Date.now() - obj.fetched_at) > REASON_CATALOG_TTL_MS) return false;
+    if(!Array.isArray(obj.data) || obj.data.length === 0) return false;
+    window.REASON_CATALOG = obj.data;
+    return true;
+  }catch(e){ return false; }
+}
+
+function saveCachedReasonCatalog(data){
+  try{
+    localStorage.setItem(REASON_CATALOG_KEY, JSON.stringify({
+      fetched_at: Date.now(),
+      data: data
+    }));
+  }catch(e){}
+}
+
+function hydrateReasonCatalog(){
+  if(!window.SUPABASE_URL || !window.SUPABASE_ANON) return;
+  try{
+    fetch(window.SUPABASE_URL + '/rest/v1/rpc/get_reason_catalog', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': window.SUPABASE_ANON,
+        'Authorization': 'Bearer ' + window.SUPABASE_ANON
+      },
+      body: '{}'
+    }).then(function(r){ return r.ok ? r.json() : null; })
+      .then(function(data){
+        if(data && Array.isArray(data) && data.length > 0){
+          window.REASON_CATALOG = data;
+          saveCachedReasonCatalog(data);
+          console.log('[eBerry] Reason catalog hydrated:', data.length, 'codes');
+        }
+      })
+      .catch(function(e){ console.warn('[eBerry] hydrateReasonCatalog failed:', e); });
+  }catch(e){}
+}
+
+loadCachedReasonCatalog();
+if(typeof window !== 'undefined' && navigator.onLine !== false){
+  setTimeout(hydrateReasonCatalog, 1500);
+}
+
+var REFUSALS_QUEUE_KEY = 'REFUSALS_QUEUE_V1';
+window.refusalsQueue = (function(){
+  try{ return JSON.parse(localStorage.getItem(REFUSALS_QUEUE_KEY) || '[]'); }catch(e){ return []; }
+})();
+function saveRefusalsQueue(){
+  try{ localStorage.setItem(REFUSALS_QUEUE_KEY, JSON.stringify(window.refusalsQueue || [])); }catch(e){}
+}
+function addRefusal(rec){
+  if(!rec) return;
+  rec._id = rec._id || (Date.now() + '_' + Math.random().toString(36).slice(2,8));
+  rec._created_at = rec._created_at || new Date().toISOString();
+  window.refusalsQueue.push(rec);
+  saveRefusalsQueue();
+}
+function clearRefusalsQueue(){
+  window.refusalsQueue = [];
+  saveRefusalsQueue();
+}
+
+function showAusSubtab(which){
+  var ausC = document.getElementById('subtabAusContent');
+  var recC = document.getElementById('subtabRecContent');
+  var ausB = document.getElementById('subtabAusBtn');
+  var recB = document.getElementById('subtabRecBtn');
+  var ausBar = document.getElementById('ausBar');
+  if(!ausC || !recC) return;
+  if(which === 'rec'){
+    ausC.style.display = 'none';
+    recC.style.display = 'block';
+    if(ausB){ ausB.style.background = 'transparent'; ausB.style.color = '#666'; ausB.style.boxShadow = 'none'; }
+    if(recB){ recB.style.background = '#fff'; recB.style.color = '#0F4C2E'; recB.style.boxShadow = '0 1px 2px rgba(0,0,0,.06)'; }
+    if(ausBar) ausBar.style.display = 'none';
+    if(typeof renderRechazos === 'function') renderRechazos();
+  }else{
+    ausC.style.display = 'block';
+    recC.style.display = 'none';
+    if(ausB){ ausB.style.background = '#fff'; ausB.style.color = '#0F4C2E'; ausB.style.boxShadow = '0 1px 2px rgba(0,0,0,.06)'; }
+    if(recB){ recB.style.background = 'transparent'; recB.style.color = '#666'; recB.style.boxShadow = 'none'; }
+  }
+}
+
+function renderRechazos(){
+  var list = document.getElementById('recList');
+  var empty = document.getElementById('recEmpty');
+  var hdr = document.getElementById('recHdr');
+  if(!list) return;
+  list.innerHTML = '';
+  var q = window.refusalsQueue || [];
+  if(!q.length){
+    if(empty) empty.style.display = 'block';
+    if(hdr) hdr.textContent = 'Trabajadores que rechazaron horas hoy (impacta garantía 3/4)';
+    return;
+  }
+  if(empty) empty.style.display = 'none';
+  var refusedSum = 0;
+  for(var k=0;k<q.length;k++){ if(q[k].counts_as_refused) refusedSum += (+q[k].hours_refused || 0); }
+  if(hdr) hdr.textContent = q.length + ' rechazo(s) · ' + refusedSum.toFixed(2) + ' h penalizables';
+  var catalog = window.REASON_CATALOG || [];
+  function lookupReason(code){
+    for(var i=0;i<catalog.length;i++){ if(catalog[i].reason_code === code) return catalog[i]; }
+    return {reason_code:code, label_es:code, emoji:'•', counts_as_refused:false};
+  }
+  for(var i=0;i<q.length;i++){
+    var r = q[i];
+    var meta = lookupReason(r.reason_code || '');
+    var penalColor = meta.counts_as_refused ? '#c0392b' : '#6b7280';
+    var card = document.createElement('div');
+    card.style.cssText = 'background:#fff;border:1px solid #e6e6e6;border-radius:10px;padding:12px 14px;margin-bottom:8px;box-shadow:0 1px 2px rgba(0,0,0,.04)';
+    var nm = (r.name || '—');
+    var en = r.empNum ? ('<span style="font-family:Consolas,monospace;font-size:11px;background:#f1f5f1;padding:2px 6px;border-radius:4px;margin-left:6px;color:#666">#' + esc(r.empNum) + '</span>') : '';
+    var noteHtml = r.reason_text ? '<div style="font-size:12px;color:#555;margin-top:6px;padding:6px 8px;background:#fafafa;border-left:2px solid #ccc;border-radius:0 4px 4px 0">' + esc(r.reason_text) + '</div>' : '';
+    card.innerHTML =
+      '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">' +
+        '<div style="flex:1;min-width:0">' +
+          '<div style="font-weight:700;font-size:14px;color:#0F4C2E">👤 ' + esc(nm) + en + '</div>' +
+          '<div style="font-size:12px;color:' + penalColor + ';margin-top:4px">' + (meta.emoji||'') + ' ' + esc(meta.label_es) + (meta.counts_as_refused ? ' · <b>penaliza 3/4</b>' : '') + '</div>' +
+        '</div>' +
+        '<div style="text-align:right;flex-shrink:0">' +
+          '<div style="font-size:11px;color:#666">Rechazadas</div>' +
+          '<div style="font-size:18px;font-weight:800;color:' + penalColor + '">' + (+r.hours_refused||0).toFixed(2) + ' h</div>' +
+        '</div>' +
+      '</div>' + noteHtml +
+      '<div style="display:flex;justify-content:space-between;font-size:11px;color:#888;margin-top:8px">' +
+        '<span>Ofrecidas ' + (+r.hours_offered||0).toFixed(2) + ' h · Trabajadas ' + (+r.hours_worked||0).toFixed(2) + ' h</span>' +
+        '<span><a href="#" onclick="removeRefusal(\'' + r._id + '\');return false" style="color:#c0392b;text-decoration:none">Eliminar</a></span>' +
+      '</div>';
+    list.appendChild(card);
+  }
+}
+
+function removeRefusal(id){
+  if(!id) return;
+  if(!confirm('¿Eliminar este rechazo?')) return;
+  window.refusalsQueue = (window.refusalsQueue||[]).filter(function(r){ return r._id !== id; });
+  saveRefusalsQueue();
+  renderRechazos();
 }
 
 function syncAusencias(){
