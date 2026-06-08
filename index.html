@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_99';
+window.APP_VERSION = 'V20_99_1';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -778,19 +778,20 @@ html.login-locked{overflow:hidden!important;height:100%!important}
 </div>
 
 <!-- V20_99: Role picker modal (dual-mode drivers) -->
-<div class="ov" id="choferRoleOv" role="dialog" aria-modal="true">
+<div class="ov" id="choferRoleOv" role="dialog" aria-modal="true" style="z-index:10000">
   <div class="md" style="max-width:420px">
     <div style="font-size:38px;text-align:center;margin-bottom:6px">👋</div>
     <div class="mt" style="text-align:center;font-size:17px" id="choferRoleTit">¿Cómo vas a trabajar hoy? / How are you working today?</div>
     <div class="mbs" style="display:flex;flex-direction:column;gap:12px;margin-top:18px">
       <button class="mok" id="choferRoleDriver" style="background:#2a4a7a;font-size:16px;padding:16px">🚌 Chofer / Driver</button>
+      <button class="mok" id="choferRoleHauler" style="background:#8b5a2b;font-size:16px;padding:16px">🚛 Hauler / Carga</button>
       <button class="mok" id="choferRoleCrew" style="background:#1f6b3a;font-size:16px;padding:16px">👷 Surquero / Crew Lead</button>
     </div>
   </div>
 </div>
 
 <!-- V20_99: Driver blocked modal (unqualified — CDL/medcard) -->
-<div class="ov" id="choferBlockedOv" role="dialog" aria-modal="true">
+<div class="ov" id="choferBlockedOv" role="dialog" aria-modal="true" style="z-index:10000">
   <div class="md" style="max-width:420px">
     <div style="font-size:42px;text-align:center;margin-bottom:6px">⛔</div>
     <div class="mt" style="color:#c0392b;text-align:center;font-size:18px;line-height:1.3">No puedes manejar hoy / You cannot drive today</div>
@@ -12551,9 +12552,19 @@ var _checkSendTimer = setInterval(checkDaysWithoutSend, 30 * 60 * 1000);
 
   C.showRolePicker = function(drv, pin, hashed){
     $('choferRoleOv').classList.add('on');
+    var modes = (drv.allowed_modes||[]);
+    var bH = $('choferRoleHauler'); if(bH) bH.style.display = (modes.indexOf('hauler')>=0 ? '' : 'none');
+    var bC = $('choferRoleCrew');   if(bC) bC.style.display = (modes.indexOf('surquero')>=0 ? '' : 'none');
+    var bD = $('choferRoleDriver'); if(bD) bD.style.display = (modes.indexOf('chofer')>=0 ? '' : 'none');
     $('choferRoleDriver').onclick = function(){
       $('choferRoleOv').classList.remove('on');
       C.enterChoferMode(drv);
+    };
+    if(bH) bH.onclick = function(){
+      $('choferRoleOv').classList.remove('on');
+      // Hauler UI not yet built — enter chofer mode and toast a notice.
+      C.enterChoferMode(drv);
+      if(typeof window.toast==='function') window.toast('🚛 Hauler UI pendiente — usando Chofer por ahora');
     };
     $('choferRoleCrew').onclick = function(){
       $('choferRoleOv').classList.remove('on');
@@ -12566,7 +12577,7 @@ var _checkSendTimer = setInterval(checkDaysWithoutSend, 30 * 60 * 1000);
   C.enterChoferMode = function(drv){
     C.state.driver = drv;
     window.currentMode = 'chofer';
-    $('choferName').textContent = '🚌 ' + (drv.msts_driver_name || drv.driver_code || 'Chofer');
+    $('choferName').textContent = '🚌 ' + (drv.full_name || drv.msts_driver_name || drv.driver_code || 'Chofer');
     $('choferSub').textContent = drv.driver_code || '';
     // Hide login + surquero, show chofer.
     var ls = $('loginScreen'); if(ls) ls.classList.add('hide');
