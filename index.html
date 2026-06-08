@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_98';
+window.APP_VERSION = 'V20_99';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -758,6 +758,47 @@ html.login-locked{overflow:hidden!important;height:100%!important}
       <button class="pin-btn del" onclick="pinDel()">⌫</button>
     </div>
     <div class="login-err" id="loginErr"></div>
+  </div>
+</div>
+
+<!-- V20_99: ── CHOFER (DRIVER) MODE ── full-screen, replaces surquero UI when active -->
+<div id="choferScreen" style="display:none;position:fixed;top:0;right:0;bottom:0;left:0;background:#0f1f3a;z-index:9000;flex-direction:column;overflow:hidden;color:#fff;font-family:inherit">
+  <div id="choferHeader" style="flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:12px 14px;background:#13294d;box-shadow:0 2px 6px rgba(0,0,0,.4)">
+    <div style="font-size:22px">🚌</div>
+    <div style="flex:1;min-width:0">
+      <div id="choferName" style="font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Chofer</div>
+      <div id="choferSub" style="font-size:11px;opacity:.7"></div>
+    </div>
+    <button id="choferLangToggle" onclick="window.Chofer.toggleLang()" style="background:#2a4a7a;border:none;color:#fff;border-radius:8px;padding:7px 10px;font-size:13px;font-weight:700">🇲🇽 ES</button>
+    <button onclick="window.Chofer.logout()" style="background:#7a2a2a;border:none;color:#fff;border-radius:8px;padding:7px 10px;font-size:13px;font-weight:700" id="choferLogoutBtn">Salir</button>
+  </div>
+  <div id="choferHosBanner" style="display:none;flex:0 0 auto;padding:8px 12px;font-size:13px;font-weight:700;text-align:center"></div>
+  <div id="choferTabs" style="flex:0 0 auto;display:flex;overflow-x:auto;background:#13294d;border-top:1px solid #1f3a66"></div>
+  <div id="choferBody" style="flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px"></div>
+</div>
+
+<!-- V20_99: Role picker modal (dual-mode drivers) -->
+<div class="ov" id="choferRoleOv" role="dialog" aria-modal="true">
+  <div class="md" style="max-width:420px">
+    <div style="font-size:38px;text-align:center;margin-bottom:6px">👋</div>
+    <div class="mt" style="text-align:center;font-size:17px" id="choferRoleTit">¿Cómo vas a trabajar hoy? / How are you working today?</div>
+    <div class="mbs" style="display:flex;flex-direction:column;gap:12px;margin-top:18px">
+      <button class="mok" id="choferRoleDriver" style="background:#2a4a7a;font-size:16px;padding:16px">🚌 Chofer / Driver</button>
+      <button class="mok" id="choferRoleCrew" style="background:#1f6b3a;font-size:16px;padding:16px">👷 Surquero / Crew Lead</button>
+    </div>
+  </div>
+</div>
+
+<!-- V20_99: Driver blocked modal (unqualified — CDL/medcard) -->
+<div class="ov" id="choferBlockedOv" role="dialog" aria-modal="true">
+  <div class="md" style="max-width:420px">
+    <div style="font-size:42px;text-align:center;margin-bottom:6px">⛔</div>
+    <div class="mt" style="color:#c0392b;text-align:center;font-size:18px;line-height:1.3">No puedes manejar hoy / You cannot drive today</div>
+    <div id="choferBlockedReasons" style="background:#fdf2f0;border-left:4px solid #c0392b;padding:12px 14px;margin:14px 0;font-size:14px;color:#7a1e12;border-radius:6px;text-align:left;line-height:1.5"></div>
+    <div class="ms" style="text-align:center;font-size:13px">Comunícate con RH / Contact HR<br><a href="tel:+19565551234" style="color:#1a3a8c;font-weight:700;font-size:16px;text-decoration:none">📞 (956) 555-1234</a></div>
+    <div class="mbs" style="margin-top:16px">
+      <button class="mok" onclick="document.getElementById('choferBlockedOv').classList.remove('on')" autofocus>Entendido / OK</button>
+    </div>
   </div>
 </div>
 
@@ -1847,20 +1888,63 @@ function checkPin(){
       return;
     }
 
-    // V7: comparar PIN hasheado contra líderes (hashear PINes de Sheets al cargarlos)
-    var matchedUser = null;
-    for(var i=0;i<LIDERES.length;i++){
-      if(LIDERES[i].pinHash === hashed || LIDERES[i].pin === pin){
-        matchedUser = {name:LIDERES[i].name, pin:pin, crew:LIDERES[i].crew, isAdmin:false, empNum:LIDERES[i].empNum};
-        break;
-      }
-    }
-
-    if(!matchedUser){
-      gEl('loginErr').textContent = '❌ PIN incorrecto, intenta de nuevo';
-      setTimeout(function(){ gEl('loginErr').textContent=''; }, 2000);
+    // V20_99: Check Supabase driver PIN BEFORE the LIDERES iteration.
+    // A driver row routes to Chofer mode (or role picker if multi-mode).
+    // Any network/parse failure falls through to the existing surquero check.
+    if(window.SUPABASE_URL && window.SUPABASE_ANON){
+      gEl('loginErr').textContent = '🔍 Verificando...';
+      fetch(window.SUPABASE_URL + '/rest/v1/rpc/driver_login_by_pin', {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json', 'Content-Profile':'public', 'Accept-Profile':'public',
+                  'apikey':window.SUPABASE_ANON, 'Authorization':'Bearer '+window.SUPABASE_ANON },
+        body: JSON.stringify({ p_pin: pin })
+      }).then(function(r){ return r.ok ? r.json() : null; }).then(function(rows){
+        gEl('loginErr').textContent = '';
+        if(rows && rows.length){
+          var drv = rows[0];
+          if(!drv.is_qualified){
+            window.Chofer.showDriverBlocked(drv);
+            return;
+          }
+          window.CURRENT_DRIVER = drv;
+          if(drv.allowed_modes && drv.allowed_modes.length > 1){
+            window.Chofer.showRolePicker(drv, pin, hashed);
+          } else {
+            window.Chofer.enterChoferMode(drv);
+          }
+          return;
+        }
+        doLideresCheck(pin, hashed);
+      }).catch(function(){ gEl('loginErr').textContent = ''; doLideresCheck(pin, hashed); });
       return;
     }
+
+    doLideresCheck(pin, hashed);
+
+  }).catch(function(e){
+    // Upsilon2: si hashPin falla inesperadamente, mostrar error en vez de congelarse
+    console.error('hashPin error:', e);
+    gEl('loginErr').textContent = '⚠️ Error de seguridad. Recarga la app.';
+  }); // cierre hashPin().then()
+}
+
+// V20_99: extracted from checkPin so both the driver path and the direct
+// path can reuse the surquero/lider login + duplicate-session flow.
+function doLideresCheck(pin, hashed){
+  // V7: comparar PIN hasheado contra líderes (hashear PINes de Sheets al cargarlos)
+  var matchedUser = null;
+  for(var i=0;i<LIDERES.length;i++){
+    if(LIDERES[i].pinHash === hashed || LIDERES[i].pin === pin){
+      matchedUser = {name:LIDERES[i].name, pin:pin, crew:LIDERES[i].crew, isAdmin:false, empNum:LIDERES[i].empNum};
+      break;
+    }
+  }
+
+  if(!matchedUser){
+    gEl('loginErr').textContent = '❌ PIN incorrecto, intenta de nuevo';
+    setTimeout(function(){ gEl('loginErr').textContent=''; }, 2000);
+    return;
+  }
 
   // ── Check for duplicate session ──
   gEl('loginErr').textContent = '🔍 Verificando sesión...';
@@ -1892,12 +1976,6 @@ function checkPin(){
       proceedLogin(_pendingSessionUser);
     }
   });
-
-  }).catch(function(e){
-    // Upsilon2: si hashPin falla inesperadamente, mostrar error en vez de congelarse
-    console.error('hashPin error:', e);
-    gEl('loginErr').textContent = '⚠️ Error de seguridad. Recarga la app.';
-  }); // cierre hashPin().then()
 }
 
 function forceSessionTakeover(){
@@ -12310,6 +12388,678 @@ function checkDaysWithoutSend(){
 // V7: revisar cada 30 min con referencia para cleanup
 var _checkSendTimer = setInterval(checkDaysWithoutSend, 30 * 60 * 1000);
 
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     V20_99 — CHOFER (DRIVER) MODE
+     Self-contained. All state/behavior under window.Chofer.
+     Surquero code above is untouched; this block only reads shared
+     helpers (gEl, toast, SUPABASE_URL/ANON) and the DOM nodes added
+     for chofer mode. Loaded last so those helpers already exist.
+     ═══════════════════════════════════════════════════════════════ -->
+<script>
+(function(){
+  'use strict';
+
+  var C = window.Chofer = window.Chofer || {};
+
+  // ── Shared-helper shims (chofer block loads last; fall back if absent) ──
+  function $(id){ return document.getElementById(id); }
+  function note(msg){ if(typeof window.toast==='function'){ window.toast(msg); } else { console.log('[Chofer]',msg); } }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function uuid(){
+    if(window.crypto && crypto.randomUUID) return crypto.randomUUID();
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,function(c){
+      var r = Math.random()*16|0, v = c==='x' ? r : (r&0x3|0x8); return v.toString(16);
+    });
+  }
+
+  // ── Bilingual dictionary ──
+  C.LANG_KEY = 'chofer_lang';
+  window.CHOFER_LANG = (function(){ try{ return localStorage.getItem(C.LANG_KEY) || 'es'; }catch(e){ return 'es'; } })();
+  var I18N = {
+    pretrip:  {es:'Pre-Viaje',  en:'Pre-Trip'},
+    timeIn:   {es:'Entrada',    en:'Time In'},
+    fuel:     {es:'Gasolina',   en:'Fuel'},
+    odometer: {es:'Odómetro',   en:'Odometer'},
+    maint:    {es:'Manten.',    en:'Maint.'},
+    posttrip: {es:'Post-Viaje', en:'Post-Trip'},
+    timeOut:  {es:'Salida',     en:'Time Out'},
+    vehicle:        {es:'Vehículo',                 en:'Vehicle'},
+    pickVehicle:    {es:'Selecciona un vehículo',   en:'Select a vehicle'},
+    odoReading:     {es:'Lectura de odómetro',      en:'Odometer reading'},
+    carryDefects:   {es:'Defectos pendientes (revisar antes de continuar)', en:'Open defects (review before continuing)'},
+    repaired:       {es:'Reparado',                 en:'Repaired'},
+    startInspect:   {es:'Iniciar inspección',       en:'Start inspection'},
+    ok:             {es:'OK',                       en:'OK'},
+    defect:         {es:'Defecto',                  en:'Defect'},
+    defectNote:     {es:'Describe el defecto',      en:'Describe the defect'},
+    signature:      {es:'Firma (tu nombre)',        en:'Signature (your name)'},
+    safeToOperate:  {es:'Seguro para operar',       en:'Safe to operate'},
+    complete:       {es:'Completar inspección',     en:'Complete inspection'},
+    startShift:     {es:'INICIAR JORNADA',          en:'START SHIFT'},
+    endShift:       {es:'TERMINAR JORNADA',         en:'END SHIFT'},
+    onTheClock:     {es:'Estás trabajando',         en:"You're on the clock"},
+    startedAt:      {es:'Inicio',                   en:'Started'},
+    endedAt:        {es:'Fin',                      en:'Ended'},
+    takePhoto:      {es:'📷 Tomar foto de recibo',  en:'📷 Take receipt photo'},
+    gallons:        {es:'Galones',                  en:'Gallons'},
+    total:          {es:'Total $',                  en:'Total $'},
+    submit:         {es:'Enviar',                   en:'Submit'},
+    receiptSent:    {es:'✓ Recibo enviado, OCR procesando', en:'✓ Receipt sent, OCR processing'},
+    queuedOffline:  {es:'Guardado — se enviará al reconectar', en:'Saved — will send when back online'},
+    eventType:      {es:'Tipo de evento',           en:'Event type'},
+    evtBulb:        {es:'💡 Foco reemplazado',      en:'💡 Bulb replaced'},
+    evtFluids:      {es:'🛢️ Líquidos rellenados',   en:'🛢️ Fluids topped'},
+    evtOther:       {es:'🔧 Otro menor',            en:'🔧 Other minor'},
+    notes:          {es:'Notas',                    en:'Notes'},
+    optional:       {es:'Esto es opcional',         en:'This is optional'},
+    needVehicle:    {es:'Selecciona un vehículo primero', en:'Select a vehicle first'},
+    needPretrip:    {es:'Completa el Pre-Viaje antes de manejar', en:'Complete the Pre-Trip before driving'},
+    inspectDone:    {es:'✓ Inspección completada',  en:'✓ Inspection complete'},
+    blockedCritical:{es:'⛔ Defecto crítico sin reparar — no es seguro operar', en:'⛔ Unresolved critical defect — not safe to operate'},
+    loading:        {es:'Cargando…',                en:'Loading…'},
+    noItems:        {es:'Sin elementos',            en:'No items'},
+    hosDrive:       {es:'⚠️ Has manejado 10h — considera descansar', en:'⚠️ 10h driving — consider a break'},
+    hosOnDuty:      {es:'⛔ 14h on-duty — DOT 395 requiere parar',    en:'⛔ 14h on-duty — DOT 395 requires stopping'},
+    saving:         {es:'Guardando…',               en:'Saving…'},
+    saved:          {es:'✓ Guardado',               en:'✓ Saved'},
+    error:          {es:'⚠️ Error, intenta de nuevo', en:'⚠️ Error, try again'},
+    odoSaved:       {es:'✓ Odómetro guardado',      en:'✓ Odometer saved'}
+  };
+  function t(key){
+    var lang = window.CHOFER_LANG || 'es';
+    return (I18N[key] && I18N[key][lang]) || key;
+  }
+  // Pick a server label by current language.
+  function L(item){ return (window.CHOFER_LANG==='en' ? (item.label_en||item.label_es) : (item.label_es||item.label_en)) || ''; }
+  C.t = t;
+
+  // ── Supabase RPC helper (driver schema = public; profile headers required) ──
+  function rpc(name, body){
+    return fetch(window.SUPABASE_URL + '/rest/v1/rpc/' + name, {
+      method:'POST',
+      headers:{ 'Content-Type':'application/json', 'Content-Profile':'public', 'Accept-Profile':'public',
+                'apikey':window.SUPABASE_ANON, 'Authorization':'Bearer '+window.SUPABASE_ANON },
+      body: JSON.stringify(body || {})
+    }).then(function(r){
+      if(!r.ok) return r.text().then(function(tx){ throw new Error(tx || ('HTTP '+r.status)); });
+      return r.json();
+    });
+  }
+  C.rpc = rpc;
+
+  // ── Per-driver state ──
+  C.state = {
+    driver: null,
+    vehicleId: null, vehicleLabel: '', lastOdometer: null,
+    vehicles: null,
+    inspectionId: null, inspectionType: null, items: null, results: {},
+    activeTab: 'pretrip',
+    pretripDone: false
+  };
+
+  // localStorage keys are per-driver so two drivers on one device don't collide.
+  function k(suffix){ var id = (C.state.driver && C.state.driver.driver_id) || 'anon'; return 'chofer_'+id+'_'+suffix; }
+  function lget(suffix){ try{ return localStorage.getItem(k(suffix)); }catch(e){ return null; } }
+  function lset(suffix, val){ try{ localStorage.setItem(k(suffix), val); }catch(e){} }
+  function ljson(suffix, fallback){ var v = lget(suffix); if(!v) return fallback; try{ return JSON.parse(v); }catch(e){ return fallback; } }
+
+  // ── HOS soft-cap tracking ──
+  function shiftStartMs(){ var v = lget('shiftStart'); return v ? +v : 0; }
+  function renderHosBanner(){
+    var el = $('choferHosBanner'); if(!el) return;
+    var start = shiftStartMs();
+    if(!start){ el.style.display='none'; return; }
+    var hrs = (Date.now() - start) / 3600000;
+    if(hrs >= 14){
+      el.style.display='block'; el.style.background='#7a1212'; el.style.color='#fff'; el.textContent = t('hosOnDuty');
+    } else if(hrs >= 10){
+      el.style.display='block'; el.style.background='#8a6d1a'; el.style.color='#fff'; el.textContent = t('hosDrive');
+    } else {
+      el.style.display='none';
+    }
+  }
+
+  // ═══ Login-path entry points (called from checkPin) ═══
+  C.showDriverBlocked = function(drv){
+    var box = $('choferBlockedReasons');
+    var br = drv.blocking_reasons;
+    var lines = [];
+    if(br && typeof br === 'object'){
+      var keys = Array.isArray(br) ? br : Object.keys(br);
+      // blocking_reasons may be array of strings or object keyed by reason.
+      var src = Array.isArray(br) ? br : keys;
+      for(var i=0;i<src.length;i++){
+        var raw = String(Array.isArray(br) ? src[i] : keys[i]);
+        lines.push(humanizeReason(raw));
+      }
+    }
+    box.innerHTML = lines.length ? ('• ' + lines.map(esc).join('<br>• ')) : esc('—');
+    $('choferBlockedOv').classList.add('on');
+    if(typeof $('loginErr') !== 'undefined' && $('loginErr')) $('loginErr').textContent='';
+  };
+  function humanizeReason(raw){
+    // keys like cdl_expired_2026-01-15 or medcard_expired_2026-03-01
+    var m;
+    if((m = raw.match(/^cdl_expired_(.+)$/)))     return 'CDL vencido / CDL expired — ' + m[1];
+    if((m = raw.match(/^medcard_expired_(.+)$/)))  return 'Tarjeta médica vencida / Medical card expired — ' + m[1];
+    if(raw.indexOf('cdl') >= 0)     return 'CDL — ' + raw;
+    if(raw.indexOf('med') >= 0)     return 'Tarjeta médica / Medical card — ' + raw;
+    return raw.replace(/_/g,' ');
+  }
+
+  C.showRolePicker = function(drv, pin, hashed){
+    $('choferRoleOv').classList.add('on');
+    $('choferRoleDriver').onclick = function(){
+      $('choferRoleOv').classList.remove('on');
+      C.enterChoferMode(drv);
+    };
+    $('choferRoleCrew').onclick = function(){
+      $('choferRoleOv').classList.remove('on');
+      // Hand back to the existing surquero login flow.
+      if(typeof window.doLideresCheck === 'function'){ window.doLideresCheck(pin, hashed); }
+      else { var e=$('loginErr'); if(e) e.textContent='⚠️ Surquero no disponible'; }
+    };
+  };
+
+  C.enterChoferMode = function(drv){
+    C.state.driver = drv;
+    window.currentMode = 'chofer';
+    $('choferName').textContent = '🚌 ' + (drv.msts_driver_name || drv.driver_code || 'Chofer');
+    $('choferSub').textContent = drv.driver_code || '';
+    // Hide login + surquero, show chofer.
+    var ls = $('loginScreen'); if(ls) ls.classList.add('hide');
+    document.body.classList.remove('login-locked');
+    document.documentElement.classList.remove('login-locked');
+    $('choferScreen').style.display = 'flex';
+    C.state.pretripDone = lget('pretripDone') === '1';
+    syncLangBtn();
+    renderTabs();
+    C.showTab('pretrip');
+    flushQueue();
+  };
+
+  C.logout = function(){
+    $('choferScreen').style.display = 'none';
+    window.currentMode = 'surquero';
+    window.CURRENT_DRIVER = null;
+    C.state.driver = null;
+    var ls = $('loginScreen'); if(ls) ls.classList.remove('hide');
+    document.body.classList.add('login-locked');
+    document.documentElement.classList.add('login-locked');
+  };
+
+  // ── Language toggle ──
+  function syncLangBtn(){
+    var b = $('choferLangToggle'); if(!b) return;
+    b.textContent = window.CHOFER_LANG === 'en' ? '🇺🇸 EN' : '🇲🇽 ES';
+  }
+  C.toggleLang = function(){
+    window.CHOFER_LANG = (window.CHOFER_LANG === 'en') ? 'es' : 'en';
+    try{ localStorage.setItem(C.LANG_KEY, window.CHOFER_LANG); }catch(e){}
+    syncLangBtn();
+    renderTabs();
+    C.showTab(C.state.activeTab);
+  };
+
+  // ── Tabs ──
+  var TABS = ['pretrip','timeIn','fuel','odometer','maint','posttrip','timeOut'];
+  function renderTabs(){
+    var bar = $('choferTabs'); if(!bar) return;
+    var html = '';
+    for(var i=0;i<TABS.length;i++){
+      var id = TABS[i];
+      var active = id === C.state.activeTab;
+      html += '<button data-tab="'+id+'" style="flex:0 0 auto;background:'+(active?'#2a4a7a':'transparent')+
+        ';border:none;border-bottom:3px solid '+(active?'#5b8dd9':'transparent')+
+        ';color:#fff;padding:11px 13px;font-size:13px;font-weight:'+(active?'700':'500')+';white-space:nowrap">'+
+        esc(t(id))+'</button>';
+    }
+    bar.innerHTML = html;
+    var btns = bar.querySelectorAll('button');
+    for(var j=0;j<btns.length;j++){
+      btns[j].onclick = (function(tab){ return function(){ C.showTab(tab); }; })(btns[j].getAttribute('data-tab'));
+    }
+  }
+
+  C.showTab = function(tab){
+    C.state.activeTab = tab;
+    renderTabs();
+    renderHosBanner();
+    var body = $('choferBody');
+    var fn = RENDER[tab];
+    body.innerHTML = fn ? fn() : '';
+    if(WIRE[tab]) WIRE[tab]();
+  };
+
+  // ── Small UI builders ──
+  function field(label, inner){
+    return '<label style="display:block;margin:10px 0 4px;font-size:13px;font-weight:600;opacity:.9">'+esc(label)+'</label>'+inner;
+  }
+  function inputStyle(){ return 'width:100%;box-sizing:border-box;padding:12px;font-size:16px;border:none;border-radius:10px;background:#1d3357;color:#fff'; }
+  function bigBtn(label, color){ return 'style="width:100%;padding:18px;font-size:18px;font-weight:800;border:none;border-radius:14px;background:'+color+';color:#fff;margin-top:14px"'; }
+
+  function vehiclePickerHtml(){
+    var opts = '<option value="">'+esc(t('pickVehicle'))+'</option>';
+    if(C.state.vehicles){
+      for(var i=0;i<C.state.vehicles.length;i++){
+        var v = C.state.vehicles[i];
+        var lbl = (v.vehicle_number||'') + (v.year_make_model? ' — '+v.year_make_model : '') + (v.plate? ' ['+v.plate+']':'');
+        opts += '<option value="'+esc(v.vehicle_id)+'"'+(v.vehicle_id===C.state.vehicleId?' selected':'')+'>'+esc(lbl)+'</option>';
+      }
+    }
+    return field(t('vehicle'), '<select id="choferVehSel" style="'+inputStyle()+'">'+opts+'</select>');
+  }
+  function ensureVehicles(after){
+    if(C.state.vehicles){ after(); return; }
+    rpc('driver_list_vehicles', { p_driver_id: C.state.driver.driver_id })
+      .then(function(rows){ C.state.vehicles = rows || []; after(); })
+      .catch(function(){ C.state.vehicles = []; after(); });
+  }
+
+  // ═══ TAB RENDERERS (return HTML) ═══
+  var RENDER = {}, WIRE = {};
+
+  // Tab 1 + 6 share DVIR rendering, distinguished by inspectionType.
+  function dvirHtml(type){
+    return '<div data-dvir="'+type+'">'+
+      vehiclePickerHtml()+
+      field(t('odoReading'), '<input id="choferDvirOdo" type="number" inputmode="numeric" style="'+inputStyle()+'" value="'+(C.state.lastOdometer!=null?esc(C.state.lastOdometer):'')+'">')+
+      '<div id="choferCarry"></div>'+
+      '<button id="choferStartInspect" '+bigBtn(t('startInspect'),'#2a4a7a')+'>'+esc(t('startInspect'))+'</button>'+
+      '<div id="choferChecklist" style="margin-top:8px"></div>'+
+    '</div>';
+  }
+  RENDER.pretrip  = function(){ return dvirHtml('pretrip'); };
+  RENDER.posttrip = function(){ return dvirHtml('posttrip'); };
+
+  function wireDvir(type){
+    return function(){
+      C.state.inspectionType = type;
+      C.state.inspectionId = null; C.state.items = null; C.state.results = {};
+      ensureVehicles(function(){
+        var body = $('choferBody');
+        if(C.state.activeTab !== type) return; // tab changed during fetch
+        $('choferBody').innerHTML = dvirHtml(type);
+        wireDvirControls(type);
+      });
+      wireDvirControls(type);
+    };
+  }
+  function wireDvirControls(type){
+    var sel = $('choferVehSel');
+    if(sel) sel.onchange = function(){
+      C.state.vehicleId = sel.value;
+      var v = (C.state.vehicles||[]).filter(function(x){ return x.vehicle_id===sel.value; })[0];
+      C.state.vehicleLabel = v ? (v.vehicle_number||'') : '';
+      C.state.lastOdometer = v && v.last_odometer!=null ? v.last_odometer : null;
+      var odo = $('choferDvirOdo'); if(odo && C.state.lastOdometer!=null && !odo.value) odo.value = C.state.lastOdometer;
+      loadCarryDefects();
+    };
+    var start = $('choferStartInspect');
+    if(start) start.onclick = function(){ startInspection(type); };
+    if(C.state.vehicleId) loadCarryDefects();
+  }
+  function loadCarryDefects(){
+    var box = $('choferCarry'); if(!box || !C.state.vehicleId) return;
+    box.innerHTML = '<div style="opacity:.6;font-size:13px;margin-top:10px">'+esc(t('loading'))+'</div>';
+    rpc('driver_last_defects', { p_vehicle_id: C.state.vehicleId }).then(function(rows){
+      if(!rows || !rows.length){ box.innerHTML=''; return; }
+      var h = '<div style="background:#3a2a12;border-left:4px solid #d9a441;padding:10px 12px;margin:12px 0;border-radius:8px">';
+      h += '<div style="font-weight:700;font-size:13px;margin-bottom:8px">'+esc(t('carryDefects'))+'</div>';
+      for(var i=0;i<rows.length;i++){
+        var d = rows[i];
+        var label = L(d) || d.defect_note || d.item_code || '—';
+        h += '<label style="display:flex;align-items:center;gap:8px;font-size:13px;margin:6px 0">'+
+             '<input type="checkbox" class="choferCarryChk" style="width:20px;height:20px"> '+
+             esc(label)+(d.defect_note?(' — '+esc(d.defect_note)):'')+' <span style="opacity:.6">('+esc(t('repaired'))+')</span></label>';
+      }
+      h += '</div>';
+      box.innerHTML = h;
+    }).catch(function(){ box.innerHTML=''; });
+  }
+  function carryDefectsCleared(){
+    var chks = document.querySelectorAll('.choferCarryChk');
+    for(var i=0;i<chks.length;i++){ if(!chks[i].checked) return false; }
+    return true;
+  }
+  function startInspection(type){
+    if(!C.state.vehicleId){ note(t('needVehicle')); return; }
+    if(!carryDefectsCleared()){ note(t('carryDefects')); return; }
+    var odo = parseFloat(($('choferDvirOdo')||{}).value) || 0;
+    var btn = $('choferStartInspect'); if(btn){ btn.disabled=true; btn.textContent=t('loading'); }
+    rpc('driver_start_inspection', {
+      p_driver_id: C.state.driver.driver_id, p_vehicle_id: C.state.vehicleId,
+      p_inspection_type: type, p_odometer: odo
+    }).then(function(res){
+      C.state.inspectionId = extractId(res, 'inspection_id') || extractId(res);
+      return rpc('driver_get_inspection_template', { p_vehicle_id: C.state.vehicleId, p_inspection_type: type });
+    }).then(function(items){
+      C.state.items = items || [];
+      renderChecklist();
+    }).catch(function(e){
+      note(t('error')); console.warn('[Chofer] startInspection', e && e.message);
+      if(btn){ btn.disabled=false; btn.textContent=t('startInspect'); }
+    });
+  }
+  function extractId(res, key){
+    if(res==null) return null;
+    if(typeof res === 'string') return res;
+    if(Array.isArray(res)) return res.length ? extractId(res[0], key) : null;
+    if(typeof res === 'object'){ if(key && res[key]!=null) return res[key]; for(var p in res){ if(res.hasOwnProperty(p)) return res[p]; } }
+    return null;
+  }
+  function renderChecklist(){
+    var box = $('choferChecklist'); if(!box) return;
+    var items = C.state.items || [];
+    if(!items.length){ box.innerHTML = '<div style="opacity:.6;margin-top:12px">'+esc(t('noItems'))+'</div>'; return; }
+    // group by category, preserve sort_order
+    items.sort(function(a,b){ return (a.sort_order||0) - (b.sort_order||0); });
+    var groups = {}; var order = [];
+    for(var i=0;i<items.length;i++){ var c = items[i].category||'—'; if(!groups[c]){ groups[c]=[]; order.push(c); } groups[c].push(items[i]); }
+    var h = '';
+    for(var g=0;g<order.length;g++){
+      var cat = order[g];
+      h += '<div style="margin-top:14px;font-weight:800;font-size:13px;opacity:.8;text-transform:uppercase;letter-spacing:.5px">'+esc(cat)+'</div>';
+      var arr = groups[cat];
+      for(var j=0;j<arr.length;j++){
+        var it = arr[j];
+        var critical = it.is_critical ? ' <span style="color:#e88;font-size:11px">★</span>' : '';
+        h += '<div data-item="'+esc(it.item_id)+'" style="background:#16294a;border-radius:10px;padding:10px 12px;margin-top:8px">'+
+          '<div style="font-size:14px;margin-bottom:8px">'+esc(L(it))+critical+'</div>'+
+          '<div style="display:flex;gap:8px">'+
+            '<button class="choferOk" data-id="'+esc(it.item_id)+'" style="flex:1;padding:10px;border:none;border-radius:8px;background:#1f6b3a;color:#fff;font-weight:700">✓ '+esc(t('ok'))+'</button>'+
+            '<button class="choferDef" data-id="'+esc(it.item_id)+'" data-crit="'+(it.is_critical?'1':'0')+'" style="flex:1;padding:10px;border:none;border-radius:8px;background:#7a2a2a;color:#fff;font-weight:700">✗ '+esc(t('defect'))+'</button>'+
+          '</div>'+
+          '<div class="choferDefNote" style="display:none;margin-top:8px"></div>'+
+        '</div>';
+      }
+    }
+    h += field(t('signature'), '<input id="choferSig" type="text" style="'+inputStyle()+'">');
+    h += '<label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:15px"><input id="choferSafe" type="checkbox" checked style="width:22px;height:22px"> '+esc(t('safeToOperate'))+'</label>';
+    h += '<button id="choferComplete" '+bigBtn(t('complete'),'#1f6b3a')+'>'+esc(t('complete'))+'</button>';
+    box.innerHTML = h;
+    wireChecklist();
+  }
+  function wireChecklist(){
+    var oks = document.querySelectorAll('.choferOk'), defs = document.querySelectorAll('.choferDef');
+    for(var i=0;i<oks.length;i++){
+      oks[i].onclick = (function(btn){ return function(){
+        var id = btn.getAttribute('data-id');
+        markItem(id, 'ok', '');
+        setRow(id, true);
+      }; })(oks[i]);
+    }
+    for(var j=0;j<defs.length;j++){
+      defs[j].onclick = (function(btn){ return function(){
+        var id = btn.getAttribute('data-id');
+        var row = btn.closest('[data-item]');
+        var noteBox = row.querySelector('.choferDefNote');
+        noteBox.style.display='block';
+        noteBox.innerHTML = '<input class="choferDefInput" type="text" placeholder="'+esc(t('defectNote'))+'" style="'+inputStyle()+'">';
+        var inp = noteBox.querySelector('.choferDefInput');
+        inp.focus();
+        inp.onblur = function(){ markItem(id, 'defect', inp.value||''); };
+        setRow(id, false);
+      }; })(defs[j]);
+    }
+    var comp = $('choferComplete');
+    if(comp) comp.onclick = completeInspection;
+  }
+  function setRow(id, isOk){
+    var row = document.querySelector('[data-item="'+CSS_escape(id)+'"]'); if(!row) return;
+    var ok = row.querySelector('.choferOk'), df = row.querySelector('.choferDef');
+    if(ok) ok.style.outline = isOk ? '3px solid #7fe3a0' : 'none';
+    if(df) df.style.outline = isOk ? 'none' : '3px solid #ffb3b3';
+  }
+  function CSS_escape(s){ return String(s).replace(/["\\]/g,'\\$&'); }
+  function markItem(itemId, status, defectNote){
+    C.state.results[itemId] = { status:status, note:defectNote };
+    if(!C.state.inspectionId) return;
+    rpc('driver_save_inspection_result', {
+      p_inspection_id: C.state.inspectionId, p_item_id: itemId,
+      p_status: status, p_defect_note: defectNote || null
+    }).catch(function(e){ console.warn('[Chofer] save_result', e && e.message); });
+  }
+  function completeInspection(){
+    if(!C.state.inspectionId){ note(t('error')); return; }
+    var sig = ($('choferSig')||{}).value || '';
+    var safe = !!($('choferSafe')||{}).checked;
+    var btn = $('choferComplete'); if(btn){ btn.disabled=true; btn.textContent=t('saving'); }
+    rpc('driver_complete_inspection', {
+      p_inspection_id: C.state.inspectionId, p_signature: sig, p_safe_to_operate: safe
+    }).then(function(){
+      note(t('inspectDone'));
+      if(C.state.inspectionType === 'pretrip'){ C.state.pretripDone = true; lset('pretripDone','1'); }
+      C.showTab(C.state.inspectionType === 'pretrip' ? 'timeIn' : 'timeOut');
+    }).catch(function(e){
+      var msg = (e && e.message || '');
+      note(/critic/i.test(msg) ? t('blockedCritical') : t('error'));
+      if(btn){ btn.disabled=false; btn.textContent=t('complete'); }
+    });
+  }
+  WIRE.pretrip  = wireDvir('pretrip');
+  WIRE.posttrip = wireDvir('posttrip');
+
+  // Tab 2: Time In
+  RENDER.timeIn = function(){
+    var start = shiftStartMs();
+    if(start){
+      return '<div style="text-align:center;margin-top:30px">'+
+        '<div style="font-size:48px">🟢</div>'+
+        '<div style="font-size:20px;font-weight:800;margin-top:10px">'+esc(t('onTheClock'))+'</div>'+
+        '<div style="opacity:.7;margin-top:6px">'+esc(t('startedAt'))+': '+esc(new Date(start).toLocaleTimeString())+'</div>'+
+      '</div>';
+    }
+    return '<div style="text-align:center;margin-top:20px">'+
+      '<button id="choferTimeInBtn" '+bigBtn(t('startShift'),'#1f6b3a')+'>'+esc(t('startShift'))+'</button>'+
+    '</div>';
+  };
+  WIRE.timeIn = function(){
+    var b = $('choferTimeInBtn');
+    if(b) b.onclick = function(){ lset('shiftStart', String(Date.now())); queueEvent('time_in', {}); C.showTab('timeIn'); };
+  };
+
+  // Tab 3: Fuel
+  RENDER.fuel = function(){
+    return vehiclePickerHtml()+
+      '<button id="choferFuelPhotoBtn" '+bigBtn(t('takePhoto'),'#2a4a7a')+'>'+esc(t('takePhoto'))+'</button>'+
+      '<input id="choferFuelFile" type="file" accept="image/*" capture="environment" style="display:none">'+
+      '<div id="choferFuelThumb" style="margin-top:10px"></div>'+
+      field(t('gallons'), '<input id="choferFuelGal" type="number" inputmode="decimal" style="'+inputStyle()+'">')+
+      field(t('total'),   '<input id="choferFuelTot" type="number" inputmode="decimal" style="'+inputStyle()+'">')+
+      field(t('odoReading'), '<input id="choferFuelOdo" type="number" inputmode="numeric" style="'+inputStyle()+'">')+
+      '<button id="choferFuelSubmit" '+bigBtn(t('submit'),'#1f6b3a')+'>'+esc(t('submit'))+'</button>';
+  };
+  WIRE.fuel = function(){
+    ensureVehicles(function(){ var sel=$('choferVehSel'); if(sel && C.state.activeTab==='fuel'){ /* options already built */ } });
+    var sel = $('choferVehSel'); if(sel) sel.onchange = function(){ C.state.vehicleId = sel.value; };
+    var btn = $('choferFuelPhotoBtn'), file = $('choferFuelFile');
+    if(btn && file) btn.onclick = function(){ file.click(); };
+    if(file) file.onchange = function(){
+      var f = file.files && file.files[0]; if(!f) return;
+      var url = URL.createObjectURL(f);
+      $('choferFuelThumb').innerHTML = '<img src="'+url+'" style="max-width:100%;border-radius:10px">';
+    };
+    var sub = $('choferFuelSubmit');
+    if(sub) sub.onclick = submitFuel;
+  };
+  function submitFuel(){
+    if(!C.state.vehicleId){ note(t('needVehicle')); return; }
+    var file = $('choferFuelFile');
+    var f = file && file.files && file.files[0];
+    var pendingId = uuid();
+    var gallons = parseFloat(($('choferFuelGal')||{}).value) || null;
+    var total = parseFloat(($('choferFuelTot')||{}).value) || null;
+    var odometer = parseFloat(($('choferFuelOdo')||{}).value) || null;
+    var sub = $('choferFuelSubmit'); if(sub){ sub.disabled=true; sub.textContent=t('saving'); }
+
+    function finishOk(){ note(t('receiptSent')); C.showTab('fuel'); }
+    function fail(){ // queue offline, will retry
+      queueFuel({ pending_id:pendingId, vehicle_id:C.state.vehicleId, gallons:gallons, total:total, odometer:odometer, photo_url:null });
+      note(t('queuedOffline')); C.showTab('fuel');
+    }
+
+    if(navigator.onLine === false){ fail(); return; }
+
+    var datePart = new Date().toISOString().slice(0,10);
+    var path = C.state.driver.driver_id + '/' + datePart + '/' + pendingId + '.jpg';
+
+    var uploadPromise;
+    if(f){
+      uploadPromise = fetch(window.SUPABASE_URL + '/storage/v1/object/fuel-receipts/' + path, {
+        method:'POST',
+        headers:{ 'apikey':window.SUPABASE_ANON, 'Authorization':'Bearer '+window.SUPABASE_ANON, 'Content-Type': f.type || 'image/jpeg' },
+        body: f
+      }).then(function(r){ if(!r.ok) throw new Error('upload '+r.status); return window.SUPABASE_URL + '/storage/v1/object/public/fuel-receipts/' + path; });
+    } else {
+      uploadPromise = Promise.resolve(null);
+    }
+
+    uploadPromise.then(function(photoUrl){
+      return rpc('submit_fuel_receipt', {
+        p_pending_id: pendingId, p_driver_id: C.state.driver.driver_id, p_vehicle_id: C.state.vehicleId,
+        p_photo_url: photoUrl, p_gallons: gallons, p_total: total, p_odometer: odometer,
+        p_purchase_at: new Date().toISOString()
+      });
+    }).then(finishOk).catch(function(e){ console.warn('[Chofer] fuel', e && e.message); fail(); });
+  }
+
+  // Tab 4: Odometer (quick reading; queued + sent via maintenance-style RPC fallback)
+  RENDER.odometer = function(){
+    return vehiclePickerHtml()+
+      field(t('odoReading'), '<input id="choferOdoVal" type="number" inputmode="numeric" style="'+inputStyle()+'">')+
+      '<button id="choferOdoSubmit" '+bigBtn(t('submit'),'#1f6b3a')+'>'+esc(t('submit'))+'</button>';
+  };
+  WIRE.odometer = function(){
+    var sel = $('choferVehSel'); if(sel) sel.onchange = function(){ C.state.vehicleId = sel.value; };
+    ensureVehicles(function(){});
+    var sub = $('choferOdoSubmit');
+    if(sub) sub.onclick = function(){
+      if(!C.state.vehicleId){ note(t('needVehicle')); return; }
+      var val = parseFloat(($('choferOdoVal')||{}).value);
+      if(!val){ note(t('error')); return; }
+      // No dedicated RPC in Phase 1 → queue locally.
+      var q = ljson('odoQueue', []);
+      q.push({ id:uuid(), vehicle_id:C.state.vehicleId, odometer:val, at:new Date().toISOString() });
+      lset('odoQueue', JSON.stringify(q));
+      note(t('odoSaved'));
+      var v=$('choferOdoVal'); if(v) v.value='';
+    };
+  };
+
+  // Tab 5: Maintenance
+  RENDER.maint = function(){
+    return vehiclePickerHtml()+
+      field(t('eventType'),
+        '<select id="choferMaintType" style="'+inputStyle()+'">'+
+          '<option value="bulb">'+esc(t('evtBulb'))+'</option>'+
+          '<option value="fluids">'+esc(t('evtFluids'))+'</option>'+
+          '<option value="other">'+esc(t('evtOther'))+'</option>'+
+        '</select>')+
+      field(t('notes'), '<textarea id="choferMaintNotes" rows="3" style="'+inputStyle()+';resize:vertical"></textarea>')+
+      '<div style="opacity:.6;font-size:12px;margin-top:8px">'+esc(t('optional'))+'</div>'+
+      '<button id="choferMaintSubmit" '+bigBtn(t('submit'),'#1f6b3a')+'>'+esc(t('submit'))+'</button>';
+  };
+  WIRE.maint = function(){
+    var sel = $('choferVehSel'); if(sel) sel.onchange = function(){ C.state.vehicleId = sel.value; };
+    ensureVehicles(function(){});
+    var sub = $('choferMaintSubmit');
+    if(sub) sub.onclick = function(){
+      if(!C.state.vehicleId){ note(t('needVehicle')); return; }
+      var type = ($('choferMaintType')||{}).value || 'other';
+      var notes = ($('choferMaintNotes')||{}).value || '';
+      var pendingId = uuid();
+      sub.disabled=true; sub.textContent=t('saving');
+      rpc('submit_maintenance_event', {
+        p_pending_id: pendingId, p_driver_id: C.state.driver.driver_id, p_vehicle_id: C.state.vehicleId,
+        p_event_type: type, p_notes: notes || null, p_occurred_at: new Date().toISOString()
+      }).then(function(){ note(t('saved')); C.showTab('maint'); })
+        .catch(function(e){
+          queueEvent('maintenance', { pending_id:pendingId, vehicle_id:C.state.vehicleId, event_type:type, notes:notes });
+          note(t('queuedOffline')); C.showTab('maint');
+        });
+    };
+  };
+
+  // Tab 6 handled by dvirHtml('posttrip') above.
+
+  // Tab 7: Time Out
+  RENDER.timeOut = function(){
+    var start = shiftStartMs();
+    var hrs = start ? ((Date.now()-start)/3600000) : 0;
+    var hosHtml = '';
+    if(hrs >= 14) hosHtml = '<div style="background:#7a1212;border-radius:10px;padding:12px;margin-top:14px;font-weight:700">'+esc(t('hosOnDuty'))+'</div>';
+    else if(hrs >= 10) hosHtml = '<div style="background:#8a6d1a;border-radius:10px;padding:12px;margin-top:14px;font-weight:700">'+esc(t('hosDrive'))+'</div>';
+    var endV = lget('shiftEnd');
+    var body = '<div style="text-align:center;margin-top:20px">';
+    if(endV){
+      body += '<div style="font-size:48px">🔴</div><div style="opacity:.8;margin-top:8px">'+esc(t('endedAt'))+': '+esc(new Date(+endV).toLocaleTimeString())+'</div>';
+    } else {
+      body += '<button id="choferTimeOutBtn" '+bigBtn(t('endShift'),'#7a2a2a')+'>'+esc(t('endShift'))+'</button>';
+    }
+    body += hosHtml + '</div>';
+    return body;
+  };
+  WIRE.timeOut = function(){
+    var b = $('choferTimeOutBtn');
+    if(b) b.onclick = function(){
+      lset('shiftEnd', String(Date.now()));
+      queueEvent('time_out', {});
+      C.showTab('timeOut');
+    };
+  };
+
+  // ── Offline queue (events + fuel) ──
+  function queueEvent(kind, payload){
+    var q = ljson('eventQueue', []);
+    q.push({ id:uuid(), kind:kind, payload:payload, at:new Date().toISOString() });
+    lset('eventQueue', JSON.stringify(q));
+  }
+  function queueFuel(rec){
+    var q = ljson('fuelQueue', []);
+    rec._queued_at = new Date().toISOString();
+    q.push(rec);
+    lset('fuelQueue', JSON.stringify(q));
+  }
+  function flushQueue(){
+    if(!C.state.driver || !window.SUPABASE_URL) return;
+    if(navigator.onLine === false) return;
+    var fq = ljson('fuelQueue', []);
+    if(fq.length){
+      var rec = fq[0];
+      rpc('submit_fuel_receipt', {
+        p_pending_id: rec.pending_id, p_driver_id: C.state.driver.driver_id, p_vehicle_id: rec.vehicle_id,
+        p_photo_url: rec.photo_url || null, p_gallons: rec.gallons, p_total: rec.total, p_odometer: rec.odometer,
+        p_purchase_at: rec._queued_at
+      }).then(function(){
+        var cur = ljson('fuelQueue', []); cur.shift(); lset('fuelQueue', JSON.stringify(cur));
+        if(cur.length) setTimeout(flushQueue, 400);
+      }).catch(function(){});
+    }
+    var eq = ljson('eventQueue', []);
+    if(eq.length){
+      var ev = eq[0];
+      if(ev.kind === 'maintenance' && ev.payload && ev.payload.pending_id){
+        rpc('submit_maintenance_event', {
+          p_pending_id: ev.payload.pending_id, p_driver_id: C.state.driver.driver_id, p_vehicle_id: ev.payload.vehicle_id,
+          p_event_type: ev.payload.event_type, p_notes: ev.payload.notes || null, p_occurred_at: ev.at
+        }).then(function(){
+          var cur = ljson('eventQueue', []); cur.shift(); lset('eventQueue', JSON.stringify(cur));
+          if(cur.length) setTimeout(flushQueue, 400);
+        }).catch(function(){});
+      } else {
+        // time_in/time_out are local-only in Phase 1 — drop from queue once driver is active.
+        var cur = ljson('eventQueue', []); cur.shift(); lset('eventQueue', JSON.stringify(cur));
+        if(cur.length) setTimeout(flushQueue, 200);
+      }
+    }
+  }
+  window.addEventListener('online', function(){ setTimeout(flushQueue, 1500); });
+  setInterval(function(){ if(C.state.driver){ flushQueue(); renderHosBanner(); } }, 60000);
+
+})();
 </script>
 </body>
 </html>
