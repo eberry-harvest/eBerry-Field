@@ -7,7 +7,7 @@ create table if not exists fleet.bol_document (
   trip_id uuid references fleet.trip(trip_id),
   bol_number text,
   bill_to_name text,
-  bill_to_customer_id uuid references billing.customer(customer_id),
+  bill_to_customer_id uuid references accounting.customers(customer_id),
   shipper_name text,
   consignee_name text,
   carrier_name text,
@@ -51,16 +51,17 @@ returns table(customer_id uuid, customer_name text, similarity real)
 language sql
 stable
 security definer
-set search_path = fleet, billing, public
+set search_path = fleet, accounting, public
 as $$
   select c.customer_id,
-         c.customer_name,
-         similarity(c.customer_name, p_name) as similarity
-    from billing.customer c
+         coalesce(c.dba_name, c.legal_name) as customer_name,
+         similarity(coalesce(c.dba_name, c.legal_name), p_name) as similarity
+    from accounting.customers c
    where c.tenant_id = p_tenant_id
+     and coalesce(c.is_active, true) = true
      and p_name is not null
      and length(trim(p_name)) > 0
-   order by similarity(c.customer_name, p_name) desc
+   order by similarity(coalesce(c.dba_name, c.legal_name), p_name) desc
    limit 3;
 $$;
 
@@ -69,7 +70,7 @@ returns table(customer_id uuid, customer_name text, similarity real)
 language sql
 stable
 security definer
-set search_path = public, fleet, billing
+set search_path = public, fleet, accounting
 as $$ select * from fleet.match_bill_to(p_tenant_id, p_name); $$;
 
 -- ── Save / confirm a BOL document + its line items in one call ──
