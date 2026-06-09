@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_99_3';
+window.APP_VERSION = 'V20_99_4';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -12945,11 +12945,59 @@ var _checkSendTimer = setInterval(checkDaysWithoutSend, 30 * 60 * 1000);
     if(file) file.onchange = function(){
       var f = file.files && file.files[0]; if(!f) return;
       var url = URL.createObjectURL(f);
-      $('choferFuelThumb').innerHTML = '<img src="'+url+'" style="max-width:100%;border-radius:10px">';
+      $('choferFuelThumb').innerHTML =
+        '<img src="'+url+'" style="max-width:100%;border-radius:10px">'+
+        '<div id="choferFuelOcrStatus" style="margin-top:8px;font-size:13px;opacity:.8">'+esc(t('ocrReading')||'Reading receipt…')+'</div>';
+      runFuelOcr(f);
     };
     var sub = $('choferFuelSubmit');
     if(sub) sub.onclick = submitFuel;
   };
+
+  // Upload the photo as a temp file under driver/ocr-tmp/<id>.jpg, then call
+  // analyze-fuel-receipt to extract gallons/total/etc. and autopopulate the form.
+  // We reuse the same path on submit so we don't re-upload.
+  function runFuelOcr(file){
+    var status = function(msg){ var el = $('choferFuelOcrStatus'); if(el) el.textContent = msg; };
+    var datePart = new Date().toISOString().slice(0,10);
+    if(!C.state.fuelOcrPath){
+      var tmpId = uuid();
+      C.state.fuelOcrPath = C.state.driver.driver_id + '/' + datePart + '/' + tmpId + '.jpg';
+    }
+    var path = C.state.fuelOcrPath;
+    fetch(window.SUPABASE_URL + '/storage/v1/object/fuel-receipts/' + path, {
+      method:'POST',
+      headers:{ 'apikey':window.SUPABASE_ANON, 'Authorization':'Bearer '+window.SUPABASE_ANON, 'Content-Type': file.type || 'image/jpeg', 'x-upsert':'true' },
+      body: file
+    }).then(function(r){
+      if(!r.ok) throw new Error('upload '+r.status);
+      return fetch(window.SUPABASE_URL + '/functions/v1/analyze-fuel-receipt', {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json', 'apikey':window.SUPABASE_ANON, 'Authorization':'Bearer '+window.SUPABASE_ANON },
+        body: JSON.stringify({ storage_path: path, bucket: 'fuel-receipts' })
+      });
+    }).then(function(r){ return r.json(); }).then(function(res){
+      if(!res || !res.ok || !res.analysis){
+        status((t('ocrFailed')||'Could not read receipt — enter manually') + (res && res.error ? ' ('+res.error+')':''));
+        return;
+      }
+      var a = res.analysis;
+      // Autopopulate only blank fields so we don't overwrite anything the driver typed.
+      var gal = $('choferFuelGal'), tot = $('choferFuelTot'), odo = $('choferFuelOdo');
+      if(gal && !gal.value && a.gallons!=null) gal.value = a.gallons;
+      if(tot && !tot.value && a.total!=null) tot.value = a.total;
+      if(odo && !odo.value && a.odometer!=null) odo.value = a.odometer;
+      var parts = [];
+      if(a.station_name) parts.push(a.station_name);
+      if(a.gallons!=null) parts.push(a.gallons+' gal');
+      if(a.total!=null) parts.push('$'+a.total);
+      if(a.confidence!=null) parts.push(Math.round(a.confidence*100)+'%');
+      status((t('ocrDone')||'Receipt read')+': '+parts.join(' · '));
+    }).catch(function(e){
+      console.warn('[Chofer] fuel ocr', e && e.message);
+      status(t('ocrFailed')||'Could not read receipt — enter manually');
+    });
+  }
   function submitFuel(){
     if(!C.state.vehicleId){ note(t('needVehicle')); return; }
     var file = $('choferFuelFile');
@@ -12969,15 +13017,19 @@ var _checkSendTimer = setInterval(checkDaysWithoutSend, 30 * 60 * 1000);
     if(navigator.onLine === false){ fail(); return; }
 
     var datePart = new Date().toISOString().slice(0,10);
-    var path = C.state.driver.driver_id + '/' + datePart + '/' + pendingId + '.jpg';
+    // If OCR already uploaded the file, reuse that path (no double upload).
+    var path = C.state.fuelOcrPath || (C.state.driver.driver_id + '/' + datePart + '/' + pendingId + '.jpg');
+    var alreadyUploaded = !!C.state.fuelOcrPath;
 
     var uploadPromise;
-    if(f){
+    if(f && !alreadyUploaded){
       uploadPromise = fetch(window.SUPABASE_URL + '/storage/v1/object/fuel-receipts/' + path, {
         method:'POST',
         headers:{ 'apikey':window.SUPABASE_ANON, 'Authorization':'Bearer '+window.SUPABASE_ANON, 'Content-Type': f.type || 'image/jpeg' },
         body: f
       }).then(function(r){ if(!r.ok) throw new Error('upload '+r.status); return window.SUPABASE_URL + '/storage/v1/object/public/fuel-receipts/' + path; });
+    } else if (alreadyUploaded) {
+      uploadPromise = Promise.resolve(window.SUPABASE_URL + '/storage/v1/object/public/fuel-receipts/' + path);
     } else {
       uploadPromise = Promise.resolve(null);
     }
@@ -12988,7 +13040,8 @@ var _checkSendTimer = setInterval(checkDaysWithoutSend, 30 * 60 * 1000);
         p_photo_url: photoUrl, p_gallons: gallons, p_total: total, p_odometer: odometer,
         p_purchase_at: new Date().toISOString()
       });
-    }).then(finishOk).catch(function(e){ console.warn('[Chofer] fuel', e && e.message); fail(); });
+    }).then(function(){ C.state.fuelOcrPath = null; finishOk(); })
+      .catch(function(e){ console.warn('[Chofer] fuel', e && e.message); fail(); });
   }
 
   // Tab 4: Odometer (quick reading; queued + sent via maintenance-style RPC fallback)
