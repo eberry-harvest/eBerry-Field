@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_99_2';
+window.APP_VERSION = 'V20_99_3';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -12651,19 +12651,29 @@ var _checkSendTimer = setInterval(checkDaysWithoutSend, 30 * 60 * 1000);
   function inputStyle(){ return 'width:100%;box-sizing:border-box;padding:12px;font-size:16px;border:none;border-radius:10px;background:#1d3357;color:#fff'; }
   function bigBtn(label, color){ return 'style="width:100%;padding:18px;font-size:18px;font-weight:800;border:none;border-radius:14px;background:'+color+';color:#fff;margin-top:14px"'; }
 
+  function vehicleLabel(v){
+    var code = v.vehicle_code || v.vehicle_number || '';
+    var ymm = [v.year, v.make, v.model].filter(function(x){return x;}).join(' ');
+    var plate = v.license_plate || v.plate || '';
+    return code + (ymm? ' — '+ymm : '') + (plate? ' ['+plate+']':'');
+  }
   function vehiclePickerHtml(){
-    var opts = '<option value="">'+esc(t('pickVehicle'))+'</option>';
+    // Searchable input + datalist so user can type partial code (e.g. "091") and pick from autocomplete.
+    var opts = '';
     if(C.state.vehicles){
       for(var i=0;i<C.state.vehicles.length;i++){
         var v = C.state.vehicles[i];
-        var code = v.vehicle_code || v.vehicle_number || '';
-        var ymm = [v.year, v.make, v.model].filter(function(x){return x;}).join(' ');
-        var plate = v.license_plate || v.plate || '';
-        var lbl = code + (ymm? ' — '+ymm : '') + (plate? ' ['+plate+']':'');
-        opts += '<option value="'+esc(v.vehicle_id)+'"'+(v.vehicle_id===C.state.vehicleId?' selected':'')+'>'+esc(lbl)+'</option>';
+        opts += '<option data-id="'+esc(v.vehicle_id)+'" value="'+esc(vehicleLabel(v))+'"></option>';
       }
     }
-    return field(t('vehicle'), '<select id="choferVehSel" style="'+inputStyle()+'">'+opts+'</select>');
+    var curLabel = '';
+    if(C.state.vehicleId && C.state.vehicles){
+      for(var k=0;k<C.state.vehicles.length;k++){ if(C.state.vehicles[k].vehicle_id===C.state.vehicleId){ curLabel = vehicleLabel(C.state.vehicles[k]); break; } }
+    }
+    return field(t('vehicle'),
+      '<input id="choferVehInput" list="choferVehList" autocomplete="off" placeholder="'+esc(t('pickVehicle'))+'" value="'+esc(curLabel)+'" style="'+inputStyle()+'">'+
+      '<datalist id="choferVehList">'+opts+'</datalist>'
+    );
   }
   function ensureVehicles(after){
     if(C.state.vehicles){ after(); return; }
@@ -12701,16 +12711,55 @@ var _checkSendTimer = setInterval(checkDaysWithoutSend, 30 * 60 * 1000);
       wireDvirControls(type);
     };
   }
+  function resolveVehicleFromInput(val){
+    if(!val || !C.state.vehicles) return null;
+    var s = String(val).trim().toLowerCase();
+    // 1) exact label match (datalist selection)
+    for(var i=0;i<C.state.vehicles.length;i++){
+      if(vehicleLabel(C.state.vehicles[i]).toLowerCase() === s) return C.state.vehicles[i];
+    }
+    // 2) exact vehicle_code match (user typed full code like BUS-091)
+    for(var j=0;j<C.state.vehicles.length;j++){
+      if((C.state.vehicles[j].vehicle_code||'').toLowerCase() === s) return C.state.vehicles[j];
+    }
+    // 3) unique prefix/substring on vehicle_code (e.g. "091" → BUS-091 if unique)
+    var matches = C.state.vehicles.filter(function(v){
+      var code = (v.vehicle_code||'').toLowerCase();
+      return code === s || code.indexOf(s) !== -1;
+    });
+    return matches.length === 1 ? matches[0] : null;
+  }
+  // Shared: wire the searchable vehicle input. onPick(v) called when a unique vehicle resolves; v=null when cleared.
+  function wireVehicleInput(onPick){
+    var sel = $('choferVehInput');
+    if(!sel) return;
+    function apply(){
+      var v = resolveVehicleFromInput(sel.value);
+      if(v){
+        C.state.vehicleId = v.vehicle_id;
+        C.state.vehicleLabel = v.vehicle_code || v.vehicle_number || '';
+        C.state.lastOdometer = v.last_odometer != null ? v.last_odometer : null;
+        sel.style.background = '#1d3357';
+        if(onPick) onPick(v);
+      } else {
+        C.state.vehicleId = null;
+        sel.style.background = '#3a1d1d';
+        if(onPick) onPick(null);
+      }
+    }
+    sel.oninput = apply;
+    sel.onchange = apply;
+    sel.onblur = function(){
+      var v = resolveVehicleFromInput(sel.value);
+      if(v){ sel.value = vehicleLabel(v); apply(); }
+    };
+  }
   function wireDvirControls(type){
-    var sel = $('choferVehSel');
-    if(sel) sel.onchange = function(){
-      C.state.vehicleId = sel.value;
-      var v = (C.state.vehicles||[]).filter(function(x){ return x.vehicle_id===sel.value; })[0];
-      C.state.vehicleLabel = v ? (v.vehicle_code || v.vehicle_number || '') : '';
-      C.state.lastOdometer = v && v.last_odometer!=null ? v.last_odometer : null;
+    wireVehicleInput(function(v){
+      if(!v) return;
       var odo = $('choferDvirOdo'); if(odo && C.state.lastOdometer!=null && !odo.value) odo.value = C.state.lastOdometer;
       loadCarryDefects();
-    };
+    });
     var start = $('choferStartInspect');
     if(start) start.onclick = function(){ startInspection(type); };
     if(C.state.vehicleId) loadCarryDefects();
@@ -12745,7 +12794,7 @@ var _checkSendTimer = setInterval(checkDaysWithoutSend, 30 * 60 * 1000);
     var btn = $('choferStartInspect'); if(btn){ btn.disabled=true; btn.textContent=t('loading'); }
     rpc('driver_start_inspection', {
       p_driver_id: C.state.driver.driver_id, p_vehicle_id: C.state.vehicleId,
-      p_inspection_type: type, p_odometer: odo
+      p_inspection_type: type, p_odometer_reading: odo
     }).then(function(res){
       C.state.inspectionId = extractId(res, 'inspection_id') || extractId(res);
       return rpc('driver_get_inspection_template', { p_vehicle_id: C.state.vehicleId, p_inspection_type: type });
@@ -12842,7 +12891,9 @@ var _checkSendTimer = setInterval(checkDaysWithoutSend, 30 * 60 * 1000);
     var safe = !!($('choferSafe')||{}).checked;
     var btn = $('choferComplete'); if(btn){ btn.disabled=true; btn.textContent=t('saving'); }
     rpc('driver_complete_inspection', {
-      p_inspection_id: C.state.inspectionId, p_signature: sig, p_safe_to_operate: safe
+      p_inspection_id: C.state.inspectionId,
+      p_driver_signature_name: sig,
+      p_notes: safe ? null : 'NOT_SAFE_TO_OPERATE'
     }).then(function(){
       note(t('inspectDone'));
       if(C.state.inspectionType === 'pretrip'){ C.state.pretripDone = true; lset('pretripDone','1'); }
@@ -12887,8 +12938,8 @@ var _checkSendTimer = setInterval(checkDaysWithoutSend, 30 * 60 * 1000);
       '<button id="choferFuelSubmit" '+bigBtn(t('submit'),'#1f6b3a')+'>'+esc(t('submit'))+'</button>';
   };
   WIRE.fuel = function(){
-    ensureVehicles(function(){ var sel=$('choferVehSel'); if(sel && C.state.activeTab==='fuel'){ /* options already built */ } });
-    var sel = $('choferVehSel'); if(sel) sel.onchange = function(){ C.state.vehicleId = sel.value; };
+    ensureVehicles(function(){ if(C.state.activeTab==='fuel'){ $('choferBody').innerHTML = RENDER.fuel(); WIRE.fuel(); } });
+    wireVehicleInput(null);
     var btn = $('choferFuelPhotoBtn'), file = $('choferFuelFile');
     if(btn && file) btn.onclick = function(){ file.click(); };
     if(file) file.onchange = function(){
@@ -12947,8 +12998,8 @@ var _checkSendTimer = setInterval(checkDaysWithoutSend, 30 * 60 * 1000);
       '<button id="choferOdoSubmit" '+bigBtn(t('submit'),'#1f6b3a')+'>'+esc(t('submit'))+'</button>';
   };
   WIRE.odometer = function(){
-    var sel = $('choferVehSel'); if(sel) sel.onchange = function(){ C.state.vehicleId = sel.value; };
-    ensureVehicles(function(){});
+    ensureVehicles(function(){ if(C.state.activeTab==='odometer'){ $('choferBody').innerHTML = RENDER.odometer(); WIRE.odometer(); } });
+    wireVehicleInput(null);
     var sub = $('choferOdoSubmit');
     if(sub) sub.onclick = function(){
       if(!C.state.vehicleId){ note(t('needVehicle')); return; }
@@ -12977,8 +13028,8 @@ var _checkSendTimer = setInterval(checkDaysWithoutSend, 30 * 60 * 1000);
       '<button id="choferMaintSubmit" '+bigBtn(t('submit'),'#1f6b3a')+'>'+esc(t('submit'))+'</button>';
   };
   WIRE.maint = function(){
-    var sel = $('choferVehSel'); if(sel) sel.onchange = function(){ C.state.vehicleId = sel.value; };
-    ensureVehicles(function(){});
+    ensureVehicles(function(){ if(C.state.activeTab==='maint'){ $('choferBody').innerHTML = RENDER.maint(); WIRE.maint(); } });
+    wireVehicleInput(null);
     var sub = $('choferMaintSubmit');
     if(sub) sub.onclick = function(){
       if(!C.state.vehicleId){ note(t('needVehicle')); return; }
