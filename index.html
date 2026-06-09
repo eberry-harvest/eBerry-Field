@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_99_4';
+window.APP_VERSION = 'V20_99_5';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -12937,11 +12937,25 @@ var _checkSendTimer = setInterval(checkDaysWithoutSend, 30 * 60 * 1000);
       field(t('odoReading'), '<input id="choferFuelOdo" type="number" inputmode="numeric" style="'+inputStyle()+'">')+
       '<button id="choferFuelSubmit" '+bigBtn(t('submit'),'#1f6b3a')+'>'+esc(t('submit'))+'</button>';
   };
-  WIRE.fuel = function(){
-    ensureVehicles(function(){ if(C.state.activeTab==='fuel'){ $('choferBody').innerHTML = RENDER.fuel(); WIRE.fuel(); } });
-    wireVehicleInput(null);
+  // Re-render JUST the vehicle picker datalist once vehicles arrive, without
+  // touching the rest of the form (which would wipe the buttons + re-entrancy bug).
+  function refreshVehicleDatalist(){
+    var dl = $('choferVehList');
+    if(!dl || !C.state.vehicles) return;
+    var html = '';
+    for(var i=0;i<C.state.vehicles.length;i++){
+      var v = C.state.vehicles[i];
+      html += '<option data-id="'+esc(v.vehicle_id)+'" value="'+esc(vehicleLabel(v))+'"></option>';
+    }
+    dl.innerHTML = html;
+  }
+  function wireFuelControls(){
     var btn = $('choferFuelPhotoBtn'), file = $('choferFuelFile');
-    if(btn && file) btn.onclick = function(){ file.click(); };
+    if(btn && file){
+      btn.onclick = function(ev){ if(ev && ev.preventDefault) ev.preventDefault(); file.click(); };
+      // Belt-and-suspenders: also catch touchend on iOS Safari which can drop the synthetic click on hidden inputs.
+      btn.addEventListener('touchend', function(ev){ ev.preventDefault(); file.click(); }, {passive:false});
+    }
     if(file) file.onchange = function(){
       var f = file.files && file.files[0]; if(!f) return;
       var url = URL.createObjectURL(f);
@@ -12952,6 +12966,14 @@ var _checkSendTimer = setInterval(checkDaysWithoutSend, 30 * 60 * 1000);
     };
     var sub = $('choferFuelSubmit');
     if(sub) sub.onclick = submitFuel;
+  }
+  WIRE.fuel = function(){
+    // If we already have vehicles cached, the picker is populated immediately.
+    // Otherwise, fetch them and ONLY refresh the datalist (don't re-render the whole tab,
+    // which would wipe the photo button handlers).
+    ensureVehicles(function(){ if(C.state.activeTab==='fuel') refreshVehicleDatalist(); });
+    wireVehicleInput(null);
+    wireFuelControls();
   };
 
   // Upload the photo as a temp file under driver/ocr-tmp/<id>.jpg, then call
@@ -13051,7 +13073,7 @@ var _checkSendTimer = setInterval(checkDaysWithoutSend, 30 * 60 * 1000);
       '<button id="choferOdoSubmit" '+bigBtn(t('submit'),'#1f6b3a')+'>'+esc(t('submit'))+'</button>';
   };
   WIRE.odometer = function(){
-    ensureVehicles(function(){ if(C.state.activeTab==='odometer'){ $('choferBody').innerHTML = RENDER.odometer(); WIRE.odometer(); } });
+    ensureVehicles(function(){ if(C.state.activeTab==='odometer') refreshVehicleDatalist(); });
     wireVehicleInput(null);
     var sub = $('choferOdoSubmit');
     if(sub) sub.onclick = function(){
@@ -13081,7 +13103,7 @@ var _checkSendTimer = setInterval(checkDaysWithoutSend, 30 * 60 * 1000);
       '<button id="choferMaintSubmit" '+bigBtn(t('submit'),'#1f6b3a')+'>'+esc(t('submit'))+'</button>';
   };
   WIRE.maint = function(){
-    ensureVehicles(function(){ if(C.state.activeTab==='maint'){ $('choferBody').innerHTML = RENDER.maint(); WIRE.maint(); } });
+    ensureVehicles(function(){ if(C.state.activeTab==='maint') refreshVehicleDatalist(); });
     wireVehicleInput(null);
     var sub = $('choferMaintSubmit');
     if(sub) sub.onclick = function(){
