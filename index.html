@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_99_10';
+window.APP_VERSION = 'V20_99_11';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -13164,7 +13164,7 @@ var _checkSendTimer = setInterval(checkDaysWithoutSend, 30 * 60 * 1000);
     if(f && !alreadyUploaded){
       uploadPromise = fetch(window.SUPABASE_URL + '/storage/v1/object/fuel-receipts/' + path, {
         method:'POST',
-        headers:{ 'apikey':window.SUPABASE_ANON, 'Authorization':'Bearer '+window.SUPABASE_ANON, 'Content-Type': f.type || 'image/jpeg' },
+        headers:{ 'apikey':window.SUPABASE_ANON, 'Authorization':'Bearer '+window.SUPABASE_ANON, 'Content-Type': f.type || 'image/jpeg', 'x-upsert':'true' },
         body: f
       }).then(function(r){ if(!r.ok) throw new Error('upload '+r.status); return window.SUPABASE_URL + '/storage/v1/object/public/fuel-receipts/' + path; });
     } else if (alreadyUploaded) {
@@ -13176,8 +13176,7 @@ var _checkSendTimer = setInterval(checkDaysWithoutSend, 30 * 60 * 1000);
     uploadPromise.then(function(photoUrl){
       return rpc('submit_fuel_receipt', {
         p_pending_id: pendingId, p_driver_id: C.state.driver.driver_id, p_vehicle_id: C.state.vehicleId,
-        p_photo_url: photoUrl, p_gallons: gallons, p_total: total, p_odometer: odometer,
-        p_purchase_at: new Date().toISOString()
+        p_receipt_photo_url: photoUrl, p_reported_gallons: gallons, p_reported_total_amount: total, p_reported_odometer: odometer
       });
     }).then(function(){ C.state.fuelOcrPath = null; finishOk(); })
       .catch(function(e){ console.warn('[Chofer] fuel', e && e.message); fail(); });
@@ -13288,8 +13287,7 @@ var _checkSendTimer = setInterval(checkDaysWithoutSend, 30 * 60 * 1000);
       var rec = fq[0];
       rpc('submit_fuel_receipt', {
         p_pending_id: rec.pending_id, p_driver_id: C.state.driver.driver_id, p_vehicle_id: rec.vehicle_id,
-        p_photo_url: rec.photo_url || null, p_gallons: rec.gallons, p_total: rec.total, p_odometer: rec.odometer,
-        p_purchase_at: rec._queued_at
+        p_receipt_photo_url: rec.photo_url || null, p_reported_gallons: rec.gallons, p_reported_total_amount: rec.total, p_reported_odometer: rec.odometer
       }).then(function(){
         var cur = ljson('fuelQueue', []); cur.shift(); lset('fuelQueue', JSON.stringify(cur));
         if(cur.length) setTimeout(flushQueue, 400);

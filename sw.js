@@ -9,7 +9,7 @@
    activate() borre el cache v2 automáticamente al activarse.
    ═══════════════════════════════════════════════════════════════ */
 
-var CACHE_NAME = 'eberry-v99-10';
+var CACHE_NAME = 'eberry-v99-11';
 
 // Dominios de API → NUNCA cachear (datos dinámicos)
 var API_DOMAINS = [
