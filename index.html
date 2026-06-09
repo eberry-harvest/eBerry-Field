@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V21_00_0';
+window.APP_VERSION = 'V21_00_1';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -800,6 +800,16 @@ html.login-locked{overflow:hidden!important;height:100%!important}
     <span style="font-size:18px">🟢</span>
     <div id="choferTripClock" style="flex:1;min-width:0;font-weight:700"></div>
   </div>
+</div>
+
+<!-- V21_00_1: Hauler start screen — pick vehicle + route + customer BEFORE creating the trip.
+     This replaces the old behavior where Hauler dropped the user on the chofer Driver tabs. -->
+<div id="haulerStartScreen" style="display:none;position:fixed;top:0;right:0;bottom:0;left:0;background:#0f1f3a;z-index:9100;flex-direction:column;overflow:hidden;color:#fff;font-family:inherit">
+  <div style="flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:12px 14px;background:#13294d;box-shadow:0 2px 6px rgba(0,0,0,.4)">
+    <button onclick="window.Chofer.cancelHauler()" style="background:#2a4a7a;border:none;color:#fff;border-radius:8px;padding:8px 12px;font-size:14px;font-weight:700" id="haulerStartBackBtn">← Volver</button>
+    <div style="flex:1;font-weight:700;font-size:15px" id="haulerStartTitle">🚛 Nuevo viaje</div>
+  </div>
+  <div id="haulerStartBody" style="flex:1 1 auto;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:14px"></div>
 </div>
 
 <!-- V21_00: BOL OCR confirmation form (editable) -->
@@ -12578,7 +12588,15 @@ var _checkSendTimer = setInterval(checkDaysWithoutSend, 30 * 60 * 1000);
     statusInProgress:{es:'en progreso',             en:'in progress'},
     statusPaused:   {es:'pausado',                  en:'paused'},
     statusCompleted:{es:'completado',               en:'completed'},
-    noBol:          {es:'Sin BOL — toma una foto',  en:'No BOL — take a photo'}
+    noBol:          {es:'Sin BOL — toma una foto',  en:'No BOL — take a photo'},
+    // ── V21_00_1 Hauler start screen ──
+    newHaul:        {es:'🚛 Nuevo viaje',           en:'🚛 New trip'},
+    customer:       {es:'Cliente',                  en:'Customer'},
+    optional:       {es:'(opcional)',               en:'(optional)'},
+    startTrip:      {es:'Iniciar viaje',            en:'Start trip'},
+    startingTrip:   {es:'Iniciando viaje…',         en:'Starting trip…'},
+    haulStartErr:   {es:'No se pudo iniciar el viaje. Revisa tu conexión e inténtalo de nuevo.',
+                     en:'Could not start the trip. Check your connection and try again.'}
   };
   function t(key){
     var lang = window.CHOFER_LANG || 'es';
@@ -12779,9 +12797,9 @@ var _checkSendTimer = setInterval(checkDaysWithoutSend, 30 * 60 * 1000);
     };
     if(bH) bH.onclick = function(){
       $('choferRoleOv').classList.remove('on');
-      // V21_00: Hauler → enter chofer shell, start a hauling trip, land on Trip Detail.
-      C.enterChoferMode(drv);
-      C.startHaulingTrip();
+      // V21_00_1: Hauler → dedicated hauling start screen (vehicle + route + customer),
+      // then create the trip and land on Trip Detail. We do NOT show the chofer Driver tabs.
+      C.enterHaulerMode(drv);
     };
     $('choferRoleCrew').onclick = function(){
       $('choferRoleOv').classList.remove('on');
@@ -12809,13 +12827,73 @@ var _checkSendTimer = setInterval(checkDaysWithoutSend, 30 * 60 * 1000);
     C.restoreClock().then(function(){ if(C.renderRoute) C.renderRoute(); });  // V21_00: re-arm clock + deep-link route
   };
 
+  // ══ V21_00_1 — Hauler mode ══
+  // Hauler is its own flow: a start screen to pick the vehicle + route + customer,
+  // then a created trip that lands on the Trip Detail screen. It deliberately does
+  // NOT render the chofer Pre-Trip/Time In/Fuel/Odometer/Maint/Post-Trip/Time Out tabs.
+  C.enterHaulerMode = function(drv){
+    C.state.driver = drv;
+    window.currentMode = 'hauler';
+    window.CURRENT_DRIVER = drv;
+    var ls = $('loginScreen'); if(ls) ls.classList.add('hide');
+    document.body.classList.remove('login-locked');
+    document.documentElement.classList.remove('login-locked');
+    // Keep the chofer shell hidden — hauler never uses the Driver tabs.
+    var cs = $('choferScreen'); if(cs) cs.style.display = 'none';
+    syncLangBtn();
+    // If a hauling trip is already active for this driver, resume straight into it.
+    C.restoreClock().then(function(){
+      if(C.state.activeTripId){ C.navTrip(C.state.activeTripId); }
+      else { C.showHaulerStart(); }
+    });
+  };
+
+  C.showHaulerStart = function(){
+    var ov = $('choferTripScreen'); if(ov) ov.style.display = 'none';
+    var scr = $('haulerStartScreen'); if(!scr) return;
+    scr.style.display = 'flex';
+    var bk = $('haulerStartBackBtn'); if(bk) bk.textContent = t('back');
+    var tt = $('haulerStartTitle'); if(tt) tt.textContent = t('newHaul');
+    ensureVehicles(function(){ renderHaulerStart(); });
+    renderHaulerStart();
+  };
+
+  function renderHaulerStart(){
+    var body = $('haulerStartBody'); if(!body) return;
+    body.innerHTML =
+      vehiclePickerHtml()+
+      field(t('origin')+' '+t('optional'),      '<input id="haulerOrigin" autocomplete="off" style="'+inputStyle()+'">')+
+      field(t('destination')+' '+t('optional'), '<input id="haulerDest" autocomplete="off" style="'+inputStyle()+'">')+
+      field(t('customer')+' '+t('optional'),    '<input id="haulerCustomer" autocomplete="off" style="'+inputStyle()+'">')+
+      '<button id="haulerStartBtn" '+bigBtn(t('startTrip'),'#1f6b3a')+'>'+esc(t('startTrip'))+'</button>'+
+      '<div id="haulerStartErr" style="margin-top:10px;color:#ff9a9a;font-size:13px;font-weight:600"></div>';
+    wireVehicleInput(null);
+    var btn = $('haulerStartBtn');
+    if(btn) btn.onclick = function(){
+      C.startHaulingTrip({
+        origin:   ($('haulerOrigin')   && $('haulerOrigin').value.trim())   || null,
+        dest:     ($('haulerDest')     && $('haulerDest').value.trim())     || null,
+        customer: ($('haulerCustomer') && $('haulerCustomer').value.trim()) || null
+      });
+    };
+  }
+
+  C.cancelHauler = function(){
+    var scr = $('haulerStartScreen'); if(scr) scr.style.display = 'none';
+    C.logout();
+  };
+
   C.logout = function(){
     $('choferScreen').style.display = 'none';
+    var hs = $('haulerStartScreen'); if(hs) hs.style.display = 'none';
+    var ts = $('choferTripScreen'); if(ts) ts.style.display = 'none';
+    if(location.hash) try{ history.replaceState(null,'',location.pathname+location.search); }catch(e){ location.hash=''; }
     window.currentMode = 'surquero';
     window.CURRENT_DRIVER = null;
     stopClockTick();
     var foot = $('choferClockFooter'); if(foot) foot.style.display='none';
     C.state.driver = null;
+    C.state.activeTripId = null;
     var ls = $('loginScreen'); if(ls) ls.classList.remove('hide');
     document.body.classList.add('login-locked');
     document.documentElement.classList.add('login-locked');
@@ -13593,27 +13671,49 @@ var _checkSendTimer = setInterval(checkDaysWithoutSend, 30 * 60 * 1000);
     var r = parseHash();
     if(r.route === 'tripDetail' && C.state.driver){
       if(ov) ov.style.display = 'flex';
+      var hs = $('haulerStartScreen'); if(hs) hs.style.display = 'none';
       C.state.activeTripId = r.tripId;
       renderTripDetail(r.tripId);
     } else {
       if(ov) ov.style.display = 'none';
+      // Hauler has no chofer shell behind the trip screen — send them back to the
+      // start screen instead of a blank view. Chofer-mode users keep their tabs.
+      if(window.currentMode === 'hauler' && C.state.driver){ C.showHaulerStart(); }
     }
   }
   window.addEventListener('hashchange', renderRoute);
 
-  C.startHaulingTrip = function(){
+  C.startHaulingTrip = function(opts){
     if(!C.state.driver) return;
-    note(t('loading'));
-    rpc('start_hauling_trip', { p_tenant_id: TENANT_ID, p_driver_id: C.state.driver.driver_id, p_vehicle_id: C.state.vehicleId || null })
+    opts = opts || {};
+    var errEl = $('haulerStartErr'); if(errEl) errEl.textContent = '';
+    var btn = $('haulerStartBtn'); if(btn){ btn.disabled = true; btn.textContent = t('startingTrip'); }
+    rpc('start_hauling_trip', {
+      p_tenant_id: TENANT_ID,
+      p_driver_id: C.state.driver.driver_id,
+      p_vehicle_id: C.state.vehicleId || null,
+      p_origin:    opts.origin   || null,
+      p_dest:      opts.dest     || null,
+      p_customer:  opts.customer || null
+    })
       .then(function(res){
-        var tripId = (typeof res === 'string') ? res : (res && (res.start_hauling_trip || res));
-        if(!tripId){ note(t('error')); return; }
+        // Accept string, {start_hauling_trip:uuid}, or [{start_hauling_trip:uuid}] shapes.
+        var tripId = res;
+        if(Array.isArray(res)) tripId = res[0];
+        if(tripId && typeof tripId === 'object') tripId = tripId.start_hauling_trip || tripId.trip_id || null;
+        if(!tripId || typeof tripId !== 'string'){ throw new Error('no trip id'); }
         C.state.activeTripId = tripId;
         // Auto clock-in tied to this trip if not already on the clock.
         if(!C.isClockedIn()){ C.clockIn({ trip_id: tripId }); }
+        var scr = $('haulerStartScreen'); if(scr) scr.style.display = 'none';
         C.navTrip(tripId);
       })
-      .catch(function(e){ console.warn('[Chofer] startHaulingTrip', e && e.message); note(t('error')); });
+      .catch(function(e){
+        console.warn('[Hauler] startHaulingTrip failed:', e && e.message);
+        if(btn){ btn.disabled = false; btn.textContent = t('startTrip'); }
+        if(errEl) errEl.textContent = t('haulStartErr');
+        else note(t('haulStartErr'));
+      });
   };
 
   // ══ Trip Detail screen ══
