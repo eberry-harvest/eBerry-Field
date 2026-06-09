@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V20_99_8';
+window.APP_VERSION = 'V20_99_9';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -12922,7 +12922,16 @@ var _checkSendTimer = setInterval(checkDaysWithoutSend, 30 * 60 * 1000);
       C.showTab(C.state.inspectionType === 'pretrip' ? 'timeIn' : 'timeOut');
     }).catch(function(e){
       var msg = (e && e.message || '');
-      note(/critic/i.test(msg) ? t('blockedCritical') : t('error'));
+      console.warn('[Chofer] complete error', msg);
+      // 23505 = unique violation: another completed inspection already exists for this vehicle/day/type.
+      // That means the inspection actually succeeded earlier — treat as done and move on.
+      if(/23505|duplicate key|already exists/i.test(msg)){
+        note('✓ Already completed today — continuing');
+        if(C.state.inspectionType === 'pretrip'){ C.state.pretripDone = true; lset('pretripDone','1'); }
+        C.showTab(C.state.inspectionType === 'pretrip' ? 'timeIn' : 'timeOut');
+        return;
+      }
+      note(/critic/i.test(msg) ? t('blockedCritical') : ((t('error')||'Error')+': '+msg.substring(0,120)));
       if(btn){ btn.disabled=false; btn.textContent=t('complete'); }
     });
   }
