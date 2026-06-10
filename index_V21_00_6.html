@@ -2723,13 +2723,14 @@ function loadSheetsData(){
     if(!loaded.workers){ ALL_WORKERS=[]; NAMES=FALLBACK_NAMES.slice(); }
     if(!loaded.tasks){ ALL_ACTS=FALLBACK_ACTS.slice(); }
      // habilitar PIN aunque no llegue config (usa respaldo 1999)
-    buildLideres();
-    setLoading(false);
-    // Delta2: si caímos a FALLBACK, mostrar banner de reintento
-    if(ALL_ACTS.length <= FALLBACK_ACTS.length){
-      _showFallbackBanner('Actividades no cargaron (timeout). Usando datos básicos.');
-    }
-    showLogin();
+    buildLideres().then(function(){
+      setLoading(false);
+      // Delta2: si caímos a FALLBACK, mostrar banner de reintento
+      if(ALL_ACTS.length <= FALLBACK_ACTS.length){
+        _showFallbackBanner('Actividades no cargaron (timeout). Usando datos básicos.');
+      }
+      showLogin();
+    });
   }, 25000);
 
   function checkDone(){
@@ -2865,7 +2866,7 @@ function buildLideres(){
   LIDERES = [];
   for(var i=0;i<ALL_WORKERS.length;i++){
     var w = ALL_WORKERS[i];
-    if(w.lider && w.lider.toLowerCase()==='surquero' && w.nip){
+    if(w.lider && /surquero/i.test(w.lider) && w.nip){
       LIDERES.push({name:w.name, empNum:w.empNum, pin:String(w.nip).trim(), crew:w.crew, pinHash:''});
     }
   }
@@ -10274,11 +10275,6 @@ window.addEventListener('DOMContentLoaded', function(){
     // V21_00_6c: re-derivar LIDERES desde ALL_WORKERS (con nip limpio) para
     // garantizar pinHash fresco aunque el cache.lideres venga corrupto de una
     // race anterior (pinHash='' / pin='****'). Luego re-guardar el cache limpio.
-    if(ALL_WORKERS && ALL_WORKERS.length){
-      buildLideres().then(function(){
-        saveCache(ALL_WORKERS, ALL_ACTS, LIDERES);
-      });
-    }
     // Tau: re-normalize cached ACTS — fix Daywork that was cached as Hora
     // Old cache may not have payType at all, so check both conditions
     for(var ci=0;ci<ALL_ACTS.length;ci++){
@@ -10287,11 +10283,23 @@ window.addEventListener('DOMContentLoaded', function(){
         ca.tipo='Ficha'; ca.hr=false; if(!ca.payType) ca.payType='Daywork';
       }
     }
-    setLoading(false);
-    showLogin();
-    // Refresh in background silently
-    refreshDataBackground();
-    startKeepAlive();
+    // V21_00_6d: gate showLogin behind buildLideres so the user can't type a
+    // PIN before pinHash settles (cache-hydration race).
+    var _showLoginFn = function(){
+      setLoading(false);
+      showLogin();
+      // Refresh in background silently
+      refreshDataBackground();
+      startKeepAlive();
+    };
+    if(ALL_WORKERS && ALL_WORKERS.length){
+      buildLideres().then(function(){
+        saveCache(ALL_WORKERS, ALL_ACTS, LIDERES);
+        _showLoginFn();
+      });
+    } else {
+      _showLoginFn();
+    }
   } else {
     // No cache → load fresh
     loadSheetsData();
@@ -10304,8 +10312,9 @@ function refreshDataBackground(){
       var wasFallback = !ALL_WORKERS.length;
       ALL_WORKERS = data.workers;
       if(data.contratos) CONTRATOS = data.contratos;
-      buildLideres();
-      saveCache(ALL_WORKERS, ALL_ACTS, LIDERES);
+      buildLideres().then(function(){
+        saveCache(ALL_WORKERS, ALL_ACTS, LIDERES);
+      });
       if(wasFallback) console.log('✅ Delta2: Workers recuperados en background (' + ALL_WORKERS.length + ')');
     }
   });
