@@ -24,7 +24,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V21_01_0c'; // V21_01_0c: HOTFIX hauler fuel submit — default vehicle to trip, stamp trip_id, fix tab routing, surface errors.
+window.APP_VERSION = 'V21_01_1'; // V21_01_1: driver-initiated trip pause/resume (start_trip_pause/end_trip_pause RPCs, paused banner + live timer, action-lock).
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -13230,17 +13230,24 @@ var _checkSendTimer = setInterval(checkDaysWithoutSend, 30 * 60 * 1000);
     tripCompleted:  {es:'✓ Viaje completado',       en:'✓ Trip completed'},
     tripPaused:     {es:'⏸ Viaje pausado',          en:'⏸ Trip paused'},
     tripResumed:    {es:'▶ Viaje reanudado',        en:'▶ Trip resumed'},
-    // V21_00_6: Pause/Resume reason picker
-    pauseTrip:      {es:'⏸ Pausar viaje',           en:'⏸ Pause trip'},
-    resumeTrip:     {es:'▶ Reanudar viaje',         en:'▶ Resume trip'},
+    // V21_01_1: Driver-initiated pause/resume (backed by start_trip_pause / end_trip_pause RPCs)
+    pauseTrip:      {es:'⏸ Pausar viaje',           en:'⏸ Pause Trip'},
+    resumeTrip:     {es:'▶ Reanudar viaje',         en:'▶ Resume Trip'},
     pauseReasonTitle:{es:'¿Motivo de la pausa?',    en:'Pause reason?'},
-    reasonLunch:    {es:'Almuerzo',                 en:'Lunch'},
-    reasonRepair:   {es:'Reparación',               en:'Repair'},
-    reasonDotBreak: {es:'Descanso DOT',             en:'DOT break'},
+    reason:         {es:'Motivo',                   en:'Reason'},
+    notesOptional:  {es:'Notas (opcional)',         en:'Notes (optional)'},
+    // V21_01_1: 8 reason keys (must match backend reason_key values)
+    reasonMeal:     {es:'Comida',                   en:'Meal'},
+    reasonRestBreak:{es:'Descanso',                 en:'Rest break'},
+    reasonFuel:     {es:'Combustible',              en:'Fuel'},
+    reasonMechanical:{es:'Mecánico',                en:'Mechanical'},
+    reasonTraffic:  {es:'Tráfico',                  en:'Traffic'},
     reasonLoading:  {es:'Cargando',                 en:'Loading'},
     reasonUnloading:{es:'Descargando',              en:'Unloading'},
     reasonOther:    {es:'Otro',                     en:'Other'},
-    pausedBanner:   {es:'⏸ Viaje en pausa',         en:'⏸ Trip on pause'},
+    pausedBanner:   {es:'⏸ Viaje pausado',          en:'⏸ Trip Paused'},
+    pausedFor:      {es:'Pausado por {n} min',      en:'Paused for {n} min'},
+    pausedJustNow:  {es:'Pausado ahora',            en:'Paused just now'},
     cancel:         {es:'Cancelar',                 en:'Cancel'},
     back:           {es:'← Volver',                 en:'← Back'},
     statusScheduled:{es:'programado',               en:'scheduled'},
@@ -14759,6 +14766,7 @@ var _checkSendTimer = setInterval(checkDaysWithoutSend, 30 * 60 * 1000);
     } else {
       if(ov) ov.style.display = 'none';
       stopGpsPing();  // V21_00_3: leaving trip detail: stop background position pings
+      stopPausePoll(); // V21_01_1: leaving trip detail: stop pause polling/timer
       // Hauler has no chofer shell behind the trip screen — send them back to the
       // start screen instead of a blank view. Chofer-mode users keep their tabs.
       if(window.currentMode === 'hauler' && C.state.driver){ C.showHaulerStart(); }
@@ -14851,6 +14859,86 @@ var _checkSendTimer = setInterval(checkDaysWithoutSend, 30 * 60 * 1000);
   function stopGpsPing(){ if(_gpsPingTimer){ clearInterval(_gpsPingTimer); _gpsPingTimer=null; } } // V21_00_3:
   C.stopGpsPing = stopGpsPing;
 
+  // ══ V21_01_1 — Driver-initiated trip pause/resume ══
+  // Backed by public.start_trip_pause / public.end_trip_pause RPCs; open-pause state is read
+  // straight from fleet.trip_pause (ended_at IS NULL) so multiple devices stay consistent.
+  // C.state.tripPause[tripId] = { pause_id, started_at(ms), reason_key, reason_label, notes } | null
+  function fleetGet(path){
+    return fetch(window.SUPABASE_URL + '/rest/v1/' + path, {
+      headers:{ 'Accept':'application/json', 'Accept-Profile':'fleet',
+                'apikey':window.SUPABASE_ANON, 'Authorization':'Bearer '+window.SUPABASE_ANON }
+    }).then(function(r){ if(!r.ok) return r.text().then(function(tx){ throw new Error(tx||('HTTP '+r.status)); }); return r.json(); });
+  }
+  // Fetch the open pause row for a trip. Resolves to true if paused-state CHANGED since last fetch.
+  function fetchTripPause(tripId){
+    if(!C.state.tripPause) C.state.tripPause = {};
+    var before = !!C.state.tripPause[tripId];
+    return fleetGet('trip_pause?select=pause_id,started_at,reason_key,reason_label,notes&trip_id=eq.'+encodeURIComponent(tripId)+'&ended_at=is.null&limit=1')
+      .then(function(rows){
+        var row = (rows && rows[0]) || null;
+        C.state.tripPause[tripId] = row ? {
+          pause_id: row.pause_id,
+          started_at: Date.parse(row.started_at) || Date.now(),
+          reason_key: row.reason_key || 'other',
+          reason_label: row.reason_label || '',
+          notes: row.notes || ''
+        } : null;
+        return before !== !!C.state.tripPause[tripId];
+      })
+      .catch(function(){ return false; }); // fail closed: keep last known state on transient error
+  }
+  function currentPause(){
+    var t = C.state.tripDetail; if(!t || !C.state.tripPause) return null;
+    return C.state.tripPause[t.trip_id] || null;
+  }
+  function isTripPaused(){ return !!currentPause(); }
+  function pauseElapsedMin(p){ return Math.max(0, Math.floor((Date.now() - p.started_at) / 60000)); }
+  function reasonKeyToI18n(key){
+    var map = { meal:'reasonMeal', rest_break:'reasonRestBreak', fuel:'reasonFuel', mechanical:'reasonMechanical',
+                traffic:'reasonTraffic', loading:'reasonLoading', unloading:'reasonUnloading', other:'reasonOther' };
+    return map[key] || 'reasonOther';
+  }
+  // V21_01_1: 8 reason choices shown to the driver (key must match backend reason_key).
+  var REASON_EMOJI = { meal:'🍽️', rest_break:'😴', fuel:'⛽', mechanical:'🔧',
+                       traffic:'🚦', loading:'📦', unloading:'📤', other:'❓' };
+  var PAUSE_REASONS = ['meal','rest_break','fuel','mechanical','traffic','loading','unloading','other'];
+
+  // Poll fleet.trip_pause every 30s while the trip screen is foregrounded.
+  var _pausePoll = null, _pauseTick = null, _pausePollTripId = null;
+  function startPausePoll(tripId){
+    _pausePollTripId = tripId;
+    if(!_pausePoll){
+      _pausePoll = setInterval(function(){
+        if(document.hidden || !_pausePollTripId) return;
+        fetchTripPause(_pausePollTripId).then(function(changed){ if(changed) refreshPauseUi(); });
+      }, 30000);
+    }
+    // 1-minute tick keeps the "Paused for N min" counter live without a network call.
+    if(!_pauseTick){
+      _pauseTick = setInterval(function(){ if(!document.hidden && isTripPaused()) updatePausedTimerUi(); }, 60000);
+    }
+  }
+  function stopPausePoll(){
+    if(_pausePoll){ clearInterval(_pausePoll); _pausePoll=null; }
+    if(_pauseTick){ clearInterval(_pauseTick); _pauseTick=null; }
+    _pausePollTripId = null;
+  }
+  C.stopPausePoll = stopPausePoll;
+
+  // Re-render the active tab so pause banner + disabled-state reflect current pause status.
+  function refreshPauseUi(){
+    if($('choferTripScreen') && $('choferTripScreen').style.display === 'none') return;
+    if(C.state.haulerTab) showHaulerTab(C.state.haulerTab);
+  }
+  // Cheap in-place update of just the elapsed counter (no full re-render).
+  function updatePausedTimerUi(){
+    var el = $('haulerPausedTimer'); var p = currentPause();
+    if(el && p){
+      var m = pauseElapsedMin(p);
+      el.textContent = m > 0 ? t('pausedFor').replace('{n}', m) : t('pausedJustNow');
+    }
+  }
+
   // V21_00_3: Trip Detail entry — fetch via trip_driver_view (driver-safe; NO ar_/driver_pay fields)
   function renderTripDetail(tripId){
     var body = $('choferTripBody');
@@ -14877,31 +14965,10 @@ var _checkSendTimer = setInterval(checkDaysWithoutSend, 30 * 60 * 1000);
         C.state.tripDetail = tr;
         var det = (out[1] && out[1][0]) || {};
         C.state.tripEvents = det.events || [];
-        // V21_00_6: restore client-side paused state for this trip from localStorage (survives refresh).
-        // Also derive from latest pause/resume event in tripEvents so multi-device stays roughly consistent.
-        try{
-          if(!C.state.tripPausedAt) C.state.tripPausedAt = {};
-          var raw = localStorage.getItem('eb_trip_paused_'+tr.trip_id);
-          if(raw){ C.state.tripPausedAt[tr.trip_id] = JSON.parse(raw); }
-          else { delete C.state.tripPausedAt[tr.trip_id]; }
-          // Cross-check with server events: most recent paused/resumed wins
-          var evs = C.state.tripEvents || [];
-          var lastPause = null, lastResume = null;
-          for(var ei=0; ei<evs.length; ei++){
-            var ev = evs[ei];
-            if(ev && ev.event_type === 'paused')  { if(!lastPause  || (ev.event_time > lastPause.event_time))  lastPause  = ev; }
-            if(ev && ev.event_type === 'resumed') { if(!lastResume || (ev.event_time > lastResume.event_time)) lastResume = ev; }
-          }
-          if(lastPause && (!lastResume || lastPause.event_time > lastResume.event_time)){
-            C.state.tripPausedAt[tr.trip_id] = { at: Date.parse(lastPause.event_time)||Date.now(), reason: lastPause.notes||'', key: '' };
-            try{ localStorage.setItem('eb_trip_paused_'+tr.trip_id, JSON.stringify(C.state.tripPausedAt[tr.trip_id])); }catch(_){ }
-          } else if(lastResume){
-            delete C.state.tripPausedAt[tr.trip_id];
-            try{ localStorage.removeItem('eb_trip_paused_'+tr.trip_id); }catch(_){ }
-          }
-        }catch(_){ /* localStorage may be disabled */ }
         // V21_00_3: manage GPS ping lifecycle: ping only while in_progress
         if(tr.status === 'in_progress'){ startGpsPing(tripId); } else { stopGpsPing(); }
+        // V21_01_1: fetch authoritative open-pause state from fleet.trip_pause, then poll while foregrounded.
+        fetchTripPause(tr.trip_id).then(function(changed){ if(changed) refreshPauseUi(); startPausePoll(tr.trip_id); });
         // V21_00_3: hide legacy bottom action bar; tabbed UI owns its own buttons
         ['choferTripPause','choferTripResume','choferTripComplete'].forEach(function(id){ var el=$(id); if(el && el.parentElement) el.parentElement.style.display='none'; });
         // V21_00_3: show tab bar
@@ -14960,6 +15027,20 @@ var _checkSendTimer = setInterval(checkDaysWithoutSend, 30 * 60 * 1000);
     body.innerHTML = fn ? fn(trip) : '';
     if(HWIRE[tab]) HWIRE[tab](trip);
     if(tab !== 'overview') maybeStaleBanner(trip);
+    applyPauseLock(); // V21_01_1: disable edit actions while the trip is paused
+  }
+
+  // V21_01_1: While paused, disable trip-action buttons (End trip, fuel/odo/maint submit,
+  // add event, clock in/out). Photo capture, DVIR and BOL stay enabled so receipts can be
+  // added during a lunch pause. Resume + Cancel buttons obviously stay enabled.
+  var PAUSE_LOCK_IDS = ['haulerCompleteBtn','haulerStaleComplete','choferFuelSubmit',
+    'haulerOdoSubmit','haulerMaintSubmit','haulerAddEvent','haulerClockIn','haulerClockOut'];
+  function applyPauseLock(){
+    if(!isTripPaused()) return;
+    for(var i=0;i<PAUSE_LOCK_IDS.length;i++){
+      var el = $(PAUSE_LOCK_IDS[i]);
+      if(el){ el.disabled = true; el.style.opacity = '.5'; }
+    }
   }
 
   function hCard(inner){ return '<div style="background:#13294d;border-radius:12px;padding:12px;margin-bottom:12px">'+inner+'</div>'; } // V21_00_3:
@@ -15001,22 +15082,33 @@ var _checkSendTimer = setInterval(checkDaysWithoutSend, 30 * 60 * 1000);
     // Helpers
     var helpers = (trip.helper_driver_ids && trip.helper_driver_ids.length) ? trip.helper_driver_ids.length+' '+t('helpers') : t('noHelpers');
     h += '<div style="background:#13294d;border-radius:12px;padding:6px 12px;margin-bottom:12px">'+infoRow(t('helpers'), helpers)+'</div>';
-    // V21_00_6: Paused banner (client-side derived from C.state.tripPausedAt)
-    var isPaused = !!(C.state.tripPausedAt && C.state.tripPausedAt[trip.trip_id]);
-    if(isPaused){
-      h += '<div style="background:#8a6d1a;color:#fff;border-radius:12px;padding:12px;margin-bottom:12px;text-align:center;font-weight:800">'+esc(t('pausedBanner'))+'</div>';
+    // V21_01_1: Pause / Resume block — server-backed (fleet.trip_pause). Wrapped in translate=no
+    // so Chrome auto-translate (ES) can't mangle the React-managed dynamic text/timer.
+    var pause = (C.state.tripPause && C.state.tripPause[trip.trip_id]) || null;
+    var liveTrip = (trip.status !== 'completed' && trip.status !== 'cancelled');
+    h += '<div translate="no">';
+    if(liveTrip && pause){
+      // Paused state: big banner + live elapsed timer + reason badge + Resume button.
+      var elapsed = pauseElapsedMin(pause);
+      var elapsedTxt = elapsed > 0 ? t('pausedFor').replace('{n}', elapsed) : t('pausedJustNow');
+      var rEmoji = REASON_EMOJI[pause.reason_key] || '⏸';
+      var rLabel = pause.reason_label || t(reasonKeyToI18n(pause.reason_key));
+      h += '<div style="background:#c9851a;color:#fff;border-radius:14px;padding:16px;margin-bottom:12px;text-align:center">'+
+        '<div style="font-size:20px;font-weight:900;margin-bottom:4px">'+esc(t('pausedBanner'))+'</div>'+
+        '<div id="haulerPausedTimer" style="font-size:15px;font-weight:700;opacity:.95">'+esc(elapsedTxt)+'</div>'+
+        '<div style="display:inline-block;margin-top:10px;background:rgba(0,0,0,.25);border-radius:999px;padding:5px 14px;font-size:14px;font-weight:700">'+esc(rEmoji+' '+rLabel)+'</div>'+
+      '</div>';
+      h += '<button id="haulerResumeBtn" style="width:100%;padding:16px;border:none;border-radius:14px;background:#1f6b3a;color:#fff;font-size:17px;font-weight:900;margin-bottom:10px">'+esc(t('resumeTrip'))+'</button>';
+    } else if(liveTrip){
+      // Not paused: big touchable Pause button.
+      h += '<button id="haulerPauseBtn" style="width:100%;padding:16px;border:none;border-radius:14px;background:#c9851a;color:#fff;font-size:17px;font-weight:900;margin-bottom:10px">'+esc(t('pauseTrip'))+'</button>';
     }
-    // V21_00_6: Pause/Resume buttons (active when trip is in_progress and not completed/cancelled)
-    if(trip.status !== 'completed' && trip.status !== 'cancelled'){
-      if(isPaused){
-        h += '<button id="haulerResumeBtn" style="width:100%;padding:14px;border:none;border-radius:12px;background:#1f6b3a;color:#fff;font-size:15px;font-weight:800;margin-bottom:10px">'+esc(t('resumeTrip'))+'</button>';
-      } else {
-        h += '<button id="haulerPauseBtn" style="width:100%;padding:14px;border:none;border-radius:12px;background:#8a6d1a;color:#fff;font-size:15px;font-weight:800;margin-bottom:10px">'+esc(t('pauseTrip'))+'</button>';
-      }
-    }
-    // Complete button
-    if(trip.status !== 'completed' && trip.status !== 'cancelled'){
-      h += '<button id="haulerCompleteBtn" style="width:100%;padding:14px;border:none;border-radius:12px;background:#1f6b3a;color:#fff;font-size:15px;font-weight:800;margin-bottom:10px">✓ '+esc(t('completeTrip'))+'</button>';
+    h += '</div>';
+    // Complete button — disabled while paused (no edits during a pause; keep drive time clean).
+    if(liveTrip){
+      var compDis = pause ? ' disabled' : '';
+      var compBg = pause ? '#2c4536' : '#1f6b3a';
+      h += '<button id="haulerCompleteBtn"'+compDis+' style="width:100%;padding:14px;border:none;border-radius:12px;background:'+compBg+';color:#fff;font-size:15px;font-weight:800;margin-bottom:10px;opacity:'+(pause?'.5':'1')+'">✓ '+esc(t('completeTrip'))+'</button>';
     }
     h += '<div style="height:40px"></div>';
     return h;
@@ -15027,47 +15119,33 @@ var _checkSendTimer = setInterval(checkDaysWithoutSend, 30 * 60 * 1000);
       // V21_00_3: require Post-Trip DVIR before completing
       ensurePostTripThen(trip, function(){ openCompleteModal(trip.trip_id); });
     };
-    // V21_00_6: Pause button -> reason picker -> trip_add_event('paused', reason) -> mark client-side paused
+    // V21_01_1: Pause button -> reason picker -> start_trip_pause RPC
     var bp = $('haulerPauseBtn');
     if(bp) bp.onclick = function(){ openPauseReasonModal(trip); };
-    // V21_00_6: Resume button -> trip_add_event('resumed') -> clear client-side paused
+    // V21_01_1: Resume button -> optional notes prompt -> end_trip_pause RPC
     var br = $('haulerResumeBtn');
-    if(br) br.onclick = function(){
-      br.disabled = true;
-      rpc('trip_add_event', { p_tenant_id: TENANT_ID, p_trip_id: trip.trip_id, p_event_type: 'resumed', p_notes: null })
-        .then(function(){
-          if(C.state.tripPausedAt) delete C.state.tripPausedAt[trip.trip_id];
-          try{ localStorage.removeItem('eb_trip_paused_'+trip.trip_id); }catch(_){ }
-          if(typeof toast === 'function') toast(t('tripResumed'));
-          showHaulerTab('overview');
-        })
-        .catch(function(e){ br.disabled = false; if(typeof toast === 'function') toast('⚠ '+(e && e.message ? e.message : 'error')); });
-    };
+    if(br) br.onclick = function(){ openResumeModal(trip); };
   };
 
-  // V21_00_6: Pause reason picker modal
+  // V21_01_1: Pause reason picker modal — 8 reasons w/ emoji + optional notes -> start_trip_pause.
   function openPauseReasonModal(trip){
-    var reasons = [
-      { key: 'lunch',     label: t('reasonLunch') },
-      { key: 'repair',    label: t('reasonRepair') },
-      { key: 'dot_break', label: t('reasonDotBreak') },
-      { key: 'loading',   label: t('reasonLoading') },
-      { key: 'unloading', label: t('reasonUnloading') },
-      { key: 'other',     label: t('reasonOther') }
-    ];
     var ov = document.createElement('div');
-    ov.setAttribute('translate', 'no'); // V21_00_5 pattern: protect from MT mangling
-    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10000;display:flex;align-items:center;justify-content:center;padding:18px';
-    var btnsHtml = '';
-    for(var i=0;i<reasons.length;i++){
-      btnsHtml += '<button data-reason-key="'+reasons[i].key+'" data-reason-label="'+esc(reasons[i].label)+'" '+
-        'style="width:100%;padding:14px;margin-bottom:8px;border:none;border-radius:10px;background:#2a4a7a;color:#fff;font-size:15px;font-weight:700;text-align:left">'+
-        esc(reasons[i].label)+'</button>';
+    ov.setAttribute('translate', 'no'); // V21_00_5 pattern: protect dynamic text from Chrome MT mangling
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10000;display:flex;align-items:flex-end;justify-content:center';
+    var chips = '';
+    for(var i=0;i<PAUSE_REASONS.length;i++){
+      var k = PAUSE_REASONS[i];
+      chips += '<button data-reason-key="'+k+'" '+
+        'style="display:flex;align-items:center;gap:8px;width:100%;padding:14px;margin-bottom:8px;border:2px solid #2a4a7a;border-radius:12px;background:#13294d;color:#fff;font-size:16px;font-weight:700;text-align:left">'+
+        '<span style="font-size:20px">'+REASON_EMOJI[k]+'</span><span>'+esc(t(reasonKeyToI18n(k)))+'</span></button>';
     }
-    ov.innerHTML = '<div style="max-width:420px;width:100%;background:#0c1a35;color:#fff;border-radius:14px;padding:18px">'+
-      '<div style="font-size:17px;font-weight:800;margin-bottom:12px">'+esc(t('pauseReasonTitle'))+'</div>'+
-      '<div id="pauseReasonList">'+btnsHtml+'</div>'+
-      '<button id="pauseReasonCancel" style="width:100%;padding:12px;margin-top:6px;border:none;border-radius:10px;background:#444;color:#fff;font-weight:700">'+esc(t('cancel'))+'</button>'+
+    ov.innerHTML = '<div style="max-width:480px;width:100%;background:#0c1a35;color:#fff;border-radius:18px 18px 0 0;padding:18px;max-height:90vh;overflow-y:auto;-webkit-overflow-scrolling:touch">'+
+      '<div style="font-size:18px;font-weight:900;margin-bottom:14px">'+esc(t('pauseReasonTitle'))+'</div>'+
+      '<div style="font-size:12px;font-weight:700;opacity:.7;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">'+esc(t('reason'))+'</div>'+
+      '<div id="pauseReasonList">'+chips+'</div>'+
+      '<label style="display:block;margin:6px 0 4px;font-size:12px;font-weight:700;opacity:.7;text-transform:uppercase;letter-spacing:.5px">'+esc(t('notesOptional'))+'</label>'+
+      '<textarea id="pauseNotes" rows="2" style="width:100%;box-sizing:border-box;padding:12px;font-size:16px;border:none;border-radius:10px;background:#1d3357;color:#fff;resize:vertical"></textarea>'+
+      '<button id="pauseReasonCancel" style="width:100%;padding:14px;margin-top:12px;border:none;border-radius:10px;background:#444;color:#fff;font-size:15px;font-weight:700">'+esc(t('cancel'))+'</button>'+
       '</div>';
     document.body.appendChild(ov);
     var close = function(){ if(ov.parentNode) ov.parentNode.removeChild(ov); };
@@ -15077,17 +15155,18 @@ var _checkSendTimer = setInterval(checkDaysWithoutSend, 30 * 60 * 1000);
     for(var j=0;j<btns.length;j++){
       btns[j].onclick = (function(btn){ return function(){
         var key = btn.getAttribute('data-reason-key');
-        var lab = btn.getAttribute('data-reason-label');
+        var notes = (ov.querySelector('#pauseNotes')||{}).value || '';
         for(var k=0;k<btns.length;k++) btns[k].disabled = true;
         if(cancelBtn) cancelBtn.disabled = true;
-        rpc('trip_add_event', { p_tenant_id: TENANT_ID, p_trip_id: trip.trip_id, p_event_type: 'paused', p_notes: lab })
+        rpc('start_trip_pause', { p_trip_id: trip.trip_id, p_reason_key: key,
+                                  p_reason_label: t(reasonKeyToI18n(key)), p_notes: notes || null })
           .then(function(){
-            if(!C.state.tripPausedAt) C.state.tripPausedAt = {};
-            C.state.tripPausedAt[trip.trip_id] = { at: Date.now(), reason: lab, key: key };
-            try{ localStorage.setItem('eb_trip_paused_'+trip.trip_id, JSON.stringify(C.state.tripPausedAt[trip.trip_id])); }catch(_){ }
             close();
-            if(typeof toast === 'function') toast(t('tripPaused')+' — '+lab);
-            showHaulerTab('overview');
+            return fetchTripPause(trip.trip_id);
+          })
+          .then(function(){
+            if(typeof toast === 'function') toast(t('pausedBanner'));
+            refreshPauseUi();
           })
           .catch(function(e){
             for(var m=0;m<btns.length;m++) btns[m].disabled = false;
@@ -15096,6 +15175,35 @@ var _checkSendTimer = setInterval(checkDaysWithoutSend, 30 * 60 * 1000);
           });
       }; })(btns[j]);
     }
+  }
+
+  // V21_01_1: Resume modal — optional notes -> end_trip_pause.
+  function openResumeModal(trip){
+    var ov = document.createElement('div');
+    ov.setAttribute('translate', 'no');
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:10000;display:flex;align-items:flex-end;justify-content:center';
+    ov.innerHTML = '<div style="max-width:480px;width:100%;background:#0c1a35;color:#fff;border-radius:18px 18px 0 0;padding:18px">'+
+      '<div style="font-size:18px;font-weight:900;margin-bottom:14px">'+esc(t('resumeTrip'))+'</div>'+
+      '<label style="display:block;margin:0 0 4px;font-size:12px;font-weight:700;opacity:.7;text-transform:uppercase;letter-spacing:.5px">'+esc(t('notesOptional'))+'</label>'+
+      '<textarea id="resumeNotes" rows="2" style="width:100%;box-sizing:border-box;padding:12px;font-size:16px;border:none;border-radius:10px;background:#1d3357;color:#fff;resize:vertical"></textarea>'+
+      '<button id="resumeConfirm" style="width:100%;padding:16px;margin-top:12px;border:none;border-radius:12px;background:#1f6b3a;color:#fff;font-size:17px;font-weight:900">'+esc(t('resumeTrip'))+'</button>'+
+      '<button id="resumeCancel" style="width:100%;padding:14px;margin-top:8px;border:none;border-radius:10px;background:#444;color:#fff;font-size:15px;font-weight:700">'+esc(t('cancel'))+'</button>'+
+      '</div>';
+    document.body.appendChild(ov);
+    var close = function(){ if(ov.parentNode) ov.parentNode.removeChild(ov); };
+    var cancelBtn = ov.querySelector('#resumeCancel'); if(cancelBtn) cancelBtn.onclick = close;
+    var ok = ov.querySelector('#resumeConfirm');
+    if(ok) ok.onclick = function(){
+      var notes = (ov.querySelector('#resumeNotes')||{}).value || '';
+      ok.disabled = true; if(cancelBtn) cancelBtn.disabled = true;
+      rpc('end_trip_pause', { p_trip_id: trip.trip_id, p_notes: notes || null })
+        .then(function(){ close(); return fetchTripPause(trip.trip_id); })
+        .then(function(){
+          if(typeof toast === 'function') toast(t('tripResumed'));
+          refreshPauseUi();
+        })
+        .catch(function(e){ ok.disabled=false; if(cancelBtn) cancelBtn.disabled=false; if(typeof toast === 'function') toast('⚠ '+(e && e.message ? e.message : 'error')); });
+    };
   }
 
   function hosSoftCapPill(){ // V21_00_3: §395.1(k) 14h soft cap informational pill
