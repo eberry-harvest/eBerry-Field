@@ -35,7 +35,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V1_0_0_5';
+window.APP_VERSION = 'V1_0_0_6';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -1895,7 +1895,10 @@ body.readOnly [onclick*="openNewDay"]{display:none !important}
       <div><label>Entrada</label><input type="time" id="hEnt" data-save step="1800" onchange="updParam()"></div>
       <div><label>Salida</label><input type="time" id="hSal" data-save step="1800" onchange="updParam()"></div>
     </div>
-    <div class="r2">
+    <!-- V1_0_0_6: el lonche ahora va POR ACTIVIDAD (debajo de cada actividad individual y grupal).
+         Este bloque queda OCULTO pero los inputs siguen en el DOM (vacíos) por compatibilidad con días viejos
+         cargados desde Sheets que aún traen lonche global; nh() sin lonche de actividad usa este como fallback. -->
+    <div class="r2" style="display:none">
       <div><label>Inicio Lonche</label><input type="time" id="lIni" data-save step="1800" onchange="updParam()"></div>
       <div><label>Fin Lonche</label><input type="time" id="lFin" data-save step="1800" onchange="updParam()"></div>
     </div>
@@ -4535,15 +4538,32 @@ function normTimeInput(el){
 // Resuelve el bug del redondeo a 1 decimal en duración (resultados siempre múltiplos de 0.25h).
 // NO se redondea el lonche (lIni/lFin) — típicamente ya es 12:00-12:30 (cuartos exactos).
 function _roundToQuarterMin(min){ return Math.round(min/15)*15; }
-function nh(a,b){
+function nh(a,b,lonches){
   var e=t2m(a),s=t2m(b); if(e===null||s===null)return 0;
   // V20_178: aplica regla 7-min antes de calcular duración.
   e = _roundToQuarterMin(e);
   s = _roundToQuarterMin(s);
   // Cruce de medianoche: si salida <= entrada, sumar 24h (1440 min)
   if(s<=e) s+=1440;
-  var li=t2m(gVal('lIni')),lf=t2m(gVal('lFin')),w=s-e;
-  if(li!==null&&lf!==null){ var ov=Math.min(s,lf)-Math.max(e,li); if(ov>0)w-=ov; }
+  var w=s-e;
+  // V1_0_0_6: lonche POR ACTIVIDAD con soporte de VARIOS lonches.
+  // Si se pasa 'lonches' (array de la actividad) → descontar TODOS los que solapen con el turno.
+  // Si NO se pasa (undefined) → usar el lonche global de Parámetros (retrocompat, no rompe call sites viejos).
+  var _lon;
+  if(Array.isArray(lonches)){
+    _lon = lonches;
+  } else {
+    var _gi=gVal('lIni'), _gf=gVal('lFin');
+    _lon = (_gi||_gf) ? [{ini:_gi, fin:_gf}] : [];
+  }
+  for(var _lx=0; _lx<_lon.length; _lx++){
+    var li=t2m(_lon[_lx].ini), lf=t2m(_lon[_lx].fin);
+    if(li!==null && lf!==null){
+      if(lf<=li) lf+=1440; // lonche que cruza medianoche (defensivo)
+      var ov=Math.min(s,lf)-Math.max(e,li);
+      if(ov>0) w-=ov;
+    }
+  }
   // V20_178: 2 decimales (cuartos exactos: .00, .25, .50, .75). El bug del .toFixed(1) queda neutralizado.
   return Math.round(Math.max(0,w)*100/60)/100;
 }
@@ -7156,7 +7176,8 @@ function addAct(wid_){
     ini: initIni, fin:'',
     showTime: !!initIni, // abrir reloj si ya tenemos hora del check-in
     pay:0, finca:gVal('finca'),
-    _iniLocked: lockIni // V20_91_05: marca para readonly del primer shift
+    _iniLocked: lockIni, // V20_91_05: marca para readonly del primer shift
+    lonches: [{ini:'12:00', fin:'12:30'}] // V1_0_0_6: lonche POR ACTIVIDAD (default 12:00-12:30, editable/quitable, soporta varios)
   });
   mkActRow(wid_,ai);
   autoSave();
@@ -7674,7 +7695,7 @@ function updBadge(wi,ai){
       var p=[];
       for(var s=0;s<a_.shifts.length;s++){
         var sh=a_.shifts[s];
-        if(sh.ini&&sh.fin) p.push('T'+(s+1)+': '+to12h(sh.ini)+'→'+to12h(sh.fin)+' ('+nh(sh.ini,sh.fin)+'h)');
+        if(sh.ini&&sh.fin) p.push('T'+(s+1)+': '+to12h(sh.ini)+'→'+to12h(sh.fin)+' ('+nh(sh.ini,sh.fin,a_.lonches)+'h)');
       }
       return p.join(' + ');
     }
@@ -7982,7 +8003,7 @@ function buildSum(){
       // tipo equivocado (ej. Pieces aparecía con "h" en vez de cantidad).
       var act = _resolveActStable(a) || resolveAct(a, true);
       if(!act){ dets.push((a.esName||'Act.#'+a.ai)+'($'+(a.pay||0).toFixed(2)+')'); continue; }
-      var u=act.hr?(a.ini&&a.fin?to12h(a.ini)+'→'+to12h(a.fin)+'('+nh(a.ini,a.fin)+'h)':'sin horario'):act.tipo==='$'?'$'+smartNum(a.qty):smartNum(a.qty)+' '+(act.tipo||(act.payType||'u'));
+      var u=act.hr?(a.ini&&a.fin?to12h(a.ini)+'→'+to12h(a.fin)+'('+nh(a.ini,a.fin,a.lonches)+'h)':'sin horario'):act.tipo==='$'?'$'+smartNum(a.qty):smartNum(a.qty)+' '+(act.tipo||(act.payType||'u'));
       dets.push(esc((act.es||'').split(' ').slice(0,2).join(' '))+'('+u+')'); // V9
     }
     var exD=grpPayDetail(w.id); var ex=exD.pay;
@@ -8160,7 +8181,7 @@ function buildAnalisis(){
         }
       }
       if(!hRate82 || hRate82<=0) continue;
-      var horas82 = nh((ga82.vars && ga82.vars.ini)||'', (ga82.vars && ga82.vars.fin)||'') || 0;
+      var horas82 = nh((ga82.vars && ga82.vars.ini)||'', (ga82.vars && ga82.vars.fin)||'', (ga82.vars&&ga82.vars.lonches)||undefined) || 0;
       if(!horas82 || horas82<=0) horas82 = getGlobalHours();
       if(!horas82 || horas82<=0) continue;
       var pzasHora82 = hRate82/price82;
@@ -8262,7 +8283,7 @@ function mkReport(){
       var a=w.acts[j],pay=a.pay||0; tot+=pay;
       var act=resolveAct(a, true); // V8
       if(!act){ acts.push((a.esName||'Act.#'+a.ai)+'(=$'+pay.toFixed(2)+')'); continue; }
-      var u=act.hr?(a.ini&&a.fin?to12h(a.ini)+'→'+to12h(a.fin)+'('+nh(a.ini,a.fin)+'h)':'sin horario')+'=$'+pay.toFixed(2):act.tipo==='$'?'$'+smartNum(a.qty):smartNum(a.qty)+' '+act.tipo+'=$'+pay.toFixed(2);
+      var u=act.hr?(a.ini&&a.fin?to12h(a.ini)+'→'+to12h(a.fin)+'('+nh(a.ini,a.fin,a.lonches)+'h)':'sin horario')+'=$'+pay.toFixed(2):act.tipo==='$'?'$'+smartNum(a.qty):smartNum(a.qty)+' '+act.tipo+'=$'+pay.toFixed(2);
       acts.push(act.es+'('+u+')');
     }
     var ex=grpPay(w.id); tot+=ex; grand+=tot;
@@ -8389,7 +8410,7 @@ function _serializeState(){
         }}
       }
       if(!sact && sa.ai>=0 && sa.ai<ACTS.length) sact=ACTS[sa.ai];
-      var actSv={ai:sa.ai,esName:sact?sact.es:(sa.esName||''),tipo:sact?sact.tipo:(sa.tipo||''),qty:sa.qty,ini:sa.ini,fin:sa.fin,showTime:sa.showTime,pay:sa.pay,shifts:sa.shifts,finca:sa.finca||''};
+      var actSv={ai:sa.ai,esName:sact?sact.es:(sa.esName||''),tipo:sact?sact.tipo:(sa.tipo||''),qty:sa.qty,ini:sa.ini,fin:sa.fin,showTime:sa.showTime,pay:sa.pay,shifts:sa.shifts,finca:sa.finca||'',lonches:sa.lonches}; // V1_0_0_6: persistir lonche por actividad
       // V20_162 FIX: persistir metadata preservada (_actEs/_payType/_unitPrice/_variable).
       // Sin esto, autoSave + load borraba TODA la identidad y el PDF se rompía después de
       // recargar (Hours vs Pieces homónimas colapsaban en la primera fila del MASTER).
@@ -10102,7 +10123,7 @@ function renderResumenV20_126(){
         var nm = act ? (act.es||'') : (a.esName||'(act sin nombre)');
         var ini = a.ini||''; var fin = a.fin||'';
         var hh = 0;
-        try { if(typeof nh === 'function' && ini && fin) hh = nh(ini, fin) || 0; } catch(e){}
+        try { if(typeof nh === 'function' && ini && fin) hh = nh(ini, fin, a.lonches) || 0; } catch(e){}
         // V20_152: hr derivada de la metadata estable (payType==='Hours' es la verdad).
         var pType = (act && act.payType) || a._payType || a.payType || '';
         var hr = !!(act && act.hr) || (pType.toString().toLowerCase().trim() === 'hours');
@@ -10794,6 +10815,7 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
         if(_colMatchesWAct(actCols[ci], act_)){
           var ini_=act_.ini||((act_.shifts&&act_.shifts.length)?act_.shifts[0].ini:'');
           if(ini_&&ini_<firstIni) firstIni=ini_;
+          if(act_.lonches && !actCols[ci]._lonches) actCols[ci]._lonches=act_.lonches; // V1_0_0_6: lonche de la actividad para el cálculo de horas del PDF
         }
       }
     }
@@ -10963,7 +10985,7 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
       col_={label:(gact_.en||gact_.es), ct:'cajas', perPersona:{}, totalVal:totalC_, np:np_, precio:precioC_, unitLabel:'Boxes p/p', finca:g_.vars.finca||'', ini:g_.vars.ini||'', fin:g_.vars.fin||''};
       for(var pi2_=0;pi2_<g_.participantes.length;pi2_++) col_.perPersona[g_.participantes[pi2_]]=cpx_;
     } else if(ct_==='hora'){
-      var hGrp_=nh(g_.vars.ini||'',g_.vars.fin||'');
+      var hGrp_=nh(g_.vars.ini||'',g_.vars.fin||'',g_.vars.lonches);
       if(!hGrp_) continue;
       // V20_71 Fase B: usar nombre en inglés en label (PDF es para Cindy en EN)
       col_={label:(gact_.en||gact_.es), ct:'hora', perPersona:{}, totalVal:hGrp_, np:np_, precio:gact_.p, unitLabel:'Hours', finca:'', ini:g_.vars.ini||'', fin:g_.vars.fin||''};
@@ -11222,11 +11244,11 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
             if(_shHasRealT){
               for(var ssx_=0;ssx_<_wAct.shifts.length;ssx_++){
                 var _wk_=(_wAct.shifts[ssx_].ini||'')+'|'+(_wAct.shifts[ssx_].fin||'');
-                if(_wk_===_tarK) _subTot+=nh(_wAct.shifts[ssx_].ini||'',_wAct.shifts[ssx_].fin||'')||0;
+                if(_wk_===_tarK) _subTot+=nh(_wAct.shifts[ssx_].ini||'',_wAct.shifts[ssx_].fin||'',_wAct.lonches)||0;
               }
             } else {
               var _wk2_=(_wAct.ini||'')+'|'+(_wAct.fin||'');
-              if(_wk2_===_tarK) _subTot+=nh(_wAct.ini||'',_wAct.fin||'')||0;
+              if(_wk2_===_tarK) _subTot+=nh(_wAct.ini||'',_wAct.fin||'',_wAct.lonches)||0;
             }
           }
         }
@@ -11274,11 +11296,11 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
             if(_shHasRealT2){
               for(var ssy_=0;ssy_<_wAct2.shifts.length;ssy_++){
                 var _wkY=(_wAct2.shifts[ssy_].ini||'')+'|'+(_wAct2.shifts[ssy_].fin||'');
-                if(_wkY===_tarK2){ _inShift=true; _subTotH+=nh(_wAct2.shifts[ssy_].ini||'',_wAct2.shifts[ssy_].fin||'')||0; }
+                if(_wkY===_tarK2){ _inShift=true; _subTotH+=nh(_wAct2.shifts[ssy_].ini||'',_wAct2.shifts[ssy_].fin||'',_wAct2.lonches)||0; }
               }
             } else {
               var _wkY2=(_wAct2.ini||'')+'|'+(_wAct2.fin||'');
-              if(_wkY2===_tarK2){ _inShift=true; _subTotH+=nh(_wAct2.ini||'',_wAct2.fin||'')||0; }
+              if(_wkY2===_tarK2){ _inShift=true; _subTotH+=nh(_wAct2.ini||'',_wAct2.fin||'',_wAct2.lonches)||0; }
             }
             if(_inShift && parseFloat(_wAct2.qty)){
               _subTotQ+=parseFloat(_wAct2.qty);
@@ -11516,14 +11538,14 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
           if(col2.hr){
             var _sumH=0;
             for(var kk=sci_;kk<sci_+_fr.span;kk++){
-              _sumH+=nh(col2.shifts[kk].ini||'',col2.shifts[kk].fin||'')||0;
+              _sumH+=nh(col2.shifts[kk].ini||'',col2.shifts[kk].fin||'',col2._lonches)||0;
             }
             if(!_sumH) _sumH=totalShiftHours(found2)||0;
             cv=smartNum(_sumH)+' h';
           } else {
             var _sumH2=0;
             for(var kk2=sci_;kk2<sci_+_fr.span;kk2++){
-              _sumH2+=nh(col2.shifts[kk2].ini||'',col2.shifts[kk2].fin||'')||0;
+              _sumH2+=nh(col2.shifts[kk2].ini||'',col2.shifts[kk2].fin||'',col2._lonches)||0;
             }
             if(_sumH2>0) cv=smartNum(_sumH2)+' h';
           }
@@ -11719,7 +11741,7 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
             }
           }
           if(!hRate171 || hRate171<=0) continue;
-          var horas171 = nh((ga171.vars && ga171.vars.ini)||'', (ga171.vars && ga171.vars.fin)||'') || 0;
+          var horas171 = nh((ga171.vars && ga171.vars.ini)||'', (ga171.vars && ga171.vars.fin)||'', (ga171.vars&&ga171.vars.lonches)||undefined) || 0;
           if(!horas171 || horas171<=0) horas171 = globalH;
           if(!horas171 || horas171<=0) continue;
           var pzH171 = hRate171/price171;
@@ -11917,6 +11939,51 @@ function renderShifts(wi, ai){
   ab.textContent='+ Agregar turno';
   (function(wi2,ai2){ ab.addEventListener('click',function(){ addShift(wi2,ai2); }); })(wi,ai);
   tf.appendChild(ab);
+  // V1_0_0_6: sección LONCHE(S) por actividad — se descuenta de las horas (soporta varios)
+  if(!a.lonches) a.lonches=[{ini:'12:00',fin:'12:30'}]; // default/compat días viejos
+  var lonWrap=document.createElement('div');
+  lonWrap.style.cssText='margin-top:8px;padding-top:8px;border-top:1px dashed #e0d39a';
+  var lonHdr=document.createElement('div');
+  lonHdr.style.cssText='font-size:11px;font-weight:700;color:#8a6d1a;margin-bottom:5px';
+  lonHdr.textContent='🍔 Lonche(s) — se descuenta de las horas';
+  lonWrap.appendChild(lonHdr);
+  for(var lj=0;lj<a.lonches.length;lj++){
+    var lo=a.lonches[lj];
+    var lrow=document.createElement('div'); lrow.className='shift-row';
+    lrow.innerHTML='<div><label style="margin:0;font-size:10px">🍔 Inicio</label><input type="time" step="900" value="'+(lo.ini||'')+'" id="loi'+wi+'_'+ai+'_'+lj+'"></div><div><label style="margin:0;font-size:10px">🍔 Fin</label><input type="time" step="900" value="'+(lo.fin||'')+'" id="lof'+wi+'_'+ai+'_'+lj+'"></div><button class="shift-del" onclick="delLonche('+wi+','+ai+','+lj+')">✕</button>';
+    lonWrap.appendChild(lrow);
+    (function(wi2,ai2,lidx){ setTimeout(function(){
+      var li=gEl('loi'+wi2+'_'+ai2+'_'+lidx), lf=gEl('lof'+wi2+'_'+ai2+'_'+lidx);
+      if(li) li.addEventListener('change',function(){ onLonche(wi2,ai2,lidx,'ini',this.value); });
+      if(lf) lf.addEventListener('change',function(){ onLonche(wi2,ai2,lidx,'fin',this.value); });
+    },0); })(wi,ai,lj);
+  }
+  var lab=document.createElement('button'); lab.className='shift-add';
+  lab.style.cssText='background:#fff7d6;color:#8a6d1a;border-color:#c8a415';
+  lab.textContent='+ Agregar lonche';
+  (function(wi2,ai2){ lab.addEventListener('click',function(){ addLonche(wi2,ai2); }); })(wi,ai);
+  lonWrap.appendChild(lab);
+  tf.appendChild(lonWrap);
+}
+
+// V1_0_0_6: funciones del lonche por actividad (individual)
+function addLonche(wi,ai){
+  var w=getW(wi); if(!w||!w.acts[ai])return;
+  var a=w.acts[ai]; if(!a.lonches) a.lonches=[];
+  a.lonches.push({ini:'',fin:''});
+  renderShifts(wi,ai); try{ recalc(wi,ai); }catch(e){} autoSave();
+}
+function delLonche(wi,ai,idx){
+  var w=getW(wi); if(!w||!w.acts[ai])return;
+  var a=w.acts[ai]; if(!a.lonches)return;
+  a.lonches.splice(idx,1);
+  renderShifts(wi,ai); try{ recalc(wi,ai); }catch(e){} autoSave();
+}
+function onLonche(wi,ai,idx,field,val){
+  var w=getW(wi); if(!w||!w.acts[ai])return;
+  var a=w.acts[ai]; if(!a.lonches||!a.lonches[idx])return;
+  a.lonches[idx][field]=val;
+  try{ recalc(wi,ai); }catch(e){} autoSave();
 }
 
 function addShift(wi,ai){
@@ -11979,9 +12046,11 @@ function onShift(wi,ai,si,field,val){
 }
 
 function totalShiftHours(a){
-  if(!a.shifts||!a.shifts.length) return nh(a.ini||'',a.fin||'');
+  // V1_0_0_6: usar el lonche de la actividad. Si no tiene (día viejo) → undefined → nh usa el global (compat).
+  var _lon=(a&&Array.isArray(a.lonches))?a.lonches:undefined;
+  if(!a.shifts||!a.shifts.length) return nh(a.ini||'',a.fin||'', _lon);
   var total=0;
-  for(var s=0;s<a.shifts.length;s++) total+=nh(a.shifts[s].ini||'',a.shifts[s].fin||'');
+  for(var s=0;s<a.shifts.length;s++) total+=nh(a.shifts[s].ini||'',a.shifts[s].fin||'', _lon);
   // V20_178: 2 decimales para preservar precisión de cuartos (2.25 + 2.25 = 4.50, no 4.5)
   return Math.round(total*100)/100;
 }
@@ -12483,7 +12552,7 @@ function _sendToSheetsCore() {
         ? (parseFloat(g.vars.precioC) || parseFloat(act && act.p) || 0.80)
         : ((act && act.p) ? parseFloat(act.p) : (parseFloat(g.vars.precioC) || 0.80));
     } else if (ct === 'hora') {
-      var hGrp = nh(g.vars.ini || '', g.vars.fin || '');
+      var hGrp = nh(g.vars.ini || '', g.vars.fin || '', g.vars.lonches);
       qtyPerPerson = hGrp || 0; // horas (igual para todos)
     } else {
       var totalP = parseFloat(g.vars.totalP) || 0;
@@ -12837,6 +12906,7 @@ function addGrpAct(gai){
   var _gact = (typeof GRUPAL_ACTS !== 'undefined' && GRUPAL_ACTS && GRUPAL_ACTS[gai]) ? GRUPAL_ACTS[gai] : null;
   // V20_114: si la grupal es de tipo cajas, sembrar precioC desde el MASTER (ya no editable por surquero).
   var _initVars = {inputs: {}}; // V20_177: motor data-driven inputs object
+  _initVars.lonches = [{ini:'12:00',fin:'12:30'}]; // V1_0_0_6: lonche por actividad grupal (default 12:00-12:30, editable, varios)
   if(_gact && (typeof grpCalcType === 'function') && grpCalcType(_gact) === 'cajas'){
     _initVars.precioC = parseFloat(_gact.p) || 0;
   }
@@ -12931,6 +13001,42 @@ function _fincaGrpHtml(gi, val){
   }
   s += '</select></div>';
   return s;
+}
+
+// V1_0_0_6: helper + funciones del lonche por actividad GRUPAL (mismo patrón que el individual)
+function _grpLoncheHtml(gi, g){
+  if(!g.vars) g.vars={};
+  if(!g.vars.lonches) g.vars.lonches=[{ini:'12:00',fin:'12:30'}];
+  var h='<div style="margin:8px 0 4px;padding-top:8px;border-top:1px dashed #e0d39a">'
+    +'<label style="font-size:11px;font-weight:700;color:#8a6d1a">🍔 Lonche(s) — se descuenta de las horas</label>';
+  for(var j=0;j<g.vars.lonches.length;j++){
+    var lo=g.vars.lonches[j]||{};
+    h+='<div style="display:flex;gap:6px;align-items:flex-end;margin-top:5px">'
+      +'<div style="flex:1"><label style="font-size:10px">🍔 Inicio</label><input type="time" step="900" value="'+(lo.ini||'')+'" data-gi="'+gi+'" data-li="'+j+'" data-lf="ini" onchange="onLoncheGrp(this)" style="font-size:16px;padding:9px 10px;width:100%"></div>'
+      +'<div style="flex:1"><label style="font-size:10px">🍔 Fin</label><input type="time" step="900" value="'+(lo.fin||'')+'" data-gi="'+gi+'" data-li="'+j+'" data-lf="fin" onchange="onLoncheGrp(this)" style="font-size:16px;padding:9px 10px;width:100%"></div>'
+      +'<button onclick="delLoncheGrp('+gi+','+j+')" style="background:#fdecea;color:#c0392b;border:1px solid #f5c6cb;border-radius:6px;padding:9px 11px;font-weight:700">✕</button>'
+      +'</div>';
+  }
+  h+='<button onclick="addLoncheGrp('+gi+')" style="margin-top:6px;background:#fff7d6;color:#8a6d1a;border:1px dashed #c8a415;border-radius:6px;padding:8px;width:100%;font-weight:700;font-size:13px">+ Agregar lonche</button>'
+    +'</div>';
+  return h;
+}
+function _recalcGrp(gi){ try{ if(typeof calcGrpAct==='function') calcGrpAct(gi); }catch(e){} }
+function addLoncheGrp(gi){
+  var g=grpActs[gi]; if(!g)return; if(!g.vars)g.vars={}; if(!g.vars.lonches)g.vars.lonches=[];
+  g.vars.lonches.push({ini:'',fin:''});
+  renderGrpActs(); _recalcGrp(gi); autoSave();
+}
+function delLoncheGrp(gi,idx){
+  var g=grpActs[gi]; if(!g||!g.vars||!g.vars.lonches)return;
+  g.vars.lonches.splice(idx,1);
+  renderGrpActs(); _recalcGrp(gi); autoSave();
+}
+function onLoncheGrp(inp){
+  var gi=parseInt(inp.dataset.gi), li=parseInt(inp.dataset.li), lf=inp.dataset.lf;
+  var g=grpActs[gi]; if(!g||!g.vars||!g.vars.lonches||!g.vars.lonches[li])return;
+  g.vars.lonches[li][lf]=inp.value;
+  _recalcGrp(gi); autoSave();
 }
 
 function renderGrpActs(){
@@ -13214,7 +13320,7 @@ function renderGrpActs(){
     var resHtml = '<div class="gr2 gaR" id="gaR'+gi+'" style="display:none"></div>';
 
     card.innerHTML = headHtml
-      + '<div class="acc-act-body gaBody">' + removeBtn + varsHtml + partHtml + resHtml + '</div>';
+      + '<div class="acc-act-body gaBody">' + removeBtn + varsHtml + _grpLoncheHtml(gi, g) + partHtml + resHtml + '</div>';
     list.appendChild(card);
 
     // Render participantes
@@ -13291,7 +13397,7 @@ function updGrpPreview(gi){
     var precioC=parseFloat(g.vars.precioC)||act.p||0.80;
     if(totalC&&np){ ppp=totalC/np*precioC; qtyLabel=(totalC/np).toFixed(1)+' cajas c/u'; }
   } else if(ct==='hora'){
-    var h=nh(g.vars.ini||'',g.vars.fin||'');
+    var h=nh(g.vars.ini||'',g.vars.fin||'',g.vars.lonches);
     if(h&&np){ ppp=h*act.p; qtyLabel=h+'h c/u'; }
   } else {
     var totalP=parseFloat(g.vars.totalP)||0;
@@ -13655,7 +13761,7 @@ function calcGrpAct(gi){
     res.innerHTML = totalC+' cajas ÷ '+np+' = <strong>'+(totalC/np).toFixed(1)+'</strong> × $'+precioC+' = <strong style="color:var(--a)">$'+ppp.toFixed(2)+' c/u</strong>';
   } else if(ct==='hora'){
     var ini = g.vars.ini||''; var fin = g.vars.fin||'';
-    var h   = nh(ini,fin);
+    var h   = nh(ini,fin,g.vars.lonches);
     if(!h||!np){ res.style.display='none'; updGrpPreview(gi); return; }
     ppp = h*act.p;
     res.innerHTML = h+' h × $'+act.p+' = <strong style="color:var(--a)">$'+ppp.toFixed(2)+' c/u</strong>';
@@ -13739,7 +13845,7 @@ function grpPayDetail(wid_){
       var precioC=parseFloat(g.vars.precioC)||act.p||0.80;
       if(totalC){ var pago2=totalC/np*precioC; ex+=pago2; parts.push('$'+pago2.toFixed(2)); }
     } else if(ct==='hora'){
-      var h=nh(g.vars.ini||'',g.vars.fin||'');
+      var h=nh(g.vars.ini||'',g.vars.fin||'',g.vars.lonches);
       if(h){ var pago3=h*act.p; ex+=pago3; parts.push('$'+pago3.toFixed(2)); }
     } else {
       var totalP=parseFloat(g.vars.totalP)||0;
@@ -15462,7 +15568,7 @@ function buildInvoiceAutoData(){
             actMap[keyH]._workerIds[w.id]=true;
             actMap[keyH].personas++;
           }
-          actMap[keyH].totalField += nh(sh.ini, sh.fin) || 0;
+          actMap[keyH].totalField += nh(sh.ini, sh.fin, a.lonches) || 0;
         }
       } else {
         // V20_22: si es actividad tipo puertas (hilo, estaca, plástico) → calcular acres
