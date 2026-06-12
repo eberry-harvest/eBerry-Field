@@ -35,7 +35,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V1_0_0_7';
+window.APP_VERSION = 'V1_0_0_9';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -9004,8 +9004,7 @@ function showEmptyState(){
 // ============================================================================
 
 // Vista única "Por actividad" — eliminado el toggle "Por Trabajador" (duplicado, confundía a surqueros).
-// Stub de setViewMode para compat con callers viejos (no hace nada — solo re-renderiza por actividad).
-function setViewMode(m){ try { renderWlistByActivity(); } catch(e){} }
+// V1_0_0_8: setViewMode (stub muerto, 0 callers) eliminado tras auditoría.
 
 // Agrupa workers[].acts[] por (actividad+horario+finca) y devuelve grupos para renderizar acordeones
 function buildActViewGroups(){
@@ -10836,10 +10835,17 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     var cFinca = (col.finca||'').trim();
     var cPT = col.payType || '';
     if(ident.name !== cName) return false;
-    if(ident.tipo !== cTipo) return false;
     if(ident.finca !== cFinca) return false;
-    // payType match: estricto si ambos lados lo definen; si col sin payType (legacy), aceptar.
-    if(cPT && ident.payType && cPT !== ident.payType) return false;
+    // V1_0_0_9 FIX: payType es el discriminador ESTABLE (Pieces/Hours/Daywork). El campo 'tipo'
+    // tiene 2 vocabularios ('pieza' de _derivarTipoActividad en vivo vs 'Ficha' del MASTER al
+    // serializar/cargar); compararlo estricto rompía el match para Pieces (columna 'Ficha' vs
+    // worker live 'pieza') → la qty no sumaba → TOTAL=0 y celdas vacías en el PDF (Cosecha).
+    if(cPT && ident.payType){
+      if(cPT !== ident.payType) return false;
+      return true; // payType decide; ignorar 'tipo' frágil
+    }
+    // Legacy (sin payType en algún lado): caer a 'tipo' como mejor esfuerzo.
+    if(ident.tipo !== cTipo) return false;
     return true;
   }
 
