@@ -35,7 +35,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V1_0_0_4';
+window.APP_VERSION = 'V1_0_0_5';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -8898,6 +8898,20 @@ function applyAutoFill(){
     if(inp && !curSurq) inp.value='';
     // Upsilon2: activar panel de sesión si ya hay surquero seleccionado
     if(curSurq && typeof adminCheckSession==='function') adminCheckSession(curSurq);
+    // V1_0_0_5 FIX: el ADMIN también debe filtrar ACTS/GRUPAL_ACTS por el rancho restaurado/seleccionado.
+    // Antes el filtro V20_174 solo corría dentro del bloque surquero (if !isAdmin) → el admin
+    // veía el dropdown de actividades VACÍO aunque ALL_ACTS tuviera datos y el rancho estuviera puesto.
+    var _rValAdm = (gVal('rancho')||'').toLowerCase().trim();
+    if(_rValAdm){
+      ACTS=[]; GRUPAL_ACTS=[];
+      for(var _fiA=0;_fiA<ALL_ACTS.length;_fiA++){
+        var _farmA=(ALL_ACTS[_fiA].farm||'').toLowerCase().trim();
+        if(_farmA===_rValAdm){
+          if((ALL_ACTS[_fiA].modo||'Individual').toLowerCase().trim()==='grupal') GRUPAL_ACTS.push(ALL_ACTS[_fiA]);
+          else ACTS.push(ALL_ACTS[_fiA]);
+        }
+      }
+    }
   }
 
   // Auto-fill fecha con hoy si está vacía
