@@ -35,7 +35,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V1_0_0_11';
+window.APP_VERSION = 'V1_0_0_12';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -11686,7 +11686,7 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
     +'.numcol{text-align:center!important;color:#8b0000;font-weight:700;font-size:8px}'
     +'.meta-last td{border-bottom:2px solid #1a2b8c!important}'
     +'.ft{font-size:7px;color:#1a2b8c;text-align:center;margin-top:3px;border-top:1px solid #1a2b8c;padding-top:3px}'
-    +'@media print{.nopr{display:none}thead{display:table-header-group}@page{margin:5mm;size:letter landscape}*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}table{table-layout:fixed;-webkit-text-size-adjust:100%}th,td{word-break:break-word}}'
+    +'@media print{.nopr{display:none}thead{display:table-header-group}@page{margin:5mm;size:letter landscape}*{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important}table{table-layout:fixed;-webkit-text-size-adjust:100%}th,td{word-break:break-word}tbody tr{page-break-inside:avoid;break-inside:avoid}}'
     +'</style></head><body>'
     +'<div class="hdr">'
     +'<div style="display:flex;align-items:center;gap:10px">'
