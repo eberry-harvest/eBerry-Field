@@ -35,7 +35,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V1_0_0_10';
+window.APP_VERSION = 'V1_0_0_11';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -11025,6 +11025,13 @@ function buildPDFWindow(vals, wks, ep, hp, cp, ausArr, grpActsArr){
       for(var pi_=0;pi_<g_.participantes.length;pi_++) col_.perPersona[g_.participantes[pi_]]=ppx_;
     } else if(ct_==='cajas'){
       var totalC_=parseFloat(g_.vars.totalC)||0;
+      // V1_0_0_11 FIX: VarBox DATA-DRIVEN (motor V20_177, ej "Empaque" Pieces) guarda la cantidad
+      // en vars.inputs (no vars.totalC legacy). grpCalcType manda VarBox a esta rama 'cajas' ANTES
+      // del else con motor → el grupal se OMITÍA del PDF (totalC_=0 → continue) aunque la pantalla
+      // SÍ lo mostraba. computeQty con personas=1 da el TOTAL exacto (no divide entre participantes).
+      if(!totalC_ && typeof _grpUsesMotor==='function' && _grpUsesMotor(gact_)){
+        try { var _tcM_=computeQty(gact_, _grpReadMotorInputs(g_), 1); if(_tcM_!=null && !isNaN(_tcM_)) totalC_=_tcM_; } catch(eC_){}
+      }
       var precioC_=parseFloat(g_.vars.precioC)||gact_.p||0.80;
       if(!totalC_) continue;
       var cpx_=totalC_/np_;
@@ -12603,7 +12610,13 @@ function _sendToSheetsCore() {
       }
     } else if (ct === 'cajas') {
       var totalC = parseFloat(g.vars.totalC) || 0;
-      qtyPerPerson = totalC / np;
+      // V1_0_0_11 FIX: VarBox DATA-DRIVEN (motor) guarda cantidad en vars.inputs, no totalC legacy.
+      // Sin esto los grupales "Empaque" NO llegaban a FIELD_DROP (qtyPerPerson=0 → continue).
+      if(totalC){
+        qtyPerPerson = totalC / np;
+      } else if(typeof _grpUsesMotor==='function' && _grpUsesMotor(act)){
+        try { var _qC=computeQty(act, _grpReadMotorInputs(g), np); qtyPerPerson=(_qC==null||isNaN(_qC))?0:_qC; } catch(eC){}
+      }
       // V20_114: precio del MASTER siempre gana. Antes el surquero podía sobrescribir vía vars.precioC editable.
       // En modo lectura respetar g.vars.precioC original (sintético del payload).
       unitP = (typeof _readOnlyMode!=='undefined' && _readOnlyMode)
@@ -15735,6 +15748,10 @@ function buildInvoiceAutoData(){
     } else if(ct === 'cajas'){
       // Upsilon2: el campo se llama totalC en vars (no totalCajas)
       var totalCajas = parseFloat(v.totalC) || parseFloat(v.totalCajas) || 0;
+      // V1_0_0_11 FIX: VarBox DATA-DRIVEN (motor) guarda cantidad en vars.inputs, no totalC legacy.
+      if(!totalCajas && typeof _grpUsesMotor==='function' && _grpUsesMotor(gact)){
+        try { var _tcI=computeQty(gact, _grpReadMotorInputs(ga), 1); if(_tcI!=null && !isNaN(_tcI)) totalCajas=_tcI; } catch(eI){}
+      }
       rows.push({
         product: gact.farm || rancho,
         equipment: gact.es,
