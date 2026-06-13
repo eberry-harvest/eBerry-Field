@@ -35,7 +35,7 @@
 </script>
 <script>
 // V20_21: check versión + ackedVersion para romper loop infinito cuando version.txt≠APP_VERSION
-window.APP_VERSION = 'V1_0_0_12';
+window.APP_VERSION = 'V1_0_0_13';
 (function(){
   // V20_77: AUTO-LIMPIEZA de _ackedVersion envenenado.
   // Bug detectado: surqueros tocaban "Actualizar ahora" pero el SW interceptaba el reload con HTML viejo.
@@ -11929,11 +11929,21 @@ function startNewDay(keepWorkers){
   gEl('newDayOv').classList.remove('on');
   saveQuiet();
   var savedWorkers=[];
+  var _excChofSurq=0; // V1_0_0_13: contador de chofer/surquero excluidos del nuevo día
   if(keepWorkers){
     // V20_91_10: NO preservar campos check-in/check-out — nuevo día empieza limpio
-    savedWorkers=workers.map(function(w){ return {id:w.id, name:w.name, empNum:w.empNum||'', contractRate:w.contractRate||0, open:false, acts:[], totalPay:0,
-      role:'trabajador', checkInTime:'', checkInTs:0, checkInLocked:false,
-      checkOutTime:'', checkOutLocked:false, canUndoUntil:0}; });
+    // V1_0_0_13 FIX: EXCLUIR chofer y surquero al conservar. Antes se conservaban en workers[]
+    // (con role forzado a 'trabajador' pero MISMO id/name) → al re-escanearlos en el check-in del
+    // nuevo día, nameInArr(workers,nombre) daba true → "ya está en la lista" → no se registraban →
+    // _dayFlow.diaIniciado nunca true → no se podía iniciar el día sin borrarlos a mano (pide PIN admin).
+    // Ahora NO se conservan → el patrón check-in (chofer→surquero) los re-registra limpio sin bug.
+    for(var _si=0; _si<workers.length; _si++){
+      var _sw=workers[_si];
+      if(_sw.role==='chofer' || _sw.role==='surquero' || _sw.role==='choferSurquero'){ _excChofSurq++; continue; }
+      savedWorkers.push({id:_sw.id, name:_sw.name, empNum:_sw.empNum||'', contractRate:_sw.contractRate||0, open:false, acts:[], totalPay:0,
+        role:'trabajador', checkInTime:'', checkInTs:0, checkInLocked:false,
+        checkOutTime:'', checkOutLocked:false, canUndoUntil:0});
+    }
   }
   var now=new Date();
   var mo=now.getMonth()+1; var dy=now.getDate();
@@ -11963,7 +11973,7 @@ function startNewDay(keepWorkers){
     list.appendChild(ph);
   }
   updParam(); updParts(); updDate(); renderGrpActs(); go(0);
-  toast(keepWorkers?'Nuevo día iniciado — '+workers.length+' trabajadores conservados':'Nuevo día iniciado — todo limpio');
+  toast(keepWorkers?('Nuevo día iniciado — '+workers.length+' conservados'+(_excChofSurq?' · vuelve a escanear chofer y surquero':'')):'Nuevo día iniciado — todo limpio');
 }
 
 // V8: updDate() duplicada eliminada — la definición canónica está en L2195
